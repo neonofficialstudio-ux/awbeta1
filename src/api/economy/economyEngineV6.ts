@@ -5,9 +5,14 @@ import { NotificationDispatcher } from "../../services/notifications/notificatio
 import { SanityGuard } from "../../services/sanity.guard";
 import { safeUserId } from "../utils/safeUser";
 import { rateLimit } from "../../api/anticheat/rateLimit";
-import { config } from "../../core/config"; // Import config check
 
 const repo = getRepository();
+
+/**
+ * ECONOMY ENGINE V6.5 (Server-Authoritative)
+ * Este arquivo agora é apenas um "cliente" que pede ações ao servidor.
+ * A matemática financeira foi movida para `server.logic.ts`.
+ */
 
 const TRUSTED_SOURCES = ["Admin", "System", "Event", "Prêmio", "Bulk", "Automated", "Jackpot", "Sorteio", "Raffle", "mission_completion"];
 
@@ -28,7 +33,7 @@ export const EconomyService = {
             throw new Error("RATE_LIMIT:FINANCEIRO");
         }
 
-        // RPC CALL - SERVER AUTHORITATIVE (Works for both Mock and Supabase via repo factory)
+        // RPC CALL - SERVER AUTHORITATIVE
         try {
             const result = await repo.rpc!('add_coins', { userId: uid, amount, source });
             
@@ -36,7 +41,8 @@ export const EconomyService = {
                 return { success: false, error: result.error };
             }
 
-            const updatedUser = SanityGuard.user(result.updatedUser || result.user); // Supabase returns 'user' in some RPCs
+            // The updated user state comes back from the server logic
+            const updatedUser = SanityGuard.user(result.updatedUser);
 
             NotificationDispatcher.coinsAdded(uid, amount, source);
             
@@ -50,6 +56,7 @@ export const EconomyService = {
         const uid = safeUserId(userId);
         if (!uid) return { success: false, error: "Invalid User ID" };
 
+        // RPC CALL
         try {
             const result = await repo.rpc!('add_xp', { userId: uid, amount, source });
             
@@ -59,6 +66,7 @@ export const EconomyService = {
 
             const updatedUser = SanityGuard.user(result.user);
             
+            // Handle Level Up Notifications on Client Side (Visuals)
             if (result.levelUp) {
                 NotificationDispatcher.levelUp(uid, updatedUser.level);
                 NotificationDispatcher.xpAdded(uid, amount, source);
@@ -67,7 +75,7 @@ export const EconomyService = {
             return { 
                 success: true,
                 updatedUser, 
-                notifications: [], 
+                notifications: [], // Notifications dispatched directly
                 data: { xpAdded: amount, levelUp: result.levelUp }
             };
         } catch (e: any) {
@@ -79,6 +87,7 @@ export const EconomyService = {
         const uid = safeUserId(userId);
         if (!uid) return { success: false, error: "Invalid User ID" };
 
+        // RPC CALL
         try {
             const result = await repo.rpc!('spend_coins', { userId: uid, amount, description });
             
@@ -86,7 +95,7 @@ export const EconomyService = {
                  return { success: false, error: result.error || "Saldo insuficiente" };
             }
 
-            const updatedUser = SanityGuard.user(result.updatedUser || result.user);
+            const updatedUser = SanityGuard.user(result.updatedUser);
 
             NotificationDispatcher.coinsSpent(uid, amount, description);
 
@@ -96,22 +105,12 @@ export const EconomyService = {
         }
     },
 
+    // Legacy method for compatibility
     processCheckIn: async (userId: string) => {
-        // Se estiver no Supabase, a lógica do Check-in deve ser via RPC direto para garantir atomicidade
-        if (config.useSupabase) {
-             // Esta função é chamada apenas pelo legacy users.ts no mock mode geralmente.
-             // Se cair aqui no modo Supabase, redirecionamos para o RPC.
-             const res = await repo.rpc!('perform_daily_checkin', { userId });
-             if(!res.success) return { success: false, error: res.error };
-             
-             // Fetch updated user state
-             const userList = await repo.selectAsync("users");
-             const updatedUser = userList.find((u:any) => u.id === userId);
-             
-             return { success: true, updatedUser, data: { coinsGained: res.coins_gained, newStreak: res.new_streak } };
-        }
-
-        // Fallback Mock Logic
+        // Since Checkin has complex logic (streak, bonus), we still do it here for now
+        // But the REWARD part calls addCoins which is now secure.
+        // Ideally, checkin logic should also move to RPC in Phase 2.
+        // For now, we keep the engine logic but use secure addCoins.
         const { CheckinEngineV2 } = await import("./checkinEngineV2");
         const user = repo.select("users").find((u: any) => u.id === userId);
         
@@ -119,6 +118,7 @@ export const EconomyService = {
 
         const result = CheckinEngineV2.process(SanityGuard.user(user));
         
+        // Update Streak locally first (non-financial)
         const partialUpdate = { 
             ...user, 
             lastCheckIn: result.lastCheckIn, 
@@ -126,6 +126,7 @@ export const EconomyService = {
         };
         await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => partialUpdate);
         
+        // Securely Add Coins via RPC
         const ecoRes = await EconomyService.addCoins(userId, result.coinsGained, result.isBonus ? "Check-in + Bônus" : "Check-in Diário");
         
         return {
