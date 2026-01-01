@@ -47,6 +47,12 @@ export const supabaseRepository: Repository = {
             return data.map((m: any) => mapMissionToApp(m));
         }
 
+        if (table === 'event_settings') {
+            const { data, error } = await supabase.from('event_settings').select('*').limit(1).single();
+            if (error) throw error;
+            return data ? [data] : [];
+        }
+
         if (table === 'redeemedItems') {
             // Complex join needed for full UI object
             const { data, error } = await supabase.from('inventory')
