@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Artist World - Artist Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              'chakra': ['"Chakra Petch"', 'sans-serif'],
+              'sans': ['"Inter"', 'sans-serif'],
+            },
+            colors: {
+              neon: {
+                cyan: '#00E8FF',
+                magenta: '#FF1CF7',
+              },
+              gold: {
+                cinematic: '#F6C560',
+              },
+              navy: {
+                deep: '#0B0F17',
+              },
+              slate: {
+                dark: '#131823',
+              },
+              bg: {
+                base: '#0D0F12',
+                surface: '#1B1E23',
+                surfaceLight: '#23262B',
+                highlight: '#2A2D33',
+              },
+              border: {
+                base: '#2A2D33',
+                light: '#3A3D44',
+              },
+              text: {
+                primary: '#FFFFFF',
+                secondary: '#B3B3B3',
+                muted: '#808080',
+              },
+              brand: {
+                gold: '#FFD447',
+                goldDim: '#E9BD3C',
+                purple: '#7A31FF',
+                purpleDim: '#6B2FD9',
+                green: '#27AE60',
+                red: '#C0392B',
+              },
+              goldenYellow: {
+                '100': '#FFFBEB',
+                '200': '#FEF3C7',
+                '300': '#FDE68A',
+                '400': '#FFD447',
+                '500': '#E9BD3C',
+                '600': '#D97706',
+                '700': '#B45309',
+                '800': '#92400E',
+                '900': '#78350F',
+              },
+            },
+            boxShadow: {
+              'glow-gold': '0 0 20px rgba(255, 212, 71, 0.3)',
+              'glow-purple': '0 0 20px rgba(122, 49, 255, 0.3)',
+              'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.15)',
+              'card-hover': '0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 4px 10px -2px rgba(0, 0, 0, 0.3)',
+            },
+            animation: {
+              'fade-in-up': 'fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'pop-in': 'pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+              'modal-in': 'modal-in 0.4s cubic-bezier(0.17, 0.67, 0.39, 1.27) forwards',
+              'shine-sweep': 'shine-sweep 3s ease-in-out infinite',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              'fade-in-up': {
+                '0%': { opacity: '0', transform: 'translateY(15px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              'pop-in': {
+                '0%': { opacity: '0', transform: 'scale(0.95)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              'modal-in': {
+                '0%': { opacity: '0', transform: 'scale(0.85) translateY(20px)' },
+                '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+              },
+              'shine-sweep': {
+                '0%': { transform: 'translateX(-100%) skewX(-20deg)' },
+                '100%': { transform: 'translateX(200%) skewX(-20deg)' },
+              },
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Global Resets & Custom Scrollbar */
+      :root {
+        --z-modal: 10000;
+        --z-toast: 11000;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0B0F17;
+        color: #FFFFFF;
+        overflow-x: hidden;
+      }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #131823; }
+      ::-webkit-scrollbar-thumb { background: #3A3D44; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #525252; }
+      .modal-open { overflow: hidden; }
+      .text-shadow-glow { text-shadow: 0 0 20px rgba(255, 212, 71, 0.4); }
+      
+      /* Avatar Frame Styles */
+      .avatar-frame { position: relative; display: inline-block; padding: 2px; border-radius: 50%; }
+      .frame-silver { background: linear-gradient(145deg, #e0e0e0, #909090); box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+      .frame-gold { background: linear-gradient(145deg, #FFD700, #B8860B); box-shadow: 0 0 15px rgba(255, 215, 0, 0.4); }
+      .frame-jade { background: linear-gradient(145deg, #00E8FF, #0099AA); box-shadow: 0 0 15px rgba(0, 232, 255, 0.4); }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.0",
+        "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^4.2.0",
+        "vite": "https://esm.sh/vite@^5.0.0"
+      }
+    }
+    </script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

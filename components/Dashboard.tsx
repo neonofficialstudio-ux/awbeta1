@@ -1,0 +1,569 @@
+
+import React, { useState, useEffect, useCallback } from 'react';
+import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry } from '../types';
+import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon } from '../constants';
+import { useAppContext } from '../constants';
+import * as api from '../api/index';
+import { fetchArtistOfTheDayConfig } from '../api/events/index';
+import CheckInSuccessModal from './CheckInSuccessModal';
+import CountUp from './CountUp';
+import { xpForLevelStart } from '../api/economy/economy';
+import { formatNumber } from './ui/utils/format';
+import { Perf } from '../services/perf.engine';
+import { AdsTelemetry } from '../api/ads/adsTelemetry'; 
+import LoadingSkeleton from './ui/base/LoadingSkeleton';
+
+interface DashboardProps {
+    onShowArtistOfTheDay: (id: string) => void;
+    onShowRewardModal: (info: { artistName: string, linkType: 'spotify' | 'youtube', updatedUser: User }) => void;
+}
+
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+};
+
+// --- COMPONENTS ---
+
+const AdvertisementCarousel: React.FC<{ ads: Advertisement[] }> = React.memo(({ ads }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const { state } = useAppContext();
+
+    useEffect(() => {
+        if (ads.length <= 0) return;
+        const currentAd = ads[currentIndex];
+        
+        // V2.1 Telemetry: Track View
+        if (state.activeUser) {
+             AdsTelemetry.trackView(currentAd.id, state.activeUser.id);
+        }
+
+        const duration = currentAd?.duration ? currentAd.duration * 1000 : 5000;
+        const timer = setTimeout(() => {
+            setCurrentIndex((prevIndex) => (prevIndex + 1) % ads.length);
+        }, duration);
+        return () => clearTimeout(timer);
+    }, [currentIndex, ads, state.activeUser]);
+
+    const handleAdClick = (ad: Advertisement) => {
+        if (state.activeUser) {
+            AdsTelemetry.trackClick(ad.id, state.activeUser.id);
+        }
+    };
+
+    if (ads.length === 0) return null;
+
+    return (
+        <div className="relative w-full h-56 md:h-72 lg:h-80 rounded-[26px] overflow-hidden group border border-[#FFD36A]/20 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.6)] bg-[#050505] transition-all duration-500 hover:shadow-[0_20px_50px_-5px_rgba(255,211,106,0.15)] hover:border-[#FFD36A]/40">
+            {ads.map((ad, index) => (
+                <div
+                    key={ad.id}
+                    className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentIndex ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                >
+                    <a 
+                        href={ad.linkUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="block w-full h-full transition-transform duration-1000 hover:scale-105"
+                        onClick={() => handleAdClick(ad)}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent z-10"></div>
+                        <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover opacity-90" />
+                        <div className="absolute inset-0 z-20 p-8 md:p-10 flex flex-col justify-end">
+                            <h3 className="text-3xl md:text-5xl font-black text-white font-chakra drop-shadow-[0_4px_8px_rgba(0,0,0,1)] leading-tight uppercase tracking-tight text-shadow-glow">{ad.title}</h3>
+                            <p className="text-sm md:text-base text-[#FFE7AC] mt-3 font-medium drop-shadow-md max-w-2xl line-clamp-2 tracking-wide">{ad.description}</p>
+                        </div>
+                    </a>
+                </div>
+            ))}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-3 z-30">
+                {ads.map((_, index) => (
+                    <button
+                        key={index}
+                        onClick={() => setCurrentIndex(index)}
+                        className={`h-1.5 rounded-full transition-all duration-500 backdrop-blur-md ${index === currentIndex ? 'bg-[#FFD36A] w-10 shadow-[0_0_15px_#FFD36A]' : 'bg-white/20 w-2 hover:bg-white/50'}`}
+                        aria-label={`Go to slide ${index + 1}`}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+});
+
+const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initialArtists }) => {
+    const { state, dispatch } = useAppContext();
+    const { activeUser } = state;
+    const [artists, setArtists] = useState<any[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [progress, setProgress] = useState<Record<string, any>>({});
+    const [isLoading, setIsLoading] = useState(true);
+    const [rotationSeconds, setRotationSeconds] = useState<number>(10);
+    const current = artists[currentIndex] ?? null;
+
+    useEffect(() => {
+        const loadArtists = async () => {
+            try {
+                const data = await api.fetchArtistsOfTheDayFull();
+                setArtists(data);
+                setCurrentIndex(0);
+                const config = fetchArtistOfTheDayConfig();
+                if (config && typeof config.rotationSeconds === "number") {
+                    setRotationSeconds(config.rotationSeconds);
+                }
+            } catch (e) {
+                console.error(e);
+                if(initialArtists) setArtists(initialArtists);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadArtists();
+        const savedProgress = JSON.parse(localStorage.getItem("daily-artist-progress") || "{}");
+        setProgress(savedProgress);
+    }, [state.eventSettings]);
+
+    useEffect(() => {
+        if (!artists || artists.length <= 1) return;
+        if (!rotationSeconds || rotationSeconds <= 0) return;
+        const interval = setInterval(() => {
+            setCurrentIndex((prev) => (prev + 1 >= artists.length ? 0 : prev + 1));
+        }, rotationSeconds * 1000);
+        return () => clearInterval(interval);
+    }, [artists.length, rotationSeconds]);
+
+    const handleLinkClick = async (platform: string, url: string) => {
+        if (!url) return;
+        window.open(url, '_blank');
+        if (!activeUser || !current) return;
+        const key = current.id;
+        const artistProgress = progress[key] || {};
+        if (artistProgress[platform]) return;
+        const updatedArtistProgress = { ...artistProgress, [platform]: true };
+        const updatedMap = { ...progress, [key]: updatedArtistProgress };
+        setProgress(updatedMap);
+        localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
+        
+        let required = 0;
+        if (current.links?.spotify) required++;
+        if (current.links?.instagram) required++;
+        if (current.links?.youtube) required++;
+        
+        const completedCount = Object.values(updatedArtistProgress).filter(v => v === true).length;
+        if (completedCount >= required && !updatedArtistProgress._rewarded && required > 0) {
+            try {
+                const res = await api.claimArtistOfDayReward(activeUser.id, current.id);
+                if (res.success && res.updatedUser) {
+                     updatedMap[key]._rewarded = true;
+                     setProgress(updatedMap);
+                     localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
+                     dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
+                     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Recompensa Coletada', message: `+1 Lummi Coin por apoiar ${current.artisticName}!` } });
+                }
+            } catch (e) { console.error("Failed to claim reward", e); }
+        }
+    };
+
+    if (isLoading && !current) return <LoadingSkeleton height={400} className="mt-12 rounded-[40px]" />;
+    if (!current) return null;
+
+    const currentArtistProgress = progress[current.id] || {};
+    let totalLinks = 0;
+    if (current.links?.spotify) totalLinks++;
+    if (current.links?.instagram) totalLinks++;
+    if (current.links?.youtube) totalLinks++;
+    let confirmedDone = 0;
+    if (current.links?.spotify && currentArtistProgress.spotify) confirmedDone++;
+    if (current.links?.instagram && currentArtistProgress.instagram) confirmedDone++;
+    if (current.links?.youtube && currentArtistProgress.youtube) confirmedDone++;
+    const pct = totalLinks > 0 ? (confirmedDone / totalLinks) * 100 : 0;
+    const isSetComplete = currentArtistProgress._rewarded;
+
+    return (
+        <div className="relative animate-fade-in-up mt-12 md:mt-16 px-1">
+             <div className="text-center max-w-3xl mx-auto mb-10">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#FFD36A]/10 border border-[#FFD36A]/40 mb-4 backdrop-blur-md shadow-[0_0_20px_rgba(255,211,106,0.15)]">
+                    <CrownIcon className="w-4 h-4 text-[#FFD36A] animate-pulse" />
+                    <span className="text-[11px] font-black text-[#FFD36A] uppercase tracking-[0.25em]">Destaque do Dia</span>
+                </div>
+                <h2 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tighter mb-4 drop-shadow-2xl uppercase" style={{ textShadow: '0 0 25px rgba(255,211,106,0.3)' }}>ARTISTAS DO DIA</h2>
+            </div>
+             <div className="relative min-h-[400px] max-w-5xl mx-auto">
+                 <div className="bg-[#080808] border border-[#FFD36A]/30 p-1 rounded-[40px] relative overflow-hidden shadow-[0_0_60px_rgba(255,211,106,0.1)] group hover:border-[#FFD36A]/60 transition-all duration-500">
+                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl p-8 md:p-12 rounded-[36px] relative z-10 flex flex-col md:flex-row items-center gap-10">
+                        <div className="relative shrink-0">
+                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-[#FFD36A] animate-[float_5s_ease-in-out_infinite] z-20 drop-shadow-[0_0_15px_rgba(255,211,106,0.8)]"><CrownIcon className="w-10 h-10" /></div>
+                            <div className="relative p-2 rounded-full border-2 border-[#FFD36A] shadow-[0_0_40px_rgba(255,211,106,0.25)] bg-[#050505]">
+                                <img src={current.avatarUrl} alt={current.name} className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover" />
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-[#050505] text-[#FFD36A] text-[10px] font-black uppercase px-4 py-1.5 rounded-full border border-[#FFD36A] shadow-lg whitespace-nowrap">Lvl {formatNumber(current.level)}</div>
+                            </div>
+                        </div>
+                        <div className="text-center md:text-left flex-1 w-full space-y-6">
+                             <div>
+                                <h3 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight drop-shadow-md mb-2">{current.artisticName}</h3>
+                                <p className="text-[#B3B3B3] text-sm font-medium">{current.name} • {current.plan}</p>
+                            </div>
+                            <div className="bg-[#111] p-4 rounded-2xl border border-[#222] max-w-md mx-auto md:mx-0">
+                                <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-[#808080] mb-2">
+                                    <span>Progresso de Exploração</span>
+                                    <span className={isSetComplete ? 'text-[#FFD36A]' : 'text-white'}>{confirmedDone}/{totalLinks}</span>
+                                </div>
+                                <div className="h-3 bg-[#050505] rounded-full overflow-hidden border border-[#333]">
+                                    <div style={{ width: `${pct}%` }} className={`h-full transition-all duration-700 ${isSetComplete ? 'bg-[#FFD36A] shadow-[0_0_15px_#FFD36A]' : 'bg-gradient-to-r from-[#C79B2C] to-[#FFD36A]'}`}></div>
+                                </div>
+                                <p className="text-[10px] text-[#666] mt-2 flex items-center gap-2">{isSetComplete ? <><CheckIcon className="w-3 h-3 text-[#FFD36A]"/> Recompensa Coletada!</> : "Visite os links para ganhar +1 Coin"}</p>
+                            </div>
+                            <div className="flex justify-center md:justify-start gap-4">
+                                {current.links?.spotify && <button onClick={() => handleLinkClick('spotify', current.links.spotify)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.spotify ? 'bg-[#1DB954]/10 border-[#1DB954] text-[#1DB954]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><SpotifyIcon className="w-6 h-6" /></button>}
+                                {current.links?.instagram && <button onClick={() => handleLinkClick('instagram', current.links.instagram)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.instagram ? 'bg-[#E1306C]/10 border-[#E1306C] text-[#E1306C]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><InstagramIcon className="w-6 h-6" /></button>}
+                                {current.links?.youtube && <button onClick={() => handleLinkClick('youtube', current.links.youtube)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.youtube ? 'bg-[#FF0000]/10 border-[#FF0000] text-[#FF0000]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><YoutubeIcon className="w-6 h-6" /></button>}
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+                 {artists.length > 1 && (
+                      <div className="flex justify-center gap-4 mt-8">
+                        <button onClick={() => setCurrentIndex((prev) => (prev - 1 + artists.length) % artists.length)} className="px-6 py-2 bg-[#151515] rounded-xl hover:bg-[#222] text-white font-bold text-xs uppercase tracking-widest border border-[#333] transition-colors">◀︎ Anterior</button>
+                        <span className="text-xs text-[#666] font-mono self-center bg-[#111] px-3 py-1 rounded border border-[#222]">{currentIndex + 1} / {artists.length}</span>
+                        <button onClick={() => setCurrentIndex((prev) => (prev + 1) % artists.length)} className="px-6 py-2 bg-[#151515] rounded-xl hover:bg-[#222] text-white font-bold text-xs uppercase tracking-widest border border-[#333] transition-colors">Próximo ▶︎</button>
+                      </div>
+                 )}
+             </div>
+        </div>
+    );
+};
+
+const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, isCheckingIn: boolean }> = React.memo(({ user, onCheckIn, isCheckingIn }) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
+    if (lastCheckInDate) lastCheckInDate.setHours(0, 0, 0, 0);
+    const hasCheckedInToday = lastCheckInDate?.getTime() === today.getTime();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : user.weeklyCheckInStreak;
+
+    return (
+        <div className="relative overflow-hidden rounded-[32px] p-[1px] bg-gradient-to-b from-[#FFD36A]/20 to-transparent shadow-[0_0_40px_rgba(255,211,106,0.1)] group h-full flex flex-col transition-all duration-500 hover:shadow-[0_0_60px_rgba(255,211,106,0.15)] hover:-translate-y-1">
+            <div className="absolute inset-0 bg-[#050505] rounded-[31px] m-[1px] z-0"></div>
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 pointer-events-none mix-blend-overlay z-0"></div>
+            <div className="relative z-10 p-8 md:p-10 flex flex-col h-full justify-between">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2.5 bg-[#FFD36A]/10 rounded-xl border border-[#FFD36A]/40 shadow-[0_0_15px_rgba(255,211,106,0.2)]"><CoinIcon className="w-6 h-6 text-[#FFD36A] animate-[spin_4s_linear_infinite]" /></div>
+                            <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-widest drop-shadow-[0_0_12px_rgba(255,211,106,0.45)] text-shadow-glow">Check-in</h3>
+                        </div>
+                        <p className="text-[#FFE7AC] text-sm font-bold uppercase tracking-wide drop-shadow-md opacity-90">Ganhe recompensas musicais todos os dias</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                         <div className="px-4 py-1.5 rounded-full bg-[#111] border border-[#333] flex items-center gap-2 shadow-inner group-hover:border-[#FFD36A]/40 transition-colors">
+                            <span className="w-2 h-2 bg-[#3CFF9A] rounded-full animate-pulse shadow-[0_0_8px_#3CFF9A]"></span>
+                            <span className="text-xs font-black text-white uppercase tracking-wider">{streak} {streak === 1 ? 'Dia' : 'Dias'}</span>
+                         </div>
+                    </div>
+                </div>
+                <div className="flex-grow flex flex-col justify-center pt-10 pb-14">
+                    <div className="flex items-end justify-center gap-1.5 h-16 mb-8 opacity-90">
+                        {[...Array(12)].map((_, i) => (
+                            <div key={i} className="w-2 bg-gradient-to-t from-[#FFD36A] to-[#FFB72E] rounded-t-sm shadow-[0_0_15px_rgba(255,211,106,0.5)]" style={{ height: `${20 + Math.random() * 80}%`, opacity: 0.7 + (i % 3) * 0.1, animation: `bounce 0.${6 + (i % 4)}s infinite alternate ease-in-out` }}></div>
+                        ))}
+                    </div>
+                    <div className="flex justify-between items-center relative px-2">
+                         <div className="absolute top-1/2 left-0 w-full h-1.5 bg-[#1A1A1A] rounded-full -z-10 border border-[#333]"></div>
+                         <div className="absolute top-1/2 left-0 h-1.5 bg-gradient-to-r from-[#FFB72E] to-[#FFD36A] rounded-full -z-10 transition-all duration-1000 shadow-[0_0_15px_rgba(255,211,106,0.6)]" style={{ width: `${(Math.min(streak, 7) / 7) * 100}%` }}></div>
+                         {Array.from({ length: 7 }).map((_, index) => {
+                            const dayNum = index + 1;
+                            const isCompleted = dayNum <= streak;
+                            const isToday = !hasCheckedInToday && dayNum === streak + 1;
+                            return (
+                                <div key={index} className="relative group/day">
+                                    <div className={`w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 relative ${isCompleted ? 'bg-[#FFD36A] border-[#FFB72E] text-black shadow-[0_0_25px_rgba(255,211,106,0.6)] scale-110' : isToday ? 'bg-[#0A0A0A] border-[#FFD36A] text-[#FFD36A] animate-pulse shadow-[0_0_20px_rgba(255,211,106,0.4)] scale-105' : 'bg-[#111] border-[#222] text-gray-700'}`}>
+                                        {isCompleted ? <CheckIcon className="w-5 h-5 font-black" /> : <span className="text-[10px] md:text-xs font-black font-mono">{dayNum}</span>}
+                                    </div>
+                                    {index === 6 && <div className="absolute top-full mt-3 right-0 bg-[#FFD36A] text-black text-[9px] font-black px-3 py-1.5 rounded-lg opacity-100 shadow-[0_0_10px_rgba(255,211,106,0.5)] whitespace-nowrap animate-bounce z-20 border border-black">BÔNUS FINAL: +10 LC</div>}
+                                </div>
+                            );
+                         })}
+                    </div>
+                </div>
+                <div className="mt-auto">
+                    {hasCheckedInToday ? (
+                         <div className="w-full py-5 rounded-xl bg-[#111] border border-[#333] flex items-center justify-center gap-4 cursor-default shadow-inner">
+                             <div className="w-10 h-10 rounded-full bg-[#3CFF9A]/10 flex items-center justify-center border border-[#3CFF9A]/50 shadow-[0_0_15px_rgba(60,255,154,0.2)]"><CheckIcon className="w-5 h-5 text-[#3CFF9A]" /></div>
+                             <div className="flex flex-col items-start"><span className="text-sm font-bold text-white uppercase tracking-widest">Check-in Realizado</span><span className="text-[10px] text-gray-500 font-mono">Volte amanhã para manter o ritmo</span></div>
+                         </div>
+                    ) : (
+                        <button onClick={onCheckIn} disabled={isCheckingIn} className="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all duration-300 bg-gradient-to-r from-[#FFCA4F] via-[#FFE08F] to-[#FFCA4F] bg-[length:200%_100%] animate-[shine_3s_linear_infinite] text-black border border-[#FFD36A] shadow-[0_0_35px_rgba(255,211,106,0.4)] hover:shadow-[0_0_60px_rgba(255,211,106,0.6)] hover:scale-[1.03] active:scale-[0.98] relative overflow-hidden group/btn">
+                            <span className="relative z-10 flex items-center justify-center gap-3">{isCheckingIn ? <>Sincronizando...</> : <>Fazer Check-in Agora<TrendingUpIcon className="w-5 h-5" /></>}</span>
+                        </button>
+                    )}
+                    {!hasCheckedInToday && <p className="text-center text-[10px] text-[#FFD36A] mt-4 uppercase font-bold tracking-[0.15em] drop-shadow-[0_0_10px_rgba(255,211,106,0.8)] animate-pulse">RESGATE SUAS COINS DISPONÍVEIS</p>}
+                </div>
+            </div>
+        </div>
+    );
+});
+
+const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewardModal }) => {
+  useEffect(() => {
+      Perf.mark('dashboard_mount');
+      Perf.trackRender('Dashboard');
+      return () => {};
+  }, []);
+
+  const { state, dispatch } = useAppContext();
+  const { activeUser: user, prevCoins } = state;
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchData = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const dashboardData = await api.fetchDashboardData();
+            setData(dashboardData);
+            if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
+                const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
+                if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
+                    onShowArtistOfTheDay(processedEntry.id);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch dashboard data:", error);
+            setError("Não foi possível carregar os dados do dashboard.");
+        } finally {
+            setIsLoading(false);
+            Perf.end('dashboard_mount');
+        }
+    };
+    fetchData();
+  }, []);
+
+  const handleDailyCheckIn = useCallback(async () => {
+    if (!user || isCheckingIn) return; 
+    setIsCheckingIn(true);
+    Perf.mark('check_in_action');
+    try {
+        const response = await api.dailyCheckIn(user.id);
+        if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
+        if (response.coinsGained > 0 && response.updatedUser) {
+            dispatch({ 
+                type: 'ADD_TOAST', 
+                payload: { 
+                    id: Date.now().toString(), 
+                    type: 'coin', 
+                    title: 'Check-in Realizado!', 
+                    message: `+${response.coinsGained} Lummi Coins adicionadas.` 
+                } 
+            });
+
+            setCheckInResult({
+                coinsGained: response.coinsGained,
+                isBonus: response.isBonus,
+                streak: response.streak,
+                updatedUser: response.updatedUser,
+            });
+        }
+    } catch (e) { console.error(e); } finally { 
+        setIsCheckingIn(false); 
+        Perf.end('check_in_action');
+    }
+  }, [user, isCheckingIn, dispatch]);
+
+  const handleCloseCheckInModal = useCallback(() => {
+    if (checkInResult?.updatedUser) dispatch({ type: 'UPDATE_USER', payload: checkInResult.updatedUser });
+    setCheckInResult(null);
+  }, [checkInResult, dispatch]);
+  
+  if (isLoading || !user) {
+    return (
+        <div className="space-y-6">
+            <LoadingSkeleton height={300} className="rounded-[26px]" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <LoadingSkeleton height={200} className="rounded-[28px]" />
+                <LoadingSkeleton height={200} className="rounded-[28px]" />
+                <LoadingSkeleton height={200} className="rounded-[28px]" />
+            </div>
+            <LoadingSkeleton height={400} className="rounded-[32px]" />
+        </div>
+    );
+  }
+  
+  if (error) return <div className="text-center text-red-500 p-8 border border-red-500/30 rounded-xl bg-red-900/10 backdrop-blur-sm">{error}</div>;
+  if (!data) return null;
+
+  const xpProgress = user.xp - xpForLevelStart(user.level);
+  const xpForCurrentLevel = user.xpToNextLevel;
+  const xpPercentage = Math.min(100, Math.max(0, (xpProgress / xpForCurrentLevel) * 100));
+  const coinStart = prevCoins === null ? 0 : prevCoins;
+
+  const getPlanBadge = (plan: User['plan']) => {
+      switch (plan) {
+          case 'Hitmaker': return { label: '🚀 BOOSTER 10x', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', glow: 'shadow-[0_0_25px_rgba(248,113,113,0.3)]' };
+          case 'Artista Profissional': return { label: '⚡ BOOSTER 5x', color: 'text-neon-magenta', bg: 'bg-neon-magenta/10', border: 'border-neon-magenta/30', glow: 'shadow-[0_0_25px_rgba(255,28,247,0.3)]' };
+          case 'Artista em Ascensão': return { label: '🔥 BOOSTER 3x', color: 'text-neon-cyan', bg: 'bg-neon-cyan/10', border: 'border-neon-cyan/30', glow: 'shadow-[0_0_25px_rgba(0,232,255,0.3)]' };
+          default: return null;
+      }
+  };
+  const planBadge = getPlanBadge(user.plan);
+
+  return (
+    <div className="relative pb-[120px] mb-10 space-y-12">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(255,211,106,0.03),transparent_60%),radial-gradient(circle_at_80%_80%,rgba(10,6,0,0.8),transparent_100%)] z-[-1]"></div>
+      
+      <div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6">
+            <div>
+                <p className="text-[#FFD36A] font-bold text-xs mb-2 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <span className="w-2 h-2 bg-[#FFD36A] rounded-full animate-pulse shadow-[0_0_10px_#FFD36A]"></span>
+                    {getGreeting()},
+                </p>
+                <h2 className="text-4xl md:text-6xl font-black text-white font-chakra tracking-tighter leading-none uppercase drop-shadow-lg text-shadow-glow">{user.name}</h2>
+            </div>
+            <div className="hidden md:block text-right">
+                <p className="text-[10px] text-gray-400 uppercase tracking-[0.3em] font-bold mb-1">Carreira Musical</p>
+                <p className="text-[#FFD36A] font-bold text-3xl font-chakra tracking-wide drop-shadow-[0_0_10px_rgba(255,211,106,0.4)]">{user.artisticName}</p>
+            </div>
+        </div>
+        
+        <AdvertisementCarousel ads={data.advertisements} />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 mt-12">
+            
+            {/* LEVEL CARD */}
+            <div className="bg-[#050505]/90 border border-[#FFD36A]/30 p-8 rounded-[28px] relative overflow-hidden group hover:border-[#FFD36A] transition-all duration-500 hover:shadow-[0_0_35px_rgba(255,210,120,0.25)] hover:-translate-y-1 h-full flex flex-col justify-between backdrop-blur-xl animate-[fade-in-up_0.5s_ease-out]">
+                <div className="absolute inset-0 bg-[#FFD36A]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-30 transition-opacity transform group-hover:scale-110 duration-700">
+                    <XPIcon className="w-40 h-40 text-[#FFD36A] drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]" />
+                </div>
+                
+                <div className="relative z-10">
+                    <p className="text-[10px] text-[#FFD36A] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2 border border-[#FFD36A]/20 px-3 py-1 rounded-full w-fit bg-[#FFD36A]/5 shadow-[0_0_10px_rgba(255,211,106,0.1)]">Nível Atual</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-6xl md:text-7xl font-black text-white font-chakra tracking-tighter text-shadow-glow">{formatNumber(user.level)}</span>
+                        <span className="text-sm text-gray-500 font-bold self-end mb-2">/ 100</span>
+                    </div>
+                </div>
+                <div className="mt-8 relative z-10">
+                    <div className="relative h-3 bg-black rounded-full overflow-hidden border border-white/10">
+                        <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#B45309] to-[#FFD36A] rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(255,211,106,0.6)]" style={{ width: `${xpPercentage}%` }}>
+                            <div className="absolute inset-0 bg-white/30 animate-[shine-sweep_2s_infinite]"></div>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-3 text-[10px] font-bold text-[#808080] uppercase tracking-wider">
+                        <span className="text-white">{formatNumber(xpProgress)} XP</span>
+                        <span>{formatNumber(xpForCurrentLevel)} XP</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* COINS CARD */}
+            <div className="bg-[#050505]/90 border border-[#FFD36A]/30 p-8 rounded-[28px] relative overflow-hidden group hover:border-[#FFD36A] transition-all duration-500 hover:shadow-[0_0_35px_rgba(255,210,120,0.25)] hover:-translate-y-1 h-full flex flex-col justify-between backdrop-blur-xl animate-[fade-in-up_0.6s_ease-out]">
+                <div className="absolute inset-0 bg-[#FFD36A]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-30 transition-opacity transform group-hover:scale-110 duration-700">
+                    <CoinIcon className="w-40 h-40 text-[#FFD36A] drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]" />
+                </div>
+                <div className="relative z-10">
+                    <p className="text-[10px] text-[#FFD36A] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2 border border-[#FFD36A]/20 px-3 py-1 rounded-full w-fit bg-[#FFD36A]/5 shadow-[0_0_10px_rgba(255,211,106,0.1)]">Saldo Disponível</p>
+                    <div className="flex items-center gap-4">
+                        <div className="p-3.5 bg-[#FFD36A]/10 rounded-full border border-[#FFD36A]/40 shadow-[0_0_20px_rgba(255,211,106,0.3)] animate-[pulse_2s_infinite]">
+                            <CoinIcon className="w-9 h-9 text-[#FFD36A] drop-shadow-md" />
+                        </div>
+                        <CountUp start={coinStart} end={user.coins} duration={1500} className="text-5xl md:text-6xl font-black text-white font-chakra tracking-tighter text-shadow-glow" />
+                    </div>
+                </div>
+                <p className="text-xs text-[#808080] mt-8 font-medium border-t border-white/10 pt-4 relative z-10 tracking-wide">Use na loja para impulsionar sua carreira.</p>
+            </div>
+
+            {/* PLAN CARD */}
+            <div className={`bg-[#050505]/90 border p-8 rounded-[28px] relative overflow-hidden flex flex-col justify-between transition-all duration-500 h-full backdrop-blur-xl animate-[fade-in-up_0.7s_ease-out] ${planBadge ? `hover:${planBadge.border} ${planBadge.border} hover:${planBadge.glow}` : 'border-[#00E8FF]/30 hover:border-[#00E8FF] hover:shadow-[0_0_35px_rgba(0,232,255,0.2)]'} hover:-translate-y-1`}>
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br from-transparent to-black/50"></div>
+                <div className="relative z-10">
+                    <p className={`text-[10px] uppercase tracking-[0.2em] font-black mb-4 flex items-center gap-2 border px-3 py-1 rounded-full w-fit ${planBadge ? `${planBadge.color} ${planBadge.border} ${planBadge.bg}` : 'text-[#00E8FF] border-[#00E8FF]/30 bg-[#00E8FF]/5'}`}>Plano Atual</p>
+                    <h3 className={`text-3xl md:text-4xl font-black font-chakra leading-tight mb-2 drop-shadow-lg ${planBadge ? 'text-white' : 'text-gray-200'}`}>{user.plan}</h3>
+                    
+                    {planBadge ? (
+                        <div className={`inline-flex items-center px-4 py-2 rounded-xl border mt-4 backdrop-blur-md ${planBadge.bg} ${planBadge.border} ${planBadge.color} ${planBadge.glow}`}>
+                            <span className="text-xs font-bold tracking-widest uppercase">{planBadge.label}</span>
+                        </div>
+                    ) : (
+                        <div className="mt-6">
+                            <p className="text-sm text-gray-400 mb-4 font-medium">Acelere seus ganhos e desbloqueie recursos.</p>
+                            <button onClick={() => dispatch({ type: 'SET_VIEW', payload: 'subscriptions' })} className="text-xs bg-[#00E8FF]/10 text-[#00E8FF] border border-[#00E8FF]/50 px-6 py-4 rounded-xl font-bold hover:bg-[#00E8FF] hover:text-black transition-all uppercase tracking-[0.15em] shadow-[0_0_20px_rgba(0,232,255,0.2)] hover:shadow-[0_0_40px_rgba(0,232,255,0.5)] w-full active:scale-95 relative overflow-hidden group/btn">
+                                <span className="relative z-10">Ativar Boost 🚀</span>
+                                <div className="absolute inset-0 bg-white/30 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 skew-y-12"></div>
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <div className="absolute -bottom-10 -right-10 opacity-10 pointer-events-none transform rotate-12 group-hover:scale-110 transition-transform duration-700">
+                    <CrownIcon className="w-72 h-72 text-white" />
+                </div>
+            </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
+            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} isCheckingIn={isCheckingIn} />
+
+            {/* FEATURED MISSION */}
+            {data.featuredMission ? (
+            <div 
+                className="relative rounded-[32px] overflow-hidden border border-[#FFD36A]/30 bg-[#0A0A0A] shadow-[0_0_40px_rgba(255,211,106,0.1)] group cursor-pointer transition-all duration-500 hover:-translate-y-1 hover:border-[#FFD36A] hover:shadow-[0_0_60px_rgba(255,211,106,0.25)] min-h-[400px] flex flex-col" 
+                onClick={() => dispatch({ type: 'SET_VIEW', payload: 'missions' })}
+            >
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#FFD36A] to-transparent opacity-80"></div>
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 z-0 mix-blend-overlay pointer-events-none"></div>
+                <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-[#FFD36A]/5 blur-[100px] rounded-full pointer-events-none"></div>
+                
+                <div className="relative z-10 p-8 md:p-10 h-full flex flex-col">
+                    <div className="flex items-center gap-3 mb-8">
+                        <div className="p-2.5 bg-[#FFD36A] text-black rounded-xl shadow-[0_0_20px_rgba(255,211,106,0.6)] animate-pulse-slow"><StarIcon className="w-6 h-6" /></div>
+                        <h3 className="text-xs font-black text-[#FFD36A] uppercase tracking-[0.3em] text-shadow-glow">Missão em Destaque</h3>
+                    </div>
+
+                    <h4 className="text-4xl md:text-5xl font-black text-white mb-6 font-chakra leading-[1.1] drop-shadow-xl uppercase tracking-tight group-hover:text-[#FFD36A] transition-colors duration-500">{data.featuredMission.title}</h4>
+                    <p className="text-[#B3B3B3] text-base md:text-lg line-clamp-3 mb-10 flex-grow leading-relaxed font-medium max-w-xl">{data.featuredMission.description}</p>
+
+                    <div className="flex items-center gap-4 mt-auto pt-8 border-t border-white/10">
+                        <div className="flex items-center gap-2 bg-[#1A1A1A] px-5 py-2.5 rounded-xl border border-[#A855F7]/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                            <XPIcon className="w-5 h-5 text-[#A855F7]" />
+                            <span className="font-black text-white text-sm tracking-wide">{formatNumber(data.featuredMission.xp)} XP</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-[#1A1A1A] px-5 py-2.5 rounded-xl border border-[#FFD36A]/30 shadow-[0_0_15px_rgba(255,211,106,0.15)]">
+                            <CoinIcon className="w-5 h-5 text-[#FFD36A]" />
+                            <span className="font-black text-white text-sm tracking-wide">{formatNumber(data.featuredMission.coins)} Coins</span>
+                        </div>
+                        <div className="ml-auto">
+                             <button className="text-xs font-black text-black uppercase tracking-[0.2em] bg-gradient-to-r from-[#FFD36A] to-[#FFB72E] px-8 py-3.5 rounded-xl shadow-[0_0_25px_rgba(255,211,106,0.4)] hover:shadow-[0_0_40px_rgba(255,211,106,0.6)] transition-all hover:scale-105 active:scale-95 relative overflow-hidden group/btn">
+                                <span className="relative z-10">Fazer Agora</span>
+                                <div className="absolute inset-0 bg-white/40 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 skew-y-12"></div>
+                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ) : (
+                <div className="bg-[#111] p-8 rounded-[32px] border border-[#333] h-full flex flex-col items-center justify-center text-center shadow-inner min-h-[400px]">
+                    <div className="p-6 bg-[#050505] rounded-full mb-6 border border-[#222]"><StarIcon className="w-12 h-12 text-gray-700" /></div>
+                    <h3 className="text-2xl font-bold text-gray-500 font-chakra uppercase">Sem destaque hoje</h3>
+                    <p className="text-gray-600 mt-2 text-sm tracking-wide">Fique de olho para novas missões!</p>
+                </div>
+            )}
+        </div>
+
+        <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} />
+        
+        {checkInResult && <CheckInSuccessModal onClose={handleCloseCheckInModal} coinsGained={checkInResult.coinsGained} isBonus={checkInResult.isBonus} streak={checkInResult.streak} />}
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;

@@ -1,0 +1,611 @@
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import type { SubscriptionPlan, User, SubscriptionRequest, SubscriptionEventType, SubscriptionRequestStatus, IconComponent } from '../types';
+import { useAppContext } from '../constants';
+import * as api from '../api/index';
+import ConfirmationModal from './admin/ConfirmationModal';
+import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, SoundWaveIcon, TrendingUpIcon, MicIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
+import { PLANS, PLAN_ALIASES } from '../api/subscriptions/constants';
+import { normalizePlanId } from '../api/subscriptions/normalizePlan';
+import FaqItem from './ui/patterns/FaqItem';
+
+// --- THEME CONFIGURATION ---
+
+const PLAN_THEMES: Record<string, {
+    borderColor: string;
+    glowColor: string;
+    accentColor: string;
+    bgGradient: string;
+    microText: string;
+    iconAnimation: string;
+}> = {
+    'Free Flow': {
+        borderColor: 'border-[#3CFFF8]', // Cyan Electric
+        glowColor: 'shadow-[0_0_30px_rgba(60,255,248,0.15)]',
+        accentColor: 'text-[#3CFFF8]',
+        bgGradient: 'from-[#0D0F12] via-[#14171C] to-[#0D0F12]', // Darker base
+        microText: "Comece sua jornada",
+        iconAnimation: 'animate-pulse',
+    },
+    'Artista em Ascensão': {
+        borderColor: 'border-[#FF3CE6]', // Pink Neon
+        glowColor: 'shadow-[0_0_30px_rgba(255,60,230,0.15)]',
+        accentColor: 'text-[#FF3CE6]',
+        bgGradient: 'from-[#1a0b2e] via-[#14171C] to-[#0D0F12]', // Slight purple tint
+        microText: "Dê seu primeiro salto",
+        iconAnimation: 'animate-bounce',
+    },
+    'Artista Profissional': {
+        borderColor: 'border-[#A66BFF]', // Purple Royal
+        glowColor: 'shadow-[0_0_40px_rgba(166,107,255,0.2)]',
+        accentColor: 'text-[#A66BFF]',
+        bgGradient: 'from-[#1e1b4b] via-[#14171C] to-[#0D0F12]', // Deep blue/purple
+        microText: "Cresça de verdade",
+        iconAnimation: 'animate-pulse', 
+    },
+    'Hitmaker': {
+        borderColor: 'border-[#3CFF9A]', // Emerald Pulse
+        glowColor: 'shadow-[0_0_50px_rgba(60,255,154,0.25)]',
+        accentColor: 'text-[#3CFF9A]',
+        bgGradient: 'from-[#064e3b] via-[#14171C] to-[#0D0F12]', // Emerald tint
+        microText: "Busque o topo",
+        iconAnimation: 'animate-[pulse_2s_ease-in-out_infinite]',
+    }
+};
+
+const DEFAULT_THEME = PLAN_THEMES['Free Flow'];
+
+// --- COMPONENTS ---
+
+const PlanBadge: React.FC<{text: string, className: string}> = ({text, className}) => (
+    <div className={`absolute top-0 left-1/2 -translate-x-1/2 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-xl z-30 shadow-lg border-b border-x border-white/10 backdrop-blur-md ${className} animate-fade-in-up`}>
+        {text}
+    </div>
+);
+
+const PlanFeatureItem: React.FC<{ text: string; icon: IconComponent | undefined, accentColor: string }> = ({ text, icon: Icon, accentColor }) => {
+    // Safe Fallback for Icon to prevent crash
+    const ValidIcon = Icon || StarIcon;
+    return (
+        <li className="flex items-start gap-3 text-sm text-gray-300 group/item transition-all duration-300 hover:translate-x-1">
+            <div className={`mt-0.5 p-1 rounded-full bg-white/5 border border-white/10 group-hover/item:border-${accentColor.replace('text-', '')} transition-colors`}>
+                <ValidIcon className={`w-3 h-3 ${accentColor} group-hover/item:scale-110 transition-transform`} />
+            </div>
+            <span className="leading-relaxed font-medium text-gray-400 group-hover/item:text-white transition-colors">{text}</span>
+        </li>
+    );
+};
+
+const PlanCard: React.FC<{ 
+    plan: SubscriptionPlan; 
+    currentUser: User; 
+    pendingRequest: SubscriptionRequest | null;
+    requestingPlan: string | null;
+    onRequestUpgrade: (planName: User['plan'], paymentLink?: string) => void;
+    onPay: (request: SubscriptionRequest) => void;
+    onSubmitProof: (proofDataUrl: string) => void;
+    isSubmittingProof: boolean;
+    onCancelRequest: (request: SubscriptionRequest) => void;
+}> = ({ plan, currentUser, pendingRequest, requestingPlan, onRequestUpgrade, onPay, onSubmitProof, isSubmittingProof, onCancelRequest }) => {
+    const { icon: Icon } = plan;
+    const PlanIcon = Icon || StarIcon; // Safe fallback
+    
+    const isCurrentPlan = plan.name === currentUser.plan;
+    const theme = PLAN_THEMES[plan.name] || DEFAULT_THEME;
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        if (event.target.files && event.target.files[0]) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (reader.result) {
+                    onSubmitProof(reader.result as string);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    // Dynamic Border Logic
+    const borderClass = isCurrentPlan 
+        ? 'border-[#FFD36A] shadow-[0_0_30px_rgba(255,211,106,0.4)] scale-[1.02] z-20 ring-1 ring-[#FFD36A]/50' 
+        : `${theme.borderColor} hover:${theme.borderColor} hover:${theme.glowColor} border-opacity-30 hover:border-opacity-100 hover:scale-[1.02] hover:-translate-y-2`;
+
+    const buttonBase = `
+        w-full py-4 rounded-xl font-black text-sm uppercase tracking-[0.15em] 
+        transition-all duration-300 transform active:scale-[0.98] 
+        shadow-lg relative overflow-hidden group/btn border
+    `;
+
+    const renderButton = () => {
+        if (isCurrentPlan) {
+            return (
+                <button disabled className={`${buttonBase} bg-[#0F2816] border-[#3CFF9A] text-[#3CFF9A] cursor-default shadow-[0_0_15px_rgba(60,255,154,0.2)]`}>
+                    <span className="flex items-center justify-center gap-2 relative z-10">
+                        <CheckIcon className="w-5 h-5 animate-bounce"/> SEU PLANO ATUAL
+                    </span>
+                    {/* Aura Gold Effect behind active button */}
+                    <div className="absolute inset-0 bg-[#3CFF9A]/10 animate-pulse-slow"></div>
+                </button>
+            );
+        }
+
+        const isUpgradePendingForThisPlan = pendingRequest && pendingRequest.requestedPlan === plan.name;
+        const isUpgradePendingForAnotherPlan = pendingRequest && pendingRequest.requestedPlan !== plan.name;
+
+        if (isUpgradePendingForAnotherPlan) {
+             return (
+                <button disabled className={`${buttonBase} bg-[#151515] border-gray-800 text-gray-500 cursor-not-allowed`}>
+                    Indisponível
+                </button>
+            );
+        }
+
+        if (isUpgradePendingForThisPlan) {
+            switch (pendingRequest.status) {
+                case 'pending_payment':
+                    return (
+                         <button onClick={() => onPay(pendingRequest)} className={`${buttonBase} bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-black border-[#FFD36A] hover:shadow-[0_0_25px_rgba(255,211,106,0.5)]`}>
+                            Pagar Agora
+                            <div className="absolute inset-0 bg-white/30 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 skew-y-12"></div>
+                        </button>
+                    );
+                case 'awaiting_proof':
+                     return (
+                        <div className="space-y-3 w-full">
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                            <button 
+                                onClick={() => pendingRequest.paymentLink && window.open(pendingRequest.paymentLink, '_blank')}
+                                className="w-full py-3 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1A1A1A] text-[#FFD36A] border border-[#FFD36A]/30 hover:bg-[#FFD36A]/10 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <span>Link de Pagamento</span> ↗
+                            </button>
+                            <button 
+                                onClick={() => fileInputRef.current?.click()} 
+                                disabled={isSubmittingProof} 
+                                className={`${buttonBase} bg-gradient-to-r from-[#3498DB] to-[#2980B9] text-white border-blue-400/50 hover:shadow-[0_0_20px_rgba(52,152,219,0.4)]`}
+                            >
+                                {isSubmittingProof ? <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin mx-auto"></div> : 'Enviar Comprovante'}
+                            </button>
+                            <button 
+                                onClick={() => onCancelRequest(pendingRequest)}
+                                className="w-full text-[10px] text-center text-gray-500 hover:text-red-400 uppercase font-bold tracking-widest pt-1 hover:underline"
+                            >
+                                Cancelar Pedido
+                            </button>
+                        </div>
+                    );
+                case 'pending_approval':
+                    return (
+                        <button disabled className={`${buttonBase} bg-[#1A1A1A] border border-yellow-500/50 text-yellow-500 cursor-not-allowed animate-pulse`}>
+                            Analisando...
+                        </button>
+                    );
+                default:
+                    return null;
+            }
+        }
+        
+        if (plan.name === 'Free Flow') {
+             return (
+                 <div className="w-full py-4 text-center text-xs text-gray-600 font-mono uppercase tracking-widest border border-transparent">
+                     Plano Inicial
+                 </div>
+             );
+        }
+        
+        const isRequestingThisPlan = requestingPlan === plan.name;
+        const isDisabled = !!requestingPlan;
+
+        return (
+             <button 
+                onClick={() => onRequestUpgrade(plan.name as User['plan'], plan.paymentLink)}
+                disabled={isDisabled}
+                className={`${buttonBase} ${isDisabled ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] border-[#FFD36A] hover:shadow-[0_0_30px_rgba(255,211,106,0.6)] hover:brightness-110'}`}
+            >
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                    {isRequestingThisPlan ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : 'FAZER UPGRADE'}
+                </span>
+                {!isDisabled && <div className="absolute inset-0 bg-white/40 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 skew-y-12 ease-out"></div>}
+            </button>
+        );
+    };
+
+    return (
+        <div className={`
+            relative flex flex-col h-full transition-all duration-500 group rounded-[32px] 
+            bg-gradient-to-b ${theme.bgGradient} border-2 ${borderClass} overflow-hidden
+            backdrop-blur-md
+        `}>
+            {/* Background Noise Texture */}
+            <div className="absolute inset-0 opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] pointer-events-none"></div>
+            
+            {/* Shine Effect on Hover */}
+            <div className="absolute inset-0 rounded-[32px] overflow-hidden pointer-events-none">
+                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shine-sweep duration-1000"></div>
+            </div>
+            
+            {/* Hitmaker Special Glow */}
+            {plan.name === 'Hitmaker' && (
+                <div className="absolute -top-20 -right-20 w-64 h-64 bg-[#3CFF9A]/20 blur-[80px] rounded-full pointer-events-none animate-pulse-slow"></div>
+            )}
+
+            {/* Badges */}
+            {plan.highlight && !isCurrentPlan && <PlanBadge text="Mais Popular" className="bg-[#A66BFF] text-white border-[#A66BFF]/50 shadow-[#A66BFF]/40" />}
+            {isCurrentPlan && <div className="absolute top-4 right-4 w-3 h-3 bg-[#3CFF9A] rounded-full shadow-[0_0_10px_#3CFF9A] animate-pulse z-30"></div>}
+
+            <div className="p-8 flex flex-col h-full relative z-10">
+                
+                {/* Header Icon */}
+                <div className="flex justify-center mb-6">
+                    <div className={`
+                        p-5 rounded-2xl bg-black/40 border border-white/10 shadow-2xl 
+                        group-hover:scale-110 transition-transform duration-500
+                        group-hover:border-${theme.accentColor.replace('text-', '')}/50
+                        relative overflow-hidden
+                    `}>
+                         <div className={`absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity bg-${theme.accentColor.replace('text-', '')}`}></div>
+                         <PlanIcon className={`w-10 h-10 ${theme.accentColor} ${theme.iconAnimation} drop-shadow-lg`} />
+                    </div>
+                </div>
+
+                {/* Title & Emotional Microtext */}
+                <div className="text-center mb-6">
+                    <h3 className={`text-2xl font-black font-chakra uppercase tracking-wide text-white group-hover:text-shadow-glow transition-all`}>
+                        {plan.name}
+                    </h3>
+                    <p className={`text-xs font-bold uppercase tracking-[0.15em] mt-2 ${theme.accentColor} opacity-80 group-hover:opacity-100 transition-opacity`}>
+                        {theme.microText}
+                    </p>
+                </div>
+
+                {/* Price */}
+                <div className="text-center mb-8 relative">
+                    <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+                    <div className="relative inline-block bg-[#0D0F12]/80 px-4 py-1 rounded-lg backdrop-blur-sm border border-white/5">
+                        {plan.price.includes('/') ? (
+                            <div className="flex items-baseline justify-center gap-1">
+                                <span className="text-4xl md:text-5xl font-black font-chakra text-white tracking-tighter drop-shadow-md">{plan.price.split('/')[0]}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">/{plan.price.split('/')[1]}</span>
+                            </div>
+                        ) : (
+                            <span className="text-4xl font-black font-chakra text-white">{plan.price}</span>
+                        )}
+                    </div>
+                </div>
+                
+                {/* Separator */}
+                <div className={`h-px w-full bg-gradient-to-r from-transparent via-${theme.accentColor.replace('text-', '')}/30 to-transparent mb-8 opacity-50 group-hover:opacity-100 transition-opacity`}></div>
+
+                {/* Features */}
+                <ul className="space-y-4 mb-10 flex-grow">
+                    {plan.features.map((feature, index) => (
+                        <PlanFeatureItem key={index} text={feature.text} icon={feature.icon} accentColor={theme.accentColor} />
+                    ))}
+                </ul>
+
+                {/* Action */}
+                <div className="mt-auto">
+                    {renderButton()}
+                </div>
+            </div>
+            
+            {/* Bottom Gradient Fade */}
+            <div className={`absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-${theme.accentColor.replace('text-', '')}/5 to-transparent pointer-events-none`}></div>
+        </div>
+    );
+};
+
+const UnlockItem: React.FC<{ icon: IconComponent; title: string; delay: string }> = ({ icon: Icon, title, delay }) => (
+    <div 
+        className="flex items-center gap-4 p-4 bg-[#121212] border border-[#FFD36A]/20 rounded-xl animate-fade-in-up hover:border-[#FFD36A] hover:bg-[#FFD36A]/5 transition-all group"
+        style={{ animationDelay: delay }}
+    >
+        <div className="p-3 rounded-full bg-[#FFD36A]/10 border border-[#FFD36A]/20 group-hover:scale-110 transition-transform">
+            <Icon className="w-6 h-6 text-[#FFD36A]" />
+        </div>
+        <span className="font-bold text-white font-chakra uppercase tracking-wide text-sm">{title}</span>
+    </div>
+);
+
+const Subscriptions: React.FC = () => {
+  const { state, dispatch } = useAppContext();
+  const { activeUser: currentUser } = state;
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [pendingRequest, setPendingRequest] = useState<SubscriptionRequest | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [requestingPlan, setRequestingPlan] = useState<string | null>(null);
+  const [isSubmittingProof, setIsSubmittingProof] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [requestToCancel, setRequestToCancel] = useState<SubscriptionRequest | null>(null);
+  const [isCancellingRequest, setIsCancellingRequest] = useState(false);
+
+  const faqItems = [
+    {
+        question: "Como funcionam os pagamentos?",
+        answer: "Os pagamentos são processados externamente através do link de pagamento fornecido. Após o pagamento, você deve enviar o comprovante na plataforma para que nossa equipe aprove o seu novo plano."
+    },
+    {
+        question: "Posso cancelar a qualquer momento?",
+        answer: "Sim, você pode cancelar sua assinatura a qualquer momento. Ao cancelar, você retornará ao plano 'Free Flow' e seus benefícios de assinante permanecerão ativos até o final do ciclo de pagamento atual."
+    },
+    {
+        question: "O que acontece se eu fizer um upgrade?",
+        answer: "Ao fazer um upgrade, seu novo plano e benefícios se tornam ativos assim que o pagamento for aprovado. O valor pago é referente ao período do novo plano, sem pro-rata do plano anterior."
+    },
+    {
+        question: "Os descontos na loja são aplicados automaticamente?",
+        answer: "Sim! Se o seu plano inclui descontos na loja, os preços dos itens já aparecerão com o desconto aplicado para você."
+    },
+    {
+        question: "O que são Lummi Coins e como posso ganhá-las?",
+        answer: "Lummi Coins são a moeda virtual da plataforma. Você as ganha completando missões, fazendo check-in diário e subindo de nível. Com elas, você pode resgatar serviços visuais exclusivos na Loja, como avatares 3D e animações, além de itens que impulsionam sua carreira. Elas não expiram!"
+    },
+  ];
+
+  const fetchData = async () => {
+    if (!currentUser) return;
+    try {
+      const { plans: plansData, pendingRequest: pendingRequestData } = await api.fetchSubscriptionsPageData(currentUser.id);
+      
+      // PATCH: SUBSCRIPTIONS_FIX_V1
+      const enrichedPlans = plansData.map(p => {
+          const planId = normalizePlanId(p.name);
+          const config = PLANS[planId];
+          
+          // Default features based on constants if missing
+          if (!p.features || p.features.length === 0) {
+              const feats = [];
+              if (config.features.visualRewards) feats.push({ text: "Acesso a Recompensas Visuais", icon: StoreIcon });
+              if (config.features.queuePriority) feats.push({ text: "Fila Prioritária", icon: QueueIcon });
+              if (config.features.eventsAccess === 'vip') feats.push({ text: "Acesso VIP a Eventos", icon: CrownIcon });
+              if (config.multiplier > 1) feats.push({ text: `Multiplicador ${config.multiplier}x`, icon: TrendingUpIcon });
+              if (config.storeDiscount > 0) feats.push({ text: `Desconto na Loja ${config.storeDiscount * 100}%`, icon: DiscountIcon });
+              
+              // Fallback feature if empty
+              if (feats.length === 0) feats.push({ text: "Acesso Básico", icon: StarIcon });
+              
+              return { ...p, features: feats };
+          }
+          return p;
+      });
+      
+      setPlans(enrichedPlans);
+      setPendingRequest(pendingRequestData);
+    } catch (error) {
+      console.error("Failed to fetch subscription data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+        setIsLoading(true);
+        fetchData();
+    }
+  }, []);
+  
+  const processApiResponse = (response: any) => {
+    if (response.updatedUser) {
+        dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+    }
+    if (response.notifications) {
+        dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
+    }
+  };
+
+  const handleRequestUpgrade = async (planName: User['plan'], paymentLink?: string) => {
+    if (!currentUser || pendingRequest || requestingPlan) return;
+    setRequestingPlan(planName);
+    try {
+        const response = await api.requestSubscriptionUpgrade(currentUser.id, planName, paymentLink);
+        processApiResponse(response);
+        if (response.newRequest) {
+            setPendingRequest(response.newRequest);
+        }
+    } catch (error) {
+        console.error("Failed to request upgrade:", error);
+    } finally {
+        setRequestingPlan(null);
+    }
+  };
+  
+  const handlePay = async (request: SubscriptionRequest) => {
+    if (request.paymentLink) {
+        window.open(request.paymentLink, '_blank');
+    }
+    const response = await api.markSubscriptionAsAwaitingProof(request.id);
+    if(response.updatedRequest) {
+        setPendingRequest(response.updatedRequest);
+    }
+  };
+  
+  const handleSubmitProof = async (proofDataUrl: string) => {
+    if (!currentUser || !pendingRequest) return;
+    setIsSubmittingProof(true);
+    try {
+        const response = await api.submitSubscriptionProof(currentUser.id, pendingRequest.id, proofDataUrl);
+        processApiResponse(response);
+        if (response.updatedRequest) {
+            setPendingRequest(response.updatedRequest);
+        }
+    } catch(error) {
+        console.error("Failed to submit proof:", error);
+    } finally {
+        setIsSubmittingProof(false);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!currentUser) return;
+    setIsCancelling(true);
+    try {
+        const response = await api.cancelSubscription(currentUser.id);
+        processApiResponse(response);
+        setIsCancelModalOpen(false);
+    } catch (error) {
+        console.error("Failed to cancel subscription", error);
+    } finally {
+        setIsCancelling(false);
+    }
+  };
+
+  const handleConfirmCancelRequest = async () => {
+    if (!requestToCancel) return;
+    setIsCancellingRequest(true);
+    try {
+        const response = await api.cancelSubscriptionRequest(requestToCancel.id);
+        processApiResponse(response);
+        if (response.updatedRequest) {
+            await fetchData();
+        }
+    } catch (error) {
+        console.error("Failed to cancel subscription request:", error);
+    } finally {
+        setIsCancellingRequest(false);
+        setRequestToCancel(null);
+    }
+  };
+
+  if (isLoading || !currentUser) {
+    return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD36A] shadow-[0_0_20px_rgba(255,211,106,0.4)]"></div>
+        </div>
+    );
+  }
+
+  return (
+      <div className="animate-fade-in-up pb-32 relative">
+        
+        {/* 1. HERO SECTION */}
+        <div className="text-center max-w-5xl mx-auto pt-6 mb-16 relative">
+            {/* Back Glow */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-[600px] bg-[#FFD36A]/10 blur-[100px] rounded-full pointer-events-none"></div>
+            
+            <h2 className="text-4xl md:text-6xl font-black text-[#FFD36A] font-chakra uppercase tracking-tighter mb-4 relative z-10 drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]">
+                ESCOLHA SUA EVOLUÇÃO
+            </h2>
+            
+            <div className="relative z-10 flex items-center justify-center mb-6">
+                 <div className="h-[2px] w-12 bg-gradient-to-r from-transparent to-[#FF3CE6]"></div>
+                 <div className="mx-4 text-[#FF3CE6] animate-pulse">◆</div>
+                 <div className="h-[2px] w-12 bg-gradient-to-l from-transparent to-[#3CFFF8]"></div>
+            </div>
+
+            <p className="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-medium relative z-10">
+                Assinaturas feitas para artistas que buscam <span className="text-white font-bold">crescer, aparecer e dominar.</span>
+            </p>
+        </div>
+        
+        {/* Cancellation Notice */}
+        {currentUser.cancellationPending && currentUser.subscriptionExpiresAt && (
+            <div className="max-w-3xl mx-auto p-6 bg-red-900/20 border border-red-500/30 rounded-2xl text-center backdrop-blur-sm mb-10 animate-fade-in-up">
+                <h3 className="text-lg font-bold text-red-400 mb-2 uppercase tracking-wide">Cancelamento Agendado</h3>
+                <p className="text-red-200 text-sm mb-1">
+                    Sua assinatura do plano <span className="font-bold">"{currentUser.plan}"</span> será encerrada em:
+                </p>
+                <p className="text-2xl font-bold text-white font-mono">
+                    {new Date(currentUser.subscriptionExpiresAt).toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+            </div>
+        )}
+
+        {/* 2. PLANS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1500px] mx-auto items-stretch px-2 md:px-0 mb-24">
+            {plans.map(plan => (
+                <PlanCard 
+                    key={plan.name} 
+                    plan={plan} 
+                    currentUser={currentUser} 
+                    pendingRequest={pendingRequest}
+                    requestingPlan={requestingPlan}
+                    onRequestUpgrade={handleRequestUpgrade}
+                    onPay={handlePay}
+                    onSubmitProof={handleSubmitProof}
+                    isSubmittingProof={isSubmittingProof}
+                    onCancelRequest={setRequestToCancel}
+                />
+            ))}
+        </div>
+
+        {/* 3. UNLOCK FEATURES SECTION */}
+        <div className="max-w-4xl mx-auto mb-24 relative">
+            <div className="text-center mb-10">
+                <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide">
+                    🔥 O que você desbloqueia com Upgrade?
+                </h3>
+                <p className="text-gray-400 text-sm mt-2">Acelere seus resultados com benefícios exclusivos.</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <UnlockItem icon={CoinIcon} title="Mais Coins Mensais" delay="0.1s" />
+                <UnlockItem icon={XPIcon} title="Boost de XP (até 10x)" delay="0.2s" />
+                <UnlockItem icon={MissionIcon} title="Missões Diárias Extras" delay="0.3s" />
+                <UnlockItem icon={VipIcon} title="Acesso VIP a Eventos" delay="0.4s" />
+                <UnlockItem icon={DiscountIcon} title="Descontos na Loja" delay="0.5s" />
+                <UnlockItem icon={QueueIcon} title="Prioridade na Fila" delay="0.6s" />
+            </div>
+        </div>
+
+        {/* 4. MANAGEMENT & FAQ */}
+        <div className="max-w-3xl mx-auto px-4">
+            {currentUser.plan !== 'Free Flow' && !currentUser.cancellationPending && (
+                <div className="bg-[#121212] border border-[#FFD36A]/20 rounded-2xl p-8 text-center backdrop-blur-md shadow-2xl relative overflow-hidden group mb-16">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5 pointer-events-none"></div>
+                    <div className="relative z-10">
+                        <h3 className="text-2xl font-bold text-white font-chakra uppercase tracking-wide mb-2">Gerenciar Assinatura</h3>
+                        <p className="text-[#808080] text-sm mb-6">
+                            Você está atualmente no plano <span className="text-[#FFD36A] font-bold">{currentUser.plan}</span>.
+                        </p>
+                        <button
+                            onClick={() => setIsCancelModalOpen(true)}
+                            className="px-8 py-3 rounded-xl border border-red-500/30 text-red-400 font-bold text-xs uppercase tracking-widest hover:bg-red-500/10 hover:border-red-500 transition-all hover:shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                        >
+                            Cancelar Assinatura
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <h2 className="text-2xl font-bold text-center text-white mb-8 font-chakra uppercase tracking-wider flex items-center justify-center gap-2">
+                <ShieldIcon className="w-6 h-6 text-[#FFD36A]" /> Dúvidas Frequentes
+            </h2>
+            <div className="space-y-4">
+                {faqItems.map((item, index) => <FaqItem key={index} question={item.question} answer={item.answer} />)}
+            </div>
+        </div>
+
+        {/* MODALS */}
+        <ConfirmationModal
+            isOpen={isCancelModalOpen}
+            onClose={() => setIsCancelModalOpen(false)}
+            onConfirm={handleCancelSubscription}
+            title="Confirmar Cancelamento"
+            message={
+                <>
+                    <p className="text-white text-lg mb-2">Tem certeza que deseja cancelar?</p>
+                    <p className="text-sm text-gray-400">Você retornará ao plano 'Free Flow' após o término do período atual. Seus benefícios de assinante continuarão ativos até lá.</p>
+                </>
+            }
+            confirmButtonText={isCancelling ? 'Cancelando...' : 'Sim, Confirmar'}
+            confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+        />
+
+        <ConfirmationModal
+            isOpen={!!requestToCancel}
+            onClose={() => setRequestToCancel(null)}
+            onConfirm={handleConfirmCancelRequest}
+            title="Cancelar Pedido"
+            message="Tem certeza que deseja cancelar este processo de upgrade em andamento?"
+            confirmButtonText={isCancellingRequest ? 'Cancelando...' : 'Sim, Cancelar Pedido'}
+            confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+        />
+    </div>
+  );
+};
+
+export default Subscriptions;

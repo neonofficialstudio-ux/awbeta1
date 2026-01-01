@@ -1,0 +1,100 @@
+
+import React, { useEffect, useState } from 'react';
+import { useAppContext } from '../constants';
+import * as api from '../api/index';
+import { StabilizationEngine } from './stabilization/stabilizationEngine';
+import AuthPage from '../components/AuthPage';
+import BannedUserPage from '../components/BannedUserPage';
+import { MainLayout } from './MainLayout';
+import { config } from './config';
+import { getSupabase } from '../api/supabase/client';
+
+export const AuthGate = (): React.ReactElement => {
+    const { state, dispatch } = useAppContext();
+    const { activeUser } = state;
+    const [termsContent, setTermsContent] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Initial Load Logic
+    useEffect(() => {
+        const checkLoginStatus = async () => {
+            setIsLoading(true);
+            try {
+                const { user, notifications, unseenAdminNotifications } = await api.checkAuthStatus();
+                if (user) {
+                    await StabilizationEngine.runStartupChecks(user.id);
+                    if (user.riskScore === undefined) user.riskScore = 0;
+                    if (user.shieldLevel === undefined) user.shieldLevel = "normal";
+                    
+                    dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                }
+            } catch (error) {
+                console.error("Auth check failed:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        checkLoginStatus();
+    }, [dispatch]);
+
+    // Supabase Auth Listener
+    useEffect(() => {
+        if (config.useSupabase) {
+            const supabase = getSupabase();
+            if (supabase) {
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                    if (event === 'SIGNED_IN' && session) {
+                        // User clicked email link or logged in, sync state if not already
+                         if (!activeUser) {
+                             setIsLoading(true);
+                             try {
+                                const { user, notifications, unseenAdminNotifications } = await api.checkAuthStatus();
+                                if (user) {
+                                    await StabilizationEngine.runStartupChecks(user.id);
+                                    dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                                }
+                             } catch(e) {
+                                 console.error("Sync after sign-in failed", e);
+                             } finally {
+                                 setIsLoading(false);
+                             }
+                         }
+                    } else if (event === 'SIGNED_OUT') {
+                         dispatch({ type: 'LOGOUT' });
+                    }
+                });
+                
+                return () => subscription.unsubscribe();
+            }
+        }
+    }, [dispatch, activeUser]);
+
+    useEffect(() => {
+        if (!activeUser) {
+            const fetchTermsContent = async () => {
+                const content = await api.fetchTerms();
+                setTermsContent(content);
+            };
+            fetchTermsContent();
+        }
+    }, [activeUser]);
+    
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-[#FFD447]"></div>
+            </div>
+        );
+    }
+    
+    if (!activeUser) {
+        return <AuthPage termsContent={termsContent} />;
+    }
+
+    if (activeUser.isBanned) {
+        return <BannedUserPage user={activeUser} />;
+    }
+
+    return <MainLayout />;
+}
