@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import { AppProvider, useAppContext } from './state/context';
 import { QueueProvider } from './providers/QueueProvider';
@@ -13,6 +14,7 @@ import { createHoneypots } from "./api/anticheat/honeypots";
 import { getDeviceFingerprint } from "./api/anticheat/deviceFingerprint";
 import { LegacyUserNormalizer } from './api/migration/legacyUserNormalizer';
 import { fastDeepEqual } from './api/utils/equality';
+import { logger } from './core/logger';
 import { config } from './core/config';
 
 const AppContent: React.FC = () => {
@@ -38,7 +40,7 @@ const AppContent: React.FC = () => {
             // System Integrity Checks
             setTimeout(() => {
                 const report = runMockIntegrityScan();
-                console.log("[System] Integrity Scan:", report);
+                logger.info("Startup Integrity Scan", report.summary);
                 LegacyUserNormalizer.run();
             }, 500);
         }
@@ -57,7 +59,7 @@ const AppContent: React.FC = () => {
             const { newState, report } = DataConsistency.fullScan(tempState);
 
             if (report.issues.length > 0) {
-                console.warn("[System] State repaired:", report.repaired);
+                logger.warn("State repaired during runtime consistency check", report.repaired);
 
                 // Determine if we need to dispatch updates
                 const userChanged = newState.activeUser && !fastDeepEqual(newState.activeUser, state.activeUser);

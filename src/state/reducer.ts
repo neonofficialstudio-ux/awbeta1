@@ -1,8 +1,6 @@
-
 import { AppState } from './state.types';
 import { Action } from './actions';
 import { normalizeActiveUser } from './normalizers';
-import { getMockDb } from '../api/database/mock-db';
 
 export const initialState: AppState = {
   currentView: 'dashboard',
@@ -39,7 +37,7 @@ export const initialState: AppState = {
       liveFeed: []
   },
   jackpotData: null, // V9.1
-  
+
   // V1.4 Subscription State
   upgradeRequests: [],
   subscriptionEvents: [],
@@ -222,21 +220,10 @@ export const appReducer = (state: AppState, action: Action): AppState => {
         return state;
 
     // --- Admin ---
-    case 'REFRESH_EVENT_SETTINGS': {
-        const db = getMockDb();
+    case 'REFRESH_EVENT_SETTINGS':
         return {
           ...state,
-          eventSettings: db.eventSettings || {},
-        };
-    }
-    
-    // --- V1.4 Sync Fix ---
-    case 'SUBSCRIPTIONS_SYNC':
-        return {
-            ...state,
-            upgradeRequests: action.payload.upgradeRequests || [],
-            subscriptionEvents: action.payload.events || [],
-            subscriptionUsers: action.payload.users || []
+          eventSettings: action.payload || {},
         };
 
     // --- Jackpot V9.1 ---

@@ -1,12 +1,13 @@
 
-// API HUB V4.5 - WITH AUTH ENGINE V4.0
+// API HUB V5.0 - CONSOLIDATED ARCHITECTURE
 
 // Admin & Analytics
 export { adminPainelData } from "./admin/painel";
 export { adminAnalyticsAPI } from "./admin/analytics";
 export { adminInsightsAPI } from "./admin/insights";
-import { AdminEngineV6 } from "./admin/adminEngineV6";
-export { AdminEngineV6 };
+// Consolidated Admin Engine
+import { AdminEngine } from "./admin/AdminEngine";
+export { AdminEngine };
 
 // Auth & Session (V4.0)
 export { AuthEngineV4 } from "./auth/authEngineV4";
@@ -38,7 +39,9 @@ export { runMissionSelfTest } from "./missions/missionSelfTest";
 export { 
     generateWeeklyMissionsAPI, 
     generateIndividualMissionAPI,
-    fetchWeeklyMissions // Added export
+    fetchWeeklyMissions, // Added export
+    submitMission, // Added export
+    listAllMissions // Added export for Admin Panel
 } from "./missions/index";
 export { submitMissionV4 } from "./missions/submit";
 
@@ -59,7 +62,8 @@ export {
     cancelSubscriptionRequest,
     markRaffleWinAsSeen,
     markAdminNotificationAsSeen,
-    dailyCheckIn
+    dailyCheckIn,
+    markAchievementAsSeen // Added export
 } from "./users"; 
 
 // Store
@@ -75,7 +79,8 @@ export {
     openPaymentLink,
     cancelCoinPurchaseRequest,
     submitCoinPurchaseProof,
-    submitVisualRewardForm
+    submitVisualRewardForm,
+    initiatePayment // Added export
 } from "./store";
 
 // Events V7.0 (Restored & Normalized)
@@ -94,13 +99,22 @@ export {
     getEventMissions,
     getVipEventMissions,
     getEventRanking,
-    getEventData
+    getEventData,
+    // AoD exports
+    fetchArtistsOfTheDayFull,
+    fetchArtistOfTheDayConfig,
+    claimArtistOfDayReward
 } from "./events/index";
 
 export { runEventSelfTest } from "./events/eventSelfTest";
 
 // Games
-export { buyJackpotTicket, openCyberCrate, fetchJackpotState } from "./games";
+export { 
+    buyJackpotTicket, 
+    buyJackpotTicketsBulk, // Added export
+    openCyberCrate, 
+    fetchJackpotState 
+} from "./games";
 
 // Missions (Legacy/Direct)
 export {
@@ -109,8 +123,8 @@ export {
     fetchAchievementsData
 } from "./missions";
 
-// Admin Actions
-export const fetchAdminData = AdminEngineV6.getDashboardData; 
+// Admin Actions (Delegating to Consolidated Engine)
+export const fetchAdminData = AdminEngine.getDashboardData; 
 
 export {
     fetchUserHistory,
@@ -175,6 +189,7 @@ export {
     adminInjectJackpot,
     adminEditJackpot,
     fetchJackpotAnalytics,
+    adminScheduleJackpot // Added
 } from "./admin";
 
 // Admin Store Editor (Restored & Normalized)

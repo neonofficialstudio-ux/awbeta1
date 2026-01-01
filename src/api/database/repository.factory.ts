@@ -2,10 +2,10 @@
 import { config } from "../../core/config";
 import { mockDB } from "./mock-db";
 import { supabaseRepository } from "../supabase/supabase.repositories";
-import { supabaseClient } from "../supabase/client";
+import { supabaseClient } from "../supabase/client"; // Check if client exists
 
 export interface Repository {
-    // Métodos Síncronos (Legado / Mock)
+    // Métodos Síncronos (Legado / UI Rápida - Mock Only)
     select: (table: string) => any[];
     selectPaged: (table: string, page: number, limit: number, filterFn?: (item: any) => boolean) => { data: any[], total: number, page: number, limit: number };
     insert: (table: string, data: any) => any;
@@ -13,7 +13,7 @@ export interface Repository {
     delete: (table: string, filter: (item: any) => boolean) => void;
     filter: (table: string, predicate: (item: any) => boolean) => any[];
     
-    // Métodos Assíncronos (Supabase / Real)
+    // Métodos Assíncronos (Híbridos - Funcionam em ambos)
     selectAsync: (table: string) => Promise<any[]>;
     insertAsync: (table: string, data: any) => Promise<any>;
     updateAsync: (table: string, filter: (item: any) => boolean, updateFn: (item: any) => any) => Promise<void>;
@@ -23,11 +23,11 @@ export interface Repository {
 }
 
 export function getRepository(): Repository {
-  // Se a config estiver true e o cliente existir, usa o repositório do Supabase
+  // Logic: Only use Supabase if config is true AND client initialized successfully
   if (config.useSupabase && supabaseClient) {
       return supabaseRepository as Repository;
   }
   
-  // Caso contrário, usa o banco de dados local (Mock)
+  // Fallback to MockDB seamlessly
   return mockDB as Repository;
 }
