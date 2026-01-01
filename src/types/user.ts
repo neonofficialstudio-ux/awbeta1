@@ -2,7 +2,39 @@
 import { Punishment } from './admin';
 import { SubscriptionEvent } from './economy';
 import { EventSession } from './event';
-import { RedeemedItem } from './store';
+import { RedeemedItem } from './store'; // Import dependency to fix 'any'
+
+export interface ArtistDailyMissionState {
+    requiredLinks: string[];
+    completedLinks: string[];
+    reward: number;
+    isComplete: boolean;
+    lastUpdated?: string; // ISO date
+}
+
+export interface UserSocials {
+    instagram?: string;
+    youtube?: string;
+    spotify?: string;
+    tiktok?: string;
+}
+
+export interface UserStreak {
+    lastCheckin: string | null;
+    count: number;
+}
+
+export interface UserMissionsState {
+    dailyLimit: number;
+    completedToday: number;
+    history: string[]; // IDs
+}
+
+export interface UserFlags {
+    isAdmin?: boolean;
+    isShadowBanned?: boolean;
+    migratedV14?: boolean;
+}
 
 export type UserPlan = 'Free Flow' | 'Artista em Ascensão' | 'Artista Profissional' | 'Hitmaker' | 'free' | 'ascensao' | 'profissional' | 'hitmaker';
 export type UserRole = 'user' | 'admin' | 'superadmin';
@@ -76,34 +108,18 @@ export interface User {
   punishmentHistory?: Punishment[];
   
   eventSession?: EventSession | null;
-  artistDailyMission?: any; // Avoiding circular dependency if possible, or define interface here
+  artistDailyMission?: ArtistDailyMissionState;
 
-  // Modern Schema Fields
-  socials?: {
-    instagram?: string;
-    youtube?: string;
-    spotify?: string;
-    tiktok?: string;
-  };
-  streak?: {
-    lastCheckin: string | null;
-    count: number;
-  };
-  missions?: {
-    dailyLimit: number;
-    completedToday: number;
-    history: string[];
-  };
-  flags?: {
-    isAdmin?: boolean;
-    isShadowBanned?: boolean;
-    migratedV14?: boolean;
-  };
+  // V1.4 Modern Schema Fields
+  socials?: UserSocials;
+  streak?: UserStreak;
+  missions?: UserMissionsState;
+  flags?: UserFlags;
   
-  // Queue
+  // Queue (Inventory) - Now Strictly Typed
   inventory?: RedeemedItem[];
 
-  // Anti-Cheat
+  // Anti-Cheat V1.2
   riskScore?: number;
   shieldLevel?: 'normal' | 'medium' | 'high' | 'critical';
   deviceFingerprint?: string;
@@ -114,4 +130,24 @@ export interface User {
     storeBursts?: number;
     missionRepeats?: number;
   };
+  patternFlags?: {
+      containsRepeats?: boolean;
+  };
+}
+
+export interface RankingUser {
+  rank: number;
+  name: string;
+  artisticName: string;
+  avatarUrl: string;
+  level: number;
+  monthlyMissionsCompleted: number;
+  isCurrentUser: boolean;
+  spotifyUrl?: string;
+  youtubeUrl?: string;
+  instagramUrl: string;
+  tiktokUrl?: string;
+  plan: UserPlan;
+  xp?: number; // Optional for economy ranking context
+  coins?: number; // Optional for economy ranking context
 }

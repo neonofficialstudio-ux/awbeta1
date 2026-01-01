@@ -1,5 +1,6 @@
-
+// api/users.ts
 import type { User, Notification, SubscriptionRequest } from '../types';
+import * as db from './mockData';
 import { withLatency, createNotification, updateUserInDb } from './helpers';
 import { WELCOME_BONUS_COINS } from './economy/economy';
 import { EconomyEngineV6 } from './economy/economyEngineV6';
@@ -8,9 +9,7 @@ import { StabilizationEngine } from '../core/stabilization/stabilizationEngine';
 import { SanityGuard } from '../services/sanity.guard';
 import { ArtistOfDayEngine } from '../services/missions/artistOfDay.engine';
 import { config } from '../core/config';
-import { getRepository } from './database/repository.factory';
-
-const repo = getRepository();
+import { getSupabase } from './supabase/client';
 
 export const login = (email: string, password: string) => withLatency(async () => {
     try {
@@ -21,17 +20,13 @@ export const login = (email: string, password: string) => withLatency(async () =
 
         let isFirstLogin = false;
         
-        const allNotes = await repo.selectAsync("notifications");
-        const notifications = allNotes.filter((n: any) => n.userId === user.id);
+        const notifications = db.notificationsData.filter(n => n.userId === user.id);
 
         if (user.hasReceivedWelcomeBonus === false || user.hasReceivedWelcomeBonus === undefined) {
             isFirstLogin = true;
-             const bonusRes = await EconomyEngineV6.addCoins(user.id, WELCOME_BONUS_COINS, 'Bônus de Registro');
-             if (bonusRes.updatedUser) {
-                 user = bonusRes.updatedUser;
-                 user.hasReceivedWelcomeBonus = true;
-                 await repo.updateAsync("users", (u:any) => u.id === user.id, (u:any) => ({...u, hasReceivedWelcomeBonus: true}));
-             }
+            if (!config.useSupabase) {
+                await EconomyEngineV6.addCoins(user.id, WELCOME_BONUS_COINS, 'Bônus de Registro');
+            }
         }
 
         StabilizationEngine.runStartupChecks(user.id);
@@ -57,35 +52,54 @@ export const checkAuthStatus = () => withLatency(async () => {
     let user = SanityGuard.user(rawUser);
     user = ArtistOfDayEngine.initialize(user);
     
-    const allNotes = await repo.selectAsync("notifications");
-    const notifications = allNotes.filter((n: any) => n.userId === user.id);
+    const notifications = db.notificationsData.filter(n => n.userId === user.id);
 
     return { user, notifications, unseenAdminNotifications: [] };
 });
 
 export const dailyCheckIn = (userId: string) => withLatency(async () => {
+    let user = db.allUsersData.find(u => u.id === userId);
+    if (!user && config.useSupabase) {
+         const sb = getSupabase();
+         const { data } = await sb!.from('profiles').select('*').eq('id', userId).single();
+         if(data) {
+             user = SanityGuard.user({ ...data, id: userId });
+             db.allUsersData.push(user);
+         }
+    }
+
+    if (!user) throw new Error("User not found");
+
     const result = await EconomyEngineV6.processCheckIn(userId);
     
     if (!result.success || !result.updatedUser || !result.data) {
-        throw new Error(result.error || "Falha ao processar check-in.");
+        throw new Error("Falha ao processar check-in.");
     }
+    
+    const updatedUser = updateUserInDb(result.updatedUser);
+    db.notificationsData.unshift(...(result.data.notifications || []));
 
     return { 
-        updatedUser: SanityGuard.user(result.updatedUser), 
-        notifications: result.data.notifications || [], 
-        coinsGained: result.data.coinsGained || 0, 
-        isBonus: result.data.isBonus || false, 
-        streak: result.data.newStreak || 0
+        updatedUser: SanityGuard.user(updatedUser), 
+        notifications: result.data.notifications, 
+        coinsGained: result.data.coinsGained, 
+        isBonus: result.data.isBonus, 
+        streak: result.data.newStreak 
     };
 });
 
 export const register = (formData: any) => withLatency(async () => {
+    // 1. Supabase Registration
     if (config.useSupabase) {
-         const { getSupabase } = await import('./supabase/client');
-         const supabase = getSupabase();
-         if(supabase) {
-             const cleanPhone = formData.phone.replace(/[\s\-\(\)]/g, '');
-             const { data, error } = await supabase.auth.signUp({
+        const supabase = getSupabase();
+        if (supabase) {
+            // Check if user exists (Optional optimization, signUp handles it but we can catch early)
+            
+            // Note: formData.phone comes fully formatted from UI now (e.g. +551199999999 or +14155550000)
+            // We just ensure it has no spaces or dashes for the DB
+            const cleanPhone = formData.phone.replace(/[\s\-\(\)]/g, '');
+
+            const { data, error } = await supabase.auth.signUp({
                 email: formData.email,
                 password: formData.password,
                 options: {
@@ -96,13 +110,22 @@ export const register = (formData: any) => withLatency(async () => {
                     }
                 }
             });
-            if (error) throw new Error(error.message);
-            if (data.user && !data.session) return { success: true, requireEmailConfirmation: true };
+
+            if (error) {
+                // Return original error to be translated by UI
+                throw new Error(error.message);
+            }
+            
+            // If data.user is present but data.session is null, email confirmation is required
+            if (data.user && !data.session) {
+                return { success: true, requireEmailConfirmation: true };
+            }
+            
             return { success: true, requireEmailConfirmation: false };
-         }
+        }
     }
 
-    // Mock Registration
+    // 2. Mock Registration (Fallback)
     const now = new Date();
     const newUserId = `user-${now.getTime()}`;
     const newUser: User = SanityGuard.user({
@@ -116,45 +139,27 @@ export const register = (formData: any) => withLatency(async () => {
         plan: 'Free Flow',
         role: 'user', 
         instagramUrl: formData.instagramUrl, 
+        // tiktokUrl removed from initial registration
         joined: now.toLocaleDateString('pt-BR'), 
         joinedISO: now.toISOString(),
     });
     
     const initializedUser = ArtistOfDayEngine.initialize(newUser);
-    await repo.insertAsync("users", initializedUser);
-    
+    db.allUsersData.push(initializedUser);
     return { success: true, requireEmailConfirmation: false };
 });
 
-export const fetchTerms = () => withLatency(async () => {
-    return "Termos e Condições do Artist World...";
+export const fetchTerms = () => withLatency(db.termsAndConditionsContentData);
+export const fetchProfileData = (userId: string) => withLatency(() => ({ coinTransactions: db.coinTransactionsLogData.filter(t => t.userId === userId), allAchievements: db.achievementsData }));
+export const updateUser = (user: User) => withLatency(() => { const updatedUser = updateUserInDb(SanityGuard.user(user)); return { updatedUser: SanityGuard.user(updatedUser) }; });
+
+export const fetchSubscriptionsPageData = (userId: string) => withLatency(() => {
+    const pendingRequest = db.subscriptionRequestsData.find(r => r.userId === userId && (r.status === 'pending_payment' || r.status === 'awaiting_proof' || r.status === 'pending_approval')) || null;
+    return { plans: db.subscriptionPlansData, pendingRequest };
 });
 
-export const fetchProfileData = (userId: string) => withLatency(async () => {
-    const tx = await repo.selectAsync("transactions");
-    const ach = await repo.selectAsync("achievements");
-    return { 
-        coinTransactions: tx.filter((t: any) => t.userId === userId), 
-        allAchievements: ach 
-    };
-});
-
-export const updateUser = (user: User) => withLatency(async () => { 
-    await repo.updateAsync("users", (u: any) => u.id === user.id, (u: any) => user);
-    return { updatedUser: SanityGuard.user(user) }; 
-});
-
-export const fetchSubscriptionsPageData = (userId: string) => withLatency(async () => {
-    const requests = await repo.selectAsync("subscriptionRequests");
-    const plans = await repo.selectAsync("subscriptionPlans");
-    
-    const pendingRequest = requests.find((r: any) => r.userId === userId && ['pending_payment', 'awaiting_proof', 'pending_approval'].includes(r.status)) || null;
-    return { plans, pendingRequest };
-});
-
-export const requestSubscriptionUpgrade = (userId: string, planName: User['plan'], paymentLink?: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const requestSubscriptionUpgrade = (userId: string, planName: User['plan'], paymentLink?: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (!user) throw new Error("User not found");
 
     const newRequest: SubscriptionRequest = {
@@ -167,90 +172,88 @@ export const requestSubscriptionUpgrade = (userId: string, planName: User['plan'
         status: 'pending_payment',
         paymentLink,
     };
-    await repo.insertAsync("subscriptionRequests", newRequest);
+    db.subscriptionRequestsData.unshift(newRequest);
 
     const notification = createNotification(user.id, 'Solicitação de Upgrade', `Seu pedido de upgrade para o plano ${planName} foi iniciado.`);
-    await repo.insertAsync("notifications", notification);
-    
     return { newRequest, updatedUser: SanityGuard.user(user), notifications: [notification] };
 });
 
-export const markSubscriptionAsAwaitingProof = (requestId: string) => withLatency(async () => {
-    await repo.updateAsync("subscriptionRequests", (r: any) => r.id === requestId, (r: any) => ({ ...r, status: 'awaiting_proof' }));
-    const requests = await repo.selectAsync("subscriptionRequests");
-    return { updatedRequest: requests.find((r: any) => r.id === requestId) };
-});
-
-export const submitSubscriptionProof = (userId: string, requestId: string, proofUrl: string) => withLatency(async () => {
-    await repo.updateAsync("subscriptionRequests", (r: any) => r.id === requestId, (r: any) => ({ ...r, status: 'pending_approval', proofUrl }));
+export const markSubscriptionAsAwaitingProof = (requestId: string) => withLatency(() => {
+    const requestIndex = db.subscriptionRequestsData.findIndex(r => r.id === requestId);
+    if (requestIndex === -1) throw new Error("Request not found");
     
-    const requests = await repo.selectAsync("subscriptionRequests");
-    const notification = createNotification(userId, 'Comprovante Enviado', 'Seu comprovante foi enviado para análise.');
-    await repo.insertAsync("notifications", notification);
-
-    return { updatedRequest: requests.find((r: any) => r.id === requestId), notifications: [notification] };
+    db.subscriptionRequestsData[requestIndex].status = 'awaiting_proof';
+    return { updatedRequest: db.subscriptionRequestsData[requestIndex] };
 });
 
-export const cancelSubscription = (userId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const submitSubscriptionProof = (userId: string, requestId: string, proofUrl: string) => withLatency(() => {
+    const requestIndex = db.subscriptionRequestsData.findIndex(r => r.id === requestId);
+    if (requestIndex === -1) throw new Error("Request not found");
+
+    db.subscriptionRequestsData[requestIndex].status = 'pending_approval';
+    db.subscriptionRequestsData[requestIndex].proofUrl = proofUrl;
+
+    const notification = createNotification(userId, 'Comprovante Enviado', 'Seu comprovante foi enviado para análise.');
+    return { updatedRequest: db.subscriptionRequestsData[requestIndex], notifications: [notification] };
+});
+
+export const cancelSubscription = (userId: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (!user) throw new Error("User not found");
 
     const updatedUser = { ...user, cancellationPending: true, subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() };
-    await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
+    updateUserInDb(updatedUser);
     
     const notification = createNotification(userId, 'Cancelamento Agendado', 'Sua assinatura será cancelada ao final do período atual.');
     return { updatedUser: SanityGuard.user(updatedUser), notifications: [notification] };
 });
 
-export const cancelSubscriptionRequest = (requestId: string) => withLatency(async () => {
-    await repo.updateAsync("subscriptionRequests", (r: any) => r.id === requestId, (r: any) => ({ ...r, status: 'cancelled' }));
-    const requests = await repo.selectAsync("subscriptionRequests");
-    return { updatedRequest: requests.find((r: any) => r.id === requestId) };
+export const cancelSubscriptionRequest = (requestId: string) => withLatency(() => {
+    const requestIndex = db.subscriptionRequestsData.findIndex(r => r.id === requestId);
+    if (requestIndex === -1) throw new Error("Request not found");
+
+    db.subscriptionRequestsData[requestIndex].status = 'cancelled';
+    return { updatedRequest: db.subscriptionRequestsData[requestIndex] };
 });
 
-export const markPlanUpgradeAsSeen = (userId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const markPlanUpgradeAsSeen = (userId: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (user) {
         const updatedUser = { ...user, unseenPlanUpgrade: false };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
+        updateUserInDb(updatedUser);
         return { updatedUser: SanityGuard.user(updatedUser) };
     }
     return { updatedUser: null };
 });
 
-export const markRaffleWinAsSeen = (userId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const markRaffleWinAsSeen = (userId: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (user) {
         const updatedUser = { ...user, unseenRaffleWin: undefined };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
+        updateUserInDb(updatedUser);
         return { updatedUser: SanityGuard.user(updatedUser) };
     }
     return { updatedUser: null };
 });
 
-export const markAdminNotificationAsSeen = (userId: string, notificationId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const markAdminNotificationAsSeen = (userId: string, notificationId: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (user) {
         const updatedUser = { ...user, seenAdminNotifications: [...(user.seenAdminNotifications || []), notificationId] };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
+        updateUserInDb(updatedUser);
         return { updatedUser: SanityGuard.user(updatedUser) };
     }
     return { updatedUser: null };
 });
 
-export const markAchievementAsSeen = (userId: string, achievementId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const markAchievementAsSeen = (userId: string, achievementId: string) => withLatency(() => {
+    const user = db.allUsersData.find(u => u.id === userId);
     if (user) {
         const updatedUser = { 
             ...user, 
-            unseenAchievements: (user.unseenAchievements || []).filter((id: string) => id !== achievementId) 
+            unseenAchievements: (user.unseenAchievements || []).filter(id => id !== achievementId) 
         };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
+        updateUserInDb(updatedUser);
         return { updatedUser: SanityGuard.user(updatedUser) };
     }
     return { updatedUser: null };

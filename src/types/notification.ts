@@ -21,10 +21,10 @@ export interface AWNotification {
   type: NotificationType;
   title: string;
   description: string;
-  timestamp: string; 
-  createdAt: number; 
+  timestamp: string; // Display string
+  createdAt: number; // Sorting
   read: boolean;
-  toast?: boolean; 
+  toast?: boolean; // Should trigger immediate toast
   linkTo?: {
     view: View;
     tab?: string;
