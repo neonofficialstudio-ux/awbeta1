@@ -1,6 +1,7 @@
 import { AppState } from './state.types';
 import { Action } from './actions';
 import { normalizeActiveUser } from './normalizers';
+import * as db from '../api/mockData';
 
 export const initialState: AppState = {
   currentView: 'dashboard',
@@ -220,11 +221,12 @@ export const appReducer = (state: AppState, action: Action): AppState => {
         return state;
 
     // --- Admin ---
-    case 'REFRESH_EVENT_SETTINGS':
+    case 'REFRESH_EVENT_SETTINGS': {
         return {
           ...state,
-          eventSettings: action.payload || {},
+          eventSettings: db.eventSettings || {},
         };
+    }
 
     // --- Jackpot V9.1 ---
     case 'SET_JACKPOT_DATA':

@@ -37,14 +37,11 @@ const AppContent: React.FC = () => {
             }
 
             // System Integrity Checks
-            if (config.backendProvider === 'mock') {
-                setTimeout(async () => {
-                    const { runMockIntegrityScan } = await import('./api/diagnostics/mockIntegrity');
-                    const report = runMockIntegrityScan();
-                    logger.info("Startup Integrity Scan", report.summary);
-                    LegacyUserNormalizer.run();
-                }, 500);
-            }
+            setTimeout(() => {
+                const report = runMockIntegrityScan();
+                logger.info("Startup Integrity Scan", report.summary);
+                LegacyUserNormalizer.run();
+            }, 500);
         }
     }, []);
 

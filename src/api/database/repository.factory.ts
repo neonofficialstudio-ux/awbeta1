@@ -23,16 +23,11 @@ export interface Repository {
 }
 
 export function getRepository(): Repository {
-  if (config.backendProvider === 'supabase') {
-      if (!supabaseClient) {
-          throw new Error("[Repository] Supabase provider selected but client is not initialized. Check environment variables.");
-      }
+  // Logic: Only use Supabase if config is true AND client initialized successfully
+  if (config.useSupabase && supabaseClient) {
       return supabaseRepository as Repository;
   }
-
-  if (config.backendProvider === 'mock') {
-      return mockDB as Repository;
-  }
-
-  throw new Error(`[Repository] Unknown backend provider: ${config.backendProvider}`);
+  
+  // Fallback to MockDB seamlessly
+  return mockDB as Repository;
 }
