@@ -43,7 +43,6 @@ import {
   SettingsIcon,
   ShieldIcon 
 } from '../../constants';
-import { refreshEventSettings } from '../../state/eventSettings';
 
 interface AdminPanelProps {
   activeTab: AdminTab;
@@ -240,7 +239,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     setArtistsOfTheDayIds={(ids: string[]) => handleAdminAction(api.setArtistsOfTheDay(ids))} 
                     setArtistCarouselDuration={async (d: number) => {
                         await handleAdminAction(api.setArtistCarouselDuration(d));
-                        await refreshEventSettings(dispatch);
+                        dispatch({ type: 'REFRESH_EVENT_SETTINGS' });
                     }} 
                     onSaveEventMission={(m: EventMission) => handleAdminAction(api.saveEventMission(m))} 
                     onDeleteEventMission={(id: string) => handleAdminAction(api.deleteEventMission(id))} 
