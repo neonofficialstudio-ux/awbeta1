@@ -10,9 +10,60 @@ import { SanityGuard } from '../services/sanity.guard';
 import { ArtistOfDayEngine } from '../services/missions/artistOfDay.engine';
 import { config } from '../core/config';
 import { getSupabase } from './supabase/client';
+import { isSupabaseProvider } from './core/backendGuard';
+import { mapProfileToUser } from './supabase/mappings';
 
 export const login = (email: string, password: string) => withLatency(async () => {
     try {
+        if (isSupabaseProvider()) {
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("Supabase client indisponível.");
+
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) {
+                throw new Error(error.message);
+            }
+
+            const userId = data.user?.id;
+            let userProfile: any = null;
+
+            if (userId) {
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single();
+
+                if (profileData) {
+                    userProfile = mapProfileToUser(profileData);
+                } else if (profileError) {
+                    console.warn("[Supabase Login] Perfil não encontrado, usando metadata do auth:", profileError.message);
+                }
+            }
+
+            const user = userProfile || mapProfileToUser({
+                id: userId || `supabase-${Date.now()}`,
+                name: data.user?.user_metadata?.name || data.user?.email || "Artista",
+                artistic_name: data.user?.user_metadata?.artistic_name,
+                email: data.user?.email,
+                avatar_url: data.user?.user_metadata?.avatar_url,
+                plan: data.user?.user_metadata?.plan || 'Free Flow',
+                coins: 0,
+                xp: 0,
+                level: 1,
+                check_in_streak: 0,
+                last_check_in: null,
+                joined_at: data.user?.created_at
+            });
+
+            return {
+                user: SanityGuard.user(user),
+                notifications: [],
+                unseenAdminNotifications: [],
+                isFirstLogin: false
+            };
+        }
+
         const rawUser = await AuthEngineV4.login(email, password);
         
         let user = SanityGuard.user(rawUser);
@@ -43,6 +94,41 @@ export const login = (email: string, password: string) => withLatency(async () =
 });
 
 export const checkAuthStatus = () => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        const supabase = getSupabase();
+        if (!supabase) return { user: null, notifications: [], unseenAdminNotifications: [] };
+
+        const { data, error } = await supabase.auth.getSession();
+        if (error || !data.session?.user) {
+            return { user: null, notifications: [], unseenAdminNotifications: [] };
+        }
+
+        const userId = data.session.user.id;
+        let profileUser: any = null;
+
+        const { data: profileData } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        if (profileData) {
+            profileUser = mapProfileToUser(profileData);
+        } else {
+            profileUser = mapProfileToUser({
+                id: userId,
+                name: data.session.user.email || "Artista",
+                artistic_name: data.session.user.user_metadata?.artistic_name,
+                email: data.session.user.email,
+                avatar_url: data.session.user.user_metadata?.avatar_url,
+                plan: data.session.user.user_metadata?.plan || 'Free Flow',
+                coins: 0,
+                xp: 0,
+                level: 1,
+                check_in_streak: 0,
+                last_check_in: null,
+                joined_at: data.session.user.created_at
+            });
+        }
+
+        return { user: SanityGuard.user(profileUser), notifications: [], unseenAdminNotifications: [] };
+    }
+
     const rawUser = await AuthEngineV4.restoreSession();
     
     if (!rawUser) {
