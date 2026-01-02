@@ -41,8 +41,10 @@ import { CacheService } from "../../services/performance/cache.service";
 import { SeasonRankingEngine } from "../../services/ranking/seasonRanking.engine";
 import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
+import { assertMockProvider } from "../core/backendGuard";
 
 const repo = getRepository();
+const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
 
 const AdminAudit = {
     log: (adminId: string, action: string, targetId?: string, details?: any) => {
@@ -111,9 +113,13 @@ const approveAllPendingEventSubmissionsFn = () => {
 
 export const AdminService = {
     
-    getUnifiedAwardHistory: AdminAwardsEngine.getUnifiedAwardHistory,
+    getUnifiedAwardHistory: () => {
+        ensureMockBackend('getUnifiedAwardHistory');
+        return AdminAwardsEngine.getUnifiedAwardHistory();
+    },
 
     getDashboardData: () => {
+        ensureMockBackend('getDashboardData');
         return CacheService.remember('admin_dashboard_data', 3000, () => {
             const users = [...(repo.select("users") || [])];
             const missions = [...(repo.select("missions") || [])];
@@ -189,16 +195,18 @@ export const AdminService = {
     },
 
     missions: {
-        save: MissionEngineUnified.saveMission,
-        saveBatch: MissionEngineUnified.saveBatch,
-        delete: MissionEngineUnified.deleteMission,
+        save: (...args: any[]) => { ensureMockBackend('missions.save'); return MissionEngineUnified.saveMission(...args as [any]); },
+        saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
+        delete: (...args: any[]) => { ensureMockBackend('missions.delete'); return MissionEngineUnified.deleteMission(...args as [any]); },
         reviewSubmission: (submissionId: string, status: 'approved' | 'rejected') => {
              // Invalidate cache
+             ensureMockBackend('missions.reviewSubmission');
              CacheService.invalidate('admin_dashboard_data');
              return reviewSubmissionFn(submissionId, status);
         },
-        editSubmissionStatus: MissionEngineUnified.editSubmissionStatus,
+        editSubmissionStatus: (...args: any[]) => { ensureMockBackend('missions.editSubmissionStatus'); return MissionEngineUnified.editSubmissionStatus(...args as [any]); },
         approveAllPending: () => {
+            ensureMockBackend('missions.approveAllPending');
             const pending = repo.select("submissions").filter((s:any) => s.status === 'pending');
             let approvedCount = 0;
             pending.forEach((sub:any) => {
@@ -208,9 +216,10 @@ export const AdminService = {
             CacheService.invalidate('admin_dashboard_data');
             return { success: true, count: approvedCount };
         },
-        listAll: MissionEngineUnified.listAll,
-        getSnapshot: MissionEngineUnified.getSnapshot,
+        listAll: (...args: any[]) => { ensureMockBackend('missions.listAll'); return MissionEngineUnified.listAll(...args as [any]); },
+        getSnapshot: (...args: any[]) => { ensureMockBackend('missions.getSnapshot'); return MissionEngineUnified.getSnapshot(...args as [any]); },
         setFeatured: (id: string | null) => {
+            ensureMockBackend('missions.setFeatured');
             db.setFeaturedMissionIdData(id);
             LogEngineV4.log({ action: "set_featured_mission", category: "admin", payload: { id } });
             return { success: true };
@@ -219,13 +228,13 @@ export const AdminService = {
 
     // --- STORE MANAGEMENT ---
     store: {
-        saveStoreItem: (item: StoreItem) => { const res = saveStoreItemHelper(item); CacheService.invalidate('admin_dashboard_data'); return res; },
-        deleteStoreItem: (id: string) => { repo.delete("storeItems", (i:any) => i.id === id); CacheService.invalidate('admin_dashboard_data'); return { success: true }; },
-        toggleStoreItemStock: (id: string) => { const item = repo.select("storeItems").find((i:any) => i.id === id); if (item) { repo.update("storeItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
-        saveUsableItem: saveUsableItemHelper,
-        deleteUsableItem: (id: string) => { repo.delete("usableItems", (i:any) => i.id === id); return { success: true }; },
-        toggleUsableItemStock: (id: string) => { const item = repo.select("usableItems").find((i:any) => i.id === id); if (item) { repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
-        saveCoinPack: (pack: CoinPack) => {
+        saveStoreItem: (item: StoreItem) => { ensureMockBackend('store.saveStoreItem'); const res = saveStoreItemHelper(item); CacheService.invalidate('admin_dashboard_data'); return res; },
+        deleteStoreItem: (id: string) => { ensureMockBackend('store.deleteStoreItem'); repo.delete("storeItems", (i:any) => i.id === id); CacheService.invalidate('admin_dashboard_data'); return { success: true }; },
+        toggleStoreItemStock: (id: string) => { ensureMockBackend('store.toggleStoreItemStock'); const item = repo.select("storeItems").find((i:any) => i.id === id); if (item) { repo.update("storeItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
+        saveUsableItem: (item: UsableItem) => { ensureMockBackend('store.saveUsableItem'); return saveUsableItemHelper(item); },
+        deleteUsableItem: (id: string) => { ensureMockBackend('store.deleteUsableItem'); repo.delete("usableItems", (i:any) => i.id === id); return { success: true }; },
+        toggleUsableItemStock: (id: string) => { ensureMockBackend('store.toggleUsableItemStock'); const item = repo.select("usableItems").find((i:any) => i.id === id); if (item) { repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
+        saveCoinPack: (pack: CoinPack) => { ensureMockBackend('store.saveCoinPack');
              const existing = repo.select("coinPacks").find((p:any) => p.id === pack.id);
             if (existing) {
                 repo.update("coinPacks", (p:any) => p.id === pack.id, (p:any) => pack);
@@ -234,18 +243,18 @@ export const AdminService = {
             }
             return { success: true, packages: repo.select("coinPacks") };
         },
-        deleteCoinPack: (id: string) => {
+        deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack');
              repo.delete("coinPacks", (p:any) => p.id === id);
              return { success: true, packages: repo.select("coinPacks") };
         },
-        toggleCoinPackStock: (id: string) => {
+        toggleCoinPackStock: (id: string) => { ensureMockBackend('store.toggleCoinPackStock');
              const pack = repo.select("coinPacks").find((p:any) => p.id === id);
              if(pack) {
                  repo.update("coinPacks", (p:any) => p.id === id, (p:any) => ({...pack, isOutOfStock: !p.isOutOfStock}));
              }
              return { success: true };
         },
-        setEstimatedCompletionDate: (itemId: string, date: string) => {
+        setEstimatedCompletionDate: (itemId: string, date: string) => { ensureMockBackend('store.setEstimatedCompletionDate');
             if (!date) return { success: false };
             repo.update("redeemedItems", (r:any) => r.id === itemId, (r:any) => ({ ...r, estimatedCompletionDate: date }));
             return { success: true };
@@ -255,10 +264,12 @@ export const AdminService = {
     // --- QUEUE ---
     queue: {
         processQueueItem: (id: string) => {
+            ensureMockBackend('queue.processQueueItem');
             QueueEngineV5.processItem(id);
             return { success: true };
         },
         processArtistOfTheDayQueueItem: (id: string) => {
+            ensureMockBackend('queue.processArtistOfTheDayQueueItem');
             const queue = repo.select("spotlightQueue");
             const itemIndex = queue.findIndex((i:any) => i.id === id);
             
@@ -281,52 +292,56 @@ export const AdminService = {
 
     // --- SUBSCRIPTIONS ---
     subscriptions: {
-        approveSubscriptionRequest: (id: string) => approveUpgradeRequest(id),
-        rejectSubscriptionRequest: (id: string) => rejectUpgradeRequest(id)
+        approveSubscriptionRequest: (id: string) => { ensureMockBackend('subscriptions.approveSubscriptionRequest'); return approveUpgradeRequest(id); },
+        rejectSubscriptionRequest: (id: string) => { ensureMockBackend('subscriptions.rejectSubscriptionRequest'); return rejectUpgradeRequest(id); }
     },
 
     // --- EVENTS ---
     events: {
         saveEvent: (event: Event) => {
+             ensureMockBackend('events.saveEvent');
              const res = EventEngineUnified.saveEvent(event);
              CacheService.invalidate('admin_dashboard_data');
              return res;
         },
         deleteEvent: (id: string) => {
+             ensureMockBackend('events.deleteEvent');
              const res = EventEngineUnified.deleteEvent(id);
              CacheService.invalidate('admin_dashboard_data');
              return res;
         },
-        saveEventMission: (m: EventMission) => EventEngineUnified.saveEventMission(m),
+        saveEventMission: (m: EventMission) => { ensureMockBackend('events.saveEventMission'); return EventEngineUnified.saveEventMission(m); },
         deleteEventMission: (missionId: string) => { 
+            ensureMockBackend('events.deleteEventMission');
             const m = repo.select("eventMissions").find((m:any) => m.id === missionId);
             if (!m) return { success: false, error: "Mission not found" };
             return EventEngineUnified.deleteEventMission(m.eventId, missionId);
         },
-        reviewEventMission: EventEngineUnified.reviewEventMission,
-        approveAllPendingEventSubmissions: approveAllPendingEventSubmissionsFn,
+        reviewEventMission: (...args: any[]) => { ensureMockBackend('events.reviewEventMission'); return EventEngineUnified.reviewEventMission(...args as [any]); },
+        approveAllPendingEventSubmissions: () => { ensureMockBackend('events.approveAllPendingEventSubmissions'); return approveAllPendingEventSubmissionsFn(); },
     },
 
     // --- RAFFLES ---
     raffles: {
-        saveRaffle: saveRaffleFn,
-        deleteRaffle: deleteRaffleFn,
-        drawRaffleWinner: drawRaffleWinnerFn,
-        adminSetHighlightedRaffle: adminSetHighlightedRaffleFn
+        saveRaffle: (...args: any[]) => { ensureMockBackend('raffles.saveRaffle'); return saveRaffleFn(...args as [any]); },
+        deleteRaffle: (...args: any[]) => { ensureMockBackend('raffles.deleteRaffle'); return deleteRaffleFn(...args as [any]); },
+        drawRaffleWinner: (...args: any[]) => { ensureMockBackend('raffles.drawRaffleWinner'); return drawRaffleWinnerFn(...args as [any]); },
+        adminSetHighlightedRaffle: (...args: any[]) => { ensureMockBackend('raffles.adminSetHighlightedRaffle'); return adminSetHighlightedRaffleFn(...args as [any]); }
     },
 
     // --- JACKPOT ---
     jackpot: {
-        adminDrawJackpot: adminDrawJackpotFn,
-        adminInjectJackpot: adminInjectJackpotFn,
-        adminEditJackpot: adminEditJackpotFn,
-        fetchJackpotAnalytics: fetchJackpotAnalyticsFn,
-        adminScheduleJackpot: adminScheduleJackpotFn,
-        getDetailedStats: getJackpotDetailedStatsFn
+        adminDrawJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminDrawJackpot'); return adminDrawJackpotFn(...args as [any]); },
+        adminInjectJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminInjectJackpot'); return adminInjectJackpotFn(...args as [any]); },
+        adminEditJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminEditJackpot'); return adminEditJackpotFn(...args as [any]); },
+        fetchJackpotAnalytics: (...args: any[]) => { ensureMockBackend('jackpot.fetchJackpotAnalytics'); return fetchJackpotAnalyticsFn(...args as [any]); },
+        adminScheduleJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminScheduleJackpot'); return adminScheduleJackpotFn(...args as [any]); },
+        getDetailedStats: (...args: any[]) => { ensureMockBackend('jackpot.getDetailedStats'); return getJackpotDetailedStatsFn(...args as [any]); }
     },
     
     // --- UTILS ---
     manualRefund: async (itemId: string) => {
+        ensureMockBackend('manualRefund');
         const redeemed = repo.select("redeemedItems").find((r:any) => r.id === itemId);
         if (!redeemed || redeemed.status === 'Refunded') return { success: false };
         
@@ -345,6 +360,7 @@ export const AdminService = {
     },
     
     completeVisualReward: (itemId: string, completionUrl?: string) => {
+        ensureMockBackend('completeVisualReward');
         const redeemed = repo.select("redeemedItems").find((r:any) => r.id === itemId);
         if (!redeemed) return { success: false };
         
@@ -362,6 +378,7 @@ export const AdminService = {
     },
     
     createMissionFromQueue: (queueId: string, mission: Mission) => {
+        ensureMockBackend('createMissionFromQueue');
         const queueItem = repo.select("queue").find((q:any) => q.id === queueId);
         if (!queueItem) return { success: false, error: "Item not found" };
 
@@ -379,27 +396,32 @@ export const AdminService = {
     },
     
     convertQueueItemToMission: (queueId: string) => {
+         ensureMockBackend('convertQueueItemToMission');
          // Auto-conversion logic placeholder
          return { success: true };
     },
     
     // ... existing exports ...
     setArtistsOfTheDay: (ids: string[]) => {
+        ensureMockBackend('setArtistsOfTheDay');
         db.setArtistsOfTheDayIdsData(ids);
         return { success: true };
     },
     
     setArtistCarouselDuration: (duration: number) => {
+        ensureMockBackend('setArtistCarouselDuration');
         db.setArtistCarouselDurationData(duration);
         return { success: true };
     },
     
     addManualEventPoints: (userId: string, eventId: string, points: number, reason: string) => {
+        ensureMockBackend('addManualEventPoints');
         EventEngineUnified.addEventPoints(userId, eventId, points, reason);
         return { success: true };
     },
 
     saveSubscriptionPlan: (plan: SubscriptionPlan) => {
+        ensureMockBackend('saveSubscriptionPlan');
         const existing = repo.select("subscriptionPlans").find((p:any) => p.name === plan.name);
         if (existing) {
             repo.update("subscriptionPlans", (p:any) => p.name === plan.name, (p:any) => plan);
@@ -410,6 +432,7 @@ export const AdminService = {
     },
     
     saveAdvertisement: (ad: Advertisement) => {
+        ensureMockBackend('saveAdvertisement');
         if (!ad.id) ad.id = `ad-${Date.now()}`;
         const existing = repo.select("advertisements").find((a:any) => a.id === ad.id);
         if (existing) {
@@ -421,17 +444,20 @@ export const AdminService = {
     },
     
     deleteAdvertisement: (id: string) => {
+        ensureMockBackend('deleteAdvertisement');
         repo.delete("advertisements", (a:any) => a.id === id);
         return { success: true };
     },
     
     updateTerms: (content: string) => {
+        ensureMockBackend('updateTerms');
         db.setTermsAndConditionsContentData(content);
         // Persist setting if we had a settings table, for now in-memory variable mock
         return { success: true };
     },
     
     adminSubmitPaymentLink: (requestId: string, link: string) => {
+        ensureMockBackend('adminSubmitPaymentLink');
         // Implementation
          const requests = repo.select("coinPurchaseRequests");
          const requestIndex = requests.findIndex((r: any) => r.id === requestId);
@@ -444,6 +470,7 @@ export const AdminService = {
     },
     
     reviewCoinPurchase: async (requestId: string, status: 'approved' | 'rejected') => {
+        ensureMockBackend('reviewCoinPurchase');
         const requests = repo.select("coinPurchaseRequests");
         const requestIndex = requests.findIndex((r: any) => r.id === requestId);
         if (requestIndex === -1) return { success: false };
@@ -460,6 +487,7 @@ export const AdminService = {
     },
     
     sendAdminNotification: (payload: { title: string; message: string; isGlobal: boolean; targetUserIds?: string[] }) => {
+        ensureMockBackend('sendAdminNotification');
         const { title, message, isGlobal, targetUserIds } = payload;
         
         // This usually goes to "adminNotifications" table which users pull from
@@ -478,23 +506,26 @@ export const AdminService = {
         return { success: true };
     },
 
-    saveFeaturedWinner: (winner: FeaturedWinner) => AdminAwardsEngine.add(winner),
+    saveFeaturedWinner: (winner: FeaturedWinner) => { ensureMockBackend('saveFeaturedWinner'); return AdminAwardsEngine.add(winner); },
     deleteFeaturedWinner: (id: string) => {
+         ensureMockBackend('deleteFeaturedWinner');
          // This deletes from legacy list or unified? Usually legacy list in DB
          repo.delete("featuredWinners", (w:any) => w.id === id);
          return { success: true };
     },
     
-    adminRunSimulationStep: (stepName: any, payload?: any) => runSimStep(stepName, payload),
-    adminGetSimulationState: () => getSimState(),
+    adminRunSimulationStep: (stepName: any, payload?: any) => { ensureMockBackend('adminRunSimulationStep'); return runSimStep(stepName, payload); },
+    adminGetSimulationState: () => { ensureMockBackend('adminGetSimulationState'); return getSimState(); },
     
     // --- USERS & SYSTEM ---
     adminUpdateUser: (user: User) => {
+        ensureMockBackend('adminUpdateUser');
         const result = updateUserInDb(user);
         return { success: true, updatedUser: result };
     },
     
     punishUser: async (payload: { userId: string; type: PunishmentType; reason: string; durationDays?: number; deduction?: { coins?: number; xp?: number; } }) => {
+        ensureMockBackend('punishUser');
         const { userId, type, reason, deduction } = payload;
         const user = repo.select("users").find((u:any)=>u.id===userId);
         if(!user) return { success: false };
@@ -526,20 +557,23 @@ export const AdminService = {
     },
     
     unbanUser: async (userId: string) => {
+        ensureMockBackend('unbanUser');
         repo.update("users", (u:any)=>u.id===userId, (u:any)=>({ ...u, isBanned: false, banReason: null, banExpiresAt: null }));
         return { success: true };
     },
     
     resetMonthlyRanking: () => {
+        ensureMockBackend('resetMonthlyRanking');
         SeasonRankingEngine.resetSeason();
         return { success: true };
     },
     
-    fetchUserHistory: (userId: string) => UserInspector.getFullProfile(userId),
+    fetchUserHistory: (userId: string) => { ensureMockBackend('fetchUserHistory'); return UserInspector.getFullProfile(userId); },
     
-    createManualAward: ManualAwardsEngine.createAward,
+    createManualAward: (...args: any[]) => { ensureMockBackend('createManualAward'); return ManualAwardsEngine.createAward(...args as [any]); },
     
     adminDeliverEventPrizes: async (payload: { eventId: string, winners: any[], prizes: any, adminId: string }) => {
+        ensureMockBackend('adminDeliverEventPrizes');
         // Logic to distribute prizes based on manual confirmation
         const { eventId, winners, prizes, adminId } = payload;
         

@@ -1,13 +1,13 @@
 // api/helpers.ts
 import type { User, SubscriptionEvent, SubscriptionEventType, AchievementTrigger, Mission } from '../types';
 import type { AWNotification } from '../types/notification';
-import * as db from './mockData';
 import { normalizeUserBasic, normalizeUserEconomy } from './core/normalizeUser';
 import { PLAN_HIERARCHY } from './economy/economy';
 import { simulateNetworkLatency } from './simulation/networkLatency';
 import { maybeFailRequest } from './simulation/networkFailures';
 import { NotificationEngine } from '../services/notifications/notification.engine';
 import { DiagnosticCore, LogType } from '../services/diagnostic.core';
+import { isMockProvider, assertNotMockInSupabase } from './core/backendGuard';
 
 // A simple deep clone that preserves functions, unlike JSON.parse(JSON.stringify(obj))
 export function deepClone<T>(obj: T): T {
@@ -63,6 +63,11 @@ export const createNotification = (userId: string, title: string, description: s
 };
 
 export const checkAndGrantAchievements = (user: User, trigger: AchievementTrigger) => {
+    if (!isMockProvider()) {
+        assertNotMockInSupabase("achievements");
+        throw new Error("Supabase mode: achievements not implemented yet. Previously used mockData.");
+    }
+    const db = require('./mockData');
     let updatedUser = { ...user };
     const newNotifications: AWNotification[] = [];
 
@@ -139,6 +144,11 @@ const normalizeUser = (user: User): User => {
 
 
 export const updateUserInDb = (userToUpdate: User) => {
+    if (!isMockProvider()) {
+        assertNotMockInSupabase("users");
+        throw new Error("Supabase mode: user update helper not implemented yet. Previously used mockData.");
+    }
+    const db = require('./mockData');
     const updatedUser = normalizeUser(userToUpdate);
     const userIndex = db.allUsersData.findIndex(u => u.id === updatedUser.id);
     if (userIndex !== -1) {

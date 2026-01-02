@@ -7,23 +7,31 @@ import { withLatency, createNotification, updateUserInDb } from './helpers';
 import { sanitizeLink, checkLinkSafety, applyContentRules } from './quality';
 import { processEventEntry } from './economy/economy'; // Centralized Economy
 import { rankingAPI } from './ranking/index'; // V6 Engine
+import { assertMockProvider } from './core/backendGuard';
+
+const ensureMockBackend = (feature: string) => assertMockProvider(`events.${feature}`);
 
 export const fetchRankingData = () => withLatency(() => {
+    ensureMockBackend('fetchRankingData');
     // V6: Use the Live Ranking Engine for consistent, sorted, normalized data
     return rankingAPI.getRanking(undefined, 'mensal');
 });
 
-export const fetchEventsData = (userId: string) => withLatency(() => ({
-    events: db.eventsData,
-    allUsers: db.allUsersData,
-    featuredWinners: db.featuredWinnersData,
-    participations: db.participationsData,
-    eventMissions: db.eventMissionsData,
-    eventMissionSubmissions: db.eventMissionSubmissionsData.filter(s => s.userId === userId),
-    eventScoreLog: db.eventScoreLogData,
-}));
+export const fetchEventsData = (userId: string) => withLatency(() => {
+    ensureMockBackend('fetchEventsData');
+    return {
+        events: db.eventsData,
+        allUsers: db.allUsersData,
+        featuredWinners: db.featuredWinnersData,
+        participations: db.participationsData,
+        eventMissions: db.eventMissionsData,
+        eventMissionSubmissions: db.eventMissionSubmissionsData.filter(s => s.userId === userId),
+        eventScoreLog: db.eventScoreLogData,
+    };
+});
 
 export const joinEvent = (userId: string, eventId: string, cost: number, isGolden: boolean = false) => withLatency(async () => {
+    ensureMockBackend('joinEvent');
     const user = db.allUsersData.find(u => u.id === userId);
     const event = db.eventsData.find(e => e.id === eventId);
     if (!user || !event) throw new Error("User or event not found");
@@ -61,6 +69,7 @@ export const joinEvent = (userId: string, eventId: string, cost: number, isGolde
 });
 
 export const submitEventMission = (userId: string, eventMissionId: string, proofDataUrl: string) => withLatency(() => {
+    ensureMockBackend('submitEventMission');
     // --- QUALITY SHIELD INTEGRATION ---
     const sanitizedProof = proofDataUrl.startsWith('data:') ? proofDataUrl : sanitizeLink(proofDataUrl);
     
@@ -100,6 +109,7 @@ export const submitEventMission = (userId: string, eventMissionId: string, proof
 });
 
 export const artistLinkClick = (userId: string, artistId: string, linkType: 'spotify' | 'youtube') => withLatency(() => {
+    ensureMockBackend('artistLinkClick');
     const user = db.allUsersData.find(u => u.id === userId);
     const artist = db.allUsersData.find(u => u.id === artistId);
     if (!user || !artist) throw new Error("User or artist not found");
@@ -168,6 +178,7 @@ export const artistLinkClick = (userId: string, artistId: string, linkType: 'spo
 });
 
 export const markArtistOfTheDayAsSeen = (userId: string, announcementId: string) => withLatency(() => {
+    ensureMockBackend('markArtistOfTheDayAsSeen');
     const user = db.allUsersData.find(u => u.id === userId);
     if(user) {
         const updatedUser = { ...user, seenArtistOfTheDayAnnouncements: [...(user.seenArtistOfTheDayAnnouncements || []), announcementId]};
@@ -176,9 +187,12 @@ export const markArtistOfTheDayAsSeen = (userId: string, announcementId: string)
     return {};
 });
 
-export const fetchRafflesData = (userId: string) => withLatency(() => ({
-    raffles: db.rafflesData,
-    myTickets: db.raffleTicketsData.filter(t => t.userId === userId),
-    allTickets: db.raffleTicketsData,
-    allUsers: db.allUsersData,
-}));
+export const fetchRafflesData = (userId: string) => withLatency(() => {
+    ensureMockBackend('fetchRafflesData');
+    return {
+        raffles: db.rafflesData,
+        myTickets: db.raffleTicketsData.filter(t => t.userId === userId),
+        allTickets: db.raffleTicketsData,
+        allUsers: db.allUsersData,
+    };
+});
