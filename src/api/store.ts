@@ -10,36 +10,80 @@ import { getRepository } from './database/repository.factory';
 import { EconomyEngineV6 } from './economy/economyEngineV6'; // Use V6 for atomic purchases
 import { saveMockDb } from './database/mock-db';
 import { socialLinkValidator } from './quality/socialLinkValidator';
+import { StoreSupabase } from './supabase/store';
+import { config } from '../core/config';
 
 const repo = getRepository();
 
-export const fetchStoreData = (userId: string) => withLatency(() => ({
-    success: true,
-    data: {
-        storeItems: db.storeItemsData.map(SanityGuard.storeItem),
-        usableItems: db.usableItemsData,
-        coinPacks: db.coinPacksData,
-        coinPurchaseRequests: repo.select("coinPurchaseRequests").filter((cpr: any) => cpr.userId === userId),
+export const fetchStoreData = (userId: string) => withLatency(async () => {
+    if (config.backendProvider === 'supabase') {
+        const itemsRes = await StoreSupabase.listStoreItems();
+        if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar a loja' };
+        return {
+            success: true,
+            data: {
+                storeItems: itemsRes.items || [],
+                usableItems: [],
+                coinPacks: [],
+                coinPurchaseRequests: [],
+            }
+        };
     }
-}));
 
-export const fetchInventoryData = (userId: string) => withLatency(() => ({
-    success: true,
-    data: {
-        redeemedItems: db.redeemedItemsData.filter(ri => ri.userId === userId),
-        storeItems: db.storeItemsData.map(SanityGuard.storeItem),
-        usableItems: db.usableItemsData,
-        usableItemQueue: (QueueEngineV5.getQueue('item') as UsableItemQueueEntry[]).map(SanityGuard.queueItem),
-        artistOfTheDayQueue: [], // DEPRECATED: QueueEngineV5.getQueue('spotlight') removed
+    return {
+        success: true,
+        data: {
+            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
+            usableItems: db.usableItemsData,
+            coinPacks: db.coinPacksData,
+            coinPurchaseRequests: repo.select("coinPurchaseRequests").filter((cpr: any) => cpr.userId === userId),
+        }
+    };
+});
+
+export const fetchInventoryData = (userId: string) => withLatency(async () => {
+    if (config.backendProvider === 'supabase') {
+        const itemsRes = await StoreSupabase.getMyInventory(userId);
+        if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar inventário' };
+
+        return {
+            success: true,
+            data: {
+                redeemedItems: itemsRes.items || [],
+                storeItems: (await StoreSupabase.listStoreItems()).items || [],
+                usableItems: [],
+                usableItemQueue: [],
+                artistOfTheDayQueue: [],
+            }
+        };
     }
-}));
+
+    return {
+        success: true,
+        data: {
+            redeemedItems: db.redeemedItemsData.filter(ri => ri.userId === userId),
+            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
+            usableItems: db.usableItemsData,
+            usableItemQueue: (QueueEngineV5.getQueue('item') as UsableItemQueueEntry[]).map(SanityGuard.queueItem),
+            artistOfTheDayQueue: [], // DEPRECATED: QueueEngineV5.getQueue('spotlight') removed
+        }
+    };
+});
 
 export const redeemItem = (userId: string, itemId: string) => withLatency(async () => {
+    if (config.backendProvider === 'supabase') {
+        const res = await StoreSupabase.redeemStoreItem(userId, itemId);
+        return res;
+    }
+
     // Delegate to robust Engine which uses EconomyEngineV6
     return await StoreEconomyEngine.purchaseItem(userId, itemId);
 });
 
 export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: "Itens utilizáveis não estão disponíveis neste modo." };
+    }
     const sanitizedUrl = sanitizeLink(postUrl);
     const safetyCheck = checkLinkSafety(sanitizedUrl);
     if (!safetyCheck.safe) return { success: false, error: safetyCheck.reason };
