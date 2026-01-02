@@ -5,6 +5,7 @@ import { ModalPortal } from '../ui/overlays/ModalPortal';
 import { CoinIcon, XPIcon, StoreIcon, TrophyIcon, CheckIcon } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine'; // Updated import
 import { useAppContext } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 // We reuse this component but significantly overhaul it. 
 // Ideally would be renamed to AdminManualAwardModal.tsx, but keeping name per prompt constraints.
@@ -132,7 +133,7 @@ const AdminWinnerModal: React.FC<AdminWinnerModalProps> = ({ winner, allUsers, o
                                     >
                                         <option value="">Selecione...</option>
                                         {userList.map(u => (
-                                            <option key={u.id} value={u.id}>{u.name} ({u.artisticName})</option>
+                                            <option key={u.id} value={u.id}>{u.name} ({getDisplayName({ ...u, artistic_name: u.artisticName })})</option>
                                         ))}
                                     </select>
                                 </div>
@@ -240,7 +241,7 @@ const AdminWinnerModal: React.FC<AdminWinnerModalProps> = ({ winner, allUsers, o
                                     <img src={selectedUser.avatarUrl} className="w-10 h-10 rounded-full" />
                                     <div className="text-left">
                                         <p className="font-bold text-white text-sm">{selectedUser.name}</p>
-                                        <p className="text-xs text-gray-500">{selectedUser.artisticName}</p>
+                                        <p className="text-xs text-gray-500">{getDisplayName({ ...selectedUser, artistic_name: selectedUser.artisticName })}</p>
                                     </div>
                                 </div>
 

@@ -16,6 +16,7 @@ import { AdminEngine } from '../../api/admin/AdminEngine';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface ManageRafflesProps {
     raffles: Raffle[];
@@ -614,12 +615,12 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                      {detailedStats.participants.slice(0, 10).map((p: any) => (
                                          <tr key={p.userId} className="hover:bg-[#181818]">
                                              <td className="px-6 py-3 font-medium text-white flex items-center gap-3">
-                                                 <AvatarWithFrame user={p as any} sizeClass="w-8 h-8" />
-                                                 <div>
-                                                     <p>{p.artisticName}</p>
-                                                     <p className="text-xs text-gray-600 font-normal">{p.name}</p>
-                                                 </div>
-                                             </td>
+                                                <AvatarWithFrame user={p as any} sizeClass="w-8 h-8" />
+                                                <div>
+                                                    <p>{getDisplayName({ ...p, artistic_name: p.artisticName })}</p>
+                                                    <p className="text-xs text-gray-600 font-normal">{p.name}</p>
+                                                </div>
+                                            </td>
                                              <td className="px-6 py-3 font-mono text-[#FFD86B] font-bold">{p.ticketCount}</td>
                                              <td className="px-6 py-3 text-xs">{newUserLimit === '0' ? 'Ilimitado' : newUserLimit}</td>
                                              <td className="px-6 py-3 text-xs">{p.chance.toFixed(2)}%</td>

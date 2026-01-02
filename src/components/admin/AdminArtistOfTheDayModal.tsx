@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../../types';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface AdminArtistsOfTheDayModalProps {
   isOpen: boolean;
@@ -76,7 +77,7 @@ const AdminArtistsOfTheDayModal: React.FC<AdminArtistsOfTheDayModalProps> = ({ i
                         <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full mx-4 object-cover border border-[#333]" />
                         <div>
                             <p className={`font-bold text-sm ${selectedUserIds.includes(user.id) ? 'text-white' : 'text-gray-400'}`}>
-                                {user.artisticName}
+                                {getDisplayName({ ...user, artistic_name: user.artisticName })}
                             </p>
                             <p className="text-xs text-gray-500">{user.name}</p>
                         </div>

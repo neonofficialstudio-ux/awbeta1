@@ -9,6 +9,7 @@ import AdminArtistsOfTheDayModal from './AdminArtistOfTheDayModal';
 import AdminEventMissionModal from './AdminEventMissionModal';
 import AdminEventFinalizeModal from './AdminEventFinalizeModal';
 import { EditIcon, DeleteIcon, CheckIcon, SearchIcon, LockIcon, CrownIcon, TrophyIcon, StarIcon, HistoryIcon } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 // UI Components
 import Tabs from '../ui/navigation/Tabs';
@@ -277,7 +278,7 @@ const ManageEvents: React.FC<ManageEventsProps> = (props) => {
                         <div key={artist.id} className="flex items-center bg-[#14171C] p-3 rounded-lg border border-[#2A2D33]">
                             <img src={artist.avatarUrl} alt={artist.name} className="w-10 h-10 rounded-full mr-3 object-cover" />
                             <div className="min-w-0">
-                                <p className="font-semibold text-white text-sm truncate">{artist.artisticName}</p>
+                                <p className="font-semibold text-white text-sm truncate">{getDisplayName({ ...artist, artistic_name: artist.artisticName })}</p>
                                 <p className="text-xs text-[#808080] truncate">{artist.name}</p>
                             </div>
                         </div>

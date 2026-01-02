@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { User, MissionSubmission, CoinTransaction, RedeemedItem, EventScoreLog, SubmissionStatus, RedemptionStatus, SubscriptionEvent, Punishment, PunishmentType } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface AdminUserHistoryModalProps {
   user: User;
@@ -138,7 +139,7 @@ const AdminUserHistoryModal: React.FC<AdminUserHistoryModalProps> = ({ user, onC
                 <AvatarWithFrame user={user} sizeClass="w-16 h-16" className="mr-4" />
                 <div>
                     <h2 className="text-2xl font-bold text-goldenYellow-400">{user.name}</h2>
-                    <p className="text-gray-400">{user.artisticName} • {user.plan}</p>
+                    <p className="text-gray-400">{getDisplayName({ ...user, artistic_name: user.artisticName })} • {user.plan}</p>
                 </div>
             </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white text-3xl font-bold">&times;</button>

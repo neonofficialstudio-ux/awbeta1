@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { User } from '../../types';
 import { SearchIcon } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface ManageNotificationsProps {
   allUsers: User[];
@@ -16,13 +17,17 @@ const ManageNotifications: React.FC<ManageNotificationsProps> = ({ allUsers, onS
   const [isSending, setIsSending] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const getUserDisplayName = (user: User) => getDisplayName({ ...user, artistic_name: user.artisticName });
 
   const userList = useMemo(() => allUsers.filter(u => u.role === 'user'), [allUsers]);
   
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return userList;
     const lower = searchTerm.toLowerCase();
-    return userList.filter(u => u.name.toLowerCase().includes(lower) || u.artisticName.toLowerCase().includes(lower));
+    return userList.filter(u => {
+        const displayName = getUserDisplayName(u).toLowerCase();
+        return u.name.toLowerCase().includes(lower) || displayName.includes(lower);
+    });
   }, [userList, searchTerm]);
 
   const selectedUsers = useMemo(() => userList.filter(u => selectedUserIds.includes(u.id)), [userList, selectedUserIds]);
@@ -113,7 +118,7 @@ const ManageNotifications: React.FC<ManageNotificationsProps> = ({ allUsers, onS
                                     <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full mr-3" />
                                     <div>
                                         <p className="text-sm font-medium">{user.name}</p>
-                                        <p className="text-xs text-gray-400">{user.artisticName}</p>
+                                        <p className="text-xs text-gray-400">{getUserDisplayName(user)}</p>
                                     </div>
                                 </li>
                             ))}

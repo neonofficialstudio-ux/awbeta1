@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import type { User, MissionSubmission, CoinTransaction, UsableItemQueueEntry, ProcessedUsableItemQueueEntry } from '../../types';
 import { ShieldIcon, SearchIcon, UsersIcon } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface UserBehaviorIntelligenceProps {
     allUsers: User[];
@@ -118,7 +119,7 @@ const UserBehaviorIntelligence: React.FC<UserBehaviorIntelligenceProps> = ({
     // --- FILTERED LIST FOR TABLE ---
     const filteredList = userMetrics.filter(u => 
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        u.artisticName.toLowerCase().includes(searchTerm.toLowerCase())
+        getDisplayName({ ...u, artistic_name: u.artisticName }).toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (

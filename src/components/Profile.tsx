@@ -9,6 +9,7 @@ import AvatarWithFrame from './AvatarWithFrame';
 import { safeString } from '../api/helpers';
 import FaqItem from './ui/patterns/FaqItem';
 import { AchievementEngine } from '../services/achievements/achievement.engine';
+import { getDisplayName } from '../api/core/getDisplayName';
 
 // --- V6 ICONS & ASSETS ---
 
@@ -205,6 +206,7 @@ const faqData = [
 const Profile: React.FC = () => {
     const { state, dispatch } = useAppContext();
     const { activeUser: user } = state;
+    const displayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
 
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<User | null>(user);
@@ -374,7 +376,7 @@ const Profile: React.FC = () => {
                      <div className="absolute -inset-4 border border-[#FFD36A]/30 rounded-full animate-[spin_10s_linear_infinite] opacity-50 group-hover:opacity-100 transition-opacity"></div>
                      <div className="absolute -inset-8 border border-[#FFD36A]/10 rounded-full animate-[spin_15s_linear_infinite_reverse] opacity-30"></div>
                      <div className="w-40 h-40 rounded-full p-1 bg-gradient-to-b from-[#FFD36A] to-[#C79B2C] shadow-[0_0_40px_rgba(255,211,106,0.3)] relative z-10">
-                        <img src={user.avatarUrl} alt={user.artisticName} className="w-full h-full rounded-full object-cover border-4 border-[#050505]" />
+                        <img src={user.avatarUrl} alt={displayName} className="w-full h-full rounded-full object-cover border-4 border-[#050505]" />
                      </div>
                      <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-[#050505] border border-[#FFD36A] text-[#FFD36A] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] z-20 shadow-lg whitespace-nowrap">
                         Lvl {user.level}
@@ -383,7 +385,7 @@ const Profile: React.FC = () => {
 
                 {/* User Info */}
                 <h1 className="text-5xl md:text-6xl font-black text-white font-chakra uppercase tracking-tight mb-2 drop-shadow-xl">
-                    {user.artisticName}
+                    {displayName}
                 </h1>
                 <div className="flex items-center justify-center gap-3 mb-8">
                     <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded bg-white/5 border border-white/10 ${planColor}`}>
