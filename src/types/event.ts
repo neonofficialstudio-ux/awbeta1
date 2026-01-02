@@ -1,6 +1,6 @@
 
 import { IconComponent } from './shared';
-import { UserPlan } from './user';
+import { User, UserPlan } from './user';
 import { SubmissionStatus, MissionType } from './mission';
 import { EventRankingEntry } from './ranking';
 
@@ -10,10 +10,10 @@ export type EventStatus = 'current' | 'past' | 'future' | 'closed';
 export interface EventSession {
     eventId: string;
     passType: EventPassType;
-    startedAt: string; 
-    progress: Record<string, boolean>; 
-    rewardsClaimed: string[]; 
-    boostersActive: string[]; 
+    startedAt: string; // ISO String
+    progress: Record<string, boolean>; // missionId -> completed
+    rewardsClaimed: string[]; // rewardIds
+    boostersActive: string[]; // boosterIds
     score: number;
 }
 
@@ -54,14 +54,17 @@ export interface Event {
   entryCost: number;
   goldenPassCost: number;
   maxCapacity?: number;
-  allowedPlans?: UserPlan[]; 
+  allowedPlans?: UserPlan[]; // Strict UserPlan type
   
+  // V5 Engine Props
   boostersAvailable?: { type: 'xp_5' | 'xp_10', count: number }[];
   
+  // V7.8 Closure Props
   winners?: EventWinner[];
   rewardsConfig?: EventRewardConfig;
   closedAt?: string;
   
+  // V7.9 Frozen State - Strictly Typed
   frozenRanking?: EventRankingEntry[]; 
   finalPrizes?: {
       normal: EventPrizeConfig;
@@ -82,7 +85,6 @@ export interface Participation {
   eventId: string;
   joinedAt: string;
   isGolden?: boolean;
-  user?: any; // Populated in some contexts
 }
 
 export interface EventScoreLog {
@@ -104,7 +106,7 @@ export interface EventMission {
   actionUrl?: string;
   tier?: 'normal' | 'vip'; 
   proofType?: 'link' | 'image';
-  type?: MissionType; 
+  type?: MissionType; // Matches Mission.type
   requiresReview?: boolean;
 }
 

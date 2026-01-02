@@ -24,7 +24,7 @@ export interface Notification {
   read: boolean;
   linkTo?: {
     view: View;
-    tab?: string;
+    tab?: string; 
     subTab?: string;
   };
 }

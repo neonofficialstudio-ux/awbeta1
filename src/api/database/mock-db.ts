@@ -208,6 +208,7 @@ const internalSelect = (table: string) => {
         case 'advertisements': return db.advertisementsData || [];
         case 'subscriptionPlans': return db.subscriptionPlansData || [];
         case 'subscriptionRequests': return db.subscriptionRequestsData || [];
+        case 'event_settings': return [db.eventSettings || {}];
         case 'audit': return auditLogs || [];
         case 'telemetry': return telemetryEvents || [];
         case 'telemetryPremiumEvents': return telemetryPremiumEvents || []; 

@@ -1,77 +1,122 @@
-
-import type { CoinPack, CoinPurchaseRequest, VisualRewardFormData } from '../types';
-import { withLatency, createNotification } from './helpers';
+// api/store.ts
+import type { User, Notification, StoreItem, UsableItem, CoinPack, CoinPurchaseRequest, VisualRewardFormData, RedeemedItem, Raffle, RaffleTicket, UsableItemQueueEntry, ArtistOfTheDayQueueEntry } from '../types';
+import * as db from './mockData';
+import { withLatency, createNotification, updateUserInDb } from './helpers';
+import { QueueEngineV5 } from './queue/queueEngineV5'; 
+import { sanitizeLink, checkLinkSafety } from './quality';
 import { StoreEconomyEngine } from '../services/store/storeEconomy.engine';
-import { getRepository } from './database/repository.factory';
 import { SanityGuard } from '../services/sanity.guard';
+import { getRepository } from './database/repository.factory';
+import { EconomyEngineV6 } from './economy/economyEngineV6'; // Use V6 for atomic purchases
+import { saveMockDb } from './database/mock-db';
+import { socialLinkValidator } from './quality/socialLinkValidator';
+import { StoreSupabase } from './supabase/store';
+import { config } from '../core/config';
 
 const repo = getRepository();
 
 export const fetchStoreData = (userId: string) => withLatency(async () => {
-    const storeItems = await repo.selectAsync("storeItems");
-    const usableItems = await repo.selectAsync("usableItems");
-    const coinPacks = await repo.selectAsync("coinPacks");
-    const requests = await repo.selectAsync("coinPurchaseRequests");
-    
+    if (config.backendProvider === 'supabase') {
+        const itemsRes = await StoreSupabase.listStoreItems();
+        if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar a loja' };
+        return {
+            success: true,
+            data: {
+                storeItems: itemsRes.items || [],
+                usableItems: [],
+                coinPacks: [],
+                coinPurchaseRequests: [],
+            }
+        };
+    }
+
     return {
         success: true,
         data: {
-            storeItems: storeItems.map(SanityGuard.storeItem),
-            usableItems: usableItems,
-            coinPacks: coinPacks,
-            coinPurchaseRequests: requests.filter((r: any) => r.userId === userId),
+            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
+            usableItems: db.usableItemsData,
+            coinPacks: db.coinPacksData,
+            coinPurchaseRequests: repo.select("coinPurchaseRequests").filter((cpr: any) => cpr.userId === userId),
         }
     };
 });
 
 export const fetchInventoryData = (userId: string) => withLatency(async () => {
-    const redeemedItems = await repo.selectAsync("redeemedItems");
-    const storeItems = await repo.selectAsync("storeItems");
-    const usableItems = await repo.selectAsync("usableItems");
-    const queue = await repo.selectAsync("queue");
+    if (config.backendProvider === 'supabase') {
+        const itemsRes = await StoreSupabase.getMyInventory(userId);
+        if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar inventário' };
+
+        return {
+            success: true,
+            data: {
+                redeemedItems: itemsRes.items || [],
+                storeItems: (await StoreSupabase.listStoreItems()).items || [],
+                usableItems: [],
+                usableItemQueue: [],
+                artistOfTheDayQueue: [],
+            }
+        };
+    }
 
     return {
         success: true,
         data: {
-            redeemedItems: redeemedItems.filter((i: any) => i.userId === userId),
-            storeItems: storeItems.map(SanityGuard.storeItem),
-            usableItems: usableItems,
-            usableItemQueue: queue.filter((q: any) => q.userId === userId).map(SanityGuard.queueItem),
-            artistOfTheDayQueue: [], // Deprecated
+            redeemedItems: db.redeemedItemsData.filter(ri => ri.userId === userId),
+            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
+            usableItems: db.usableItemsData,
+            usableItemQueue: (QueueEngineV5.getQueue('item') as UsableItemQueueEntry[]).map(SanityGuard.queueItem),
+            artistOfTheDayQueue: [], // DEPRECATED: QueueEngineV5.getQueue('spotlight') removed
         }
     };
 });
 
 export const redeemItem = (userId: string, itemId: string) => withLatency(async () => {
-    // Delega para a Engine que já usa o repo de forma segura
+    if (config.backendProvider === 'supabase') {
+        const res = await StoreSupabase.redeemStoreItem(userId, itemId);
+        return res;
+    }
+
+    // Delegate to robust Engine which uses EconomyEngineV6
     return await StoreEconomyEngine.purchaseItem(userId, itemId);
 });
 
-export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(async () => {
-    const redeemedItems = await repo.selectAsync("redeemedItems");
-    const item = redeemedItems.find((i: any) => i.id === redeemedItemId && i.userId === userId);
-    
-    if (!item) return { success: false, error: "Item not found" };
+export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: "Itens utilizáveis não estão disponíveis neste modo." };
+    }
+    const sanitizedUrl = sanitizeLink(postUrl);
+    const safetyCheck = checkLinkSafety(sanitizedUrl);
+    if (!safetyCheck.safe) return { success: false, error: safetyCheck.reason };
 
-    // Atualiza status do item
-    await repo.updateAsync("redeemedItems", (i: any) => i.id === redeemedItemId, (i: any) => ({ ...i, status: 'InProgress', formData: { postUrl } }));
+    const user = repo.select("users").find((u: any) => u.id === userId);
+    const redeemedItem = repo.select("redeemedItems").find((ri: any) => ri.id === redeemedItemId);
     
-    // Adiciona à fila
-    await repo.insertAsync("queue", {
-        id: `q-${Date.now()}`,
-        userId,
-        itemId: item.itemId,
-        redeemedItemId: item.id,
-        itemName: item.itemName,
-        status: 'pending',
-        priority: 1,
-        queuedAt: new Date().toISOString(),
-        postUrl
-    });
+    if (!user || !redeemedItem) return { success: false, error: "User or item not found" };
 
-    const notifications = [
-        createNotification(userId, "Solicitação Enviada", `Item ativado e enviado para a fila.`, { view: 'inventory', tab: 'usable' })
+    // Platform Validation Check
+    const usableItem = repo.select("usableItems").find((ui: any) => ui.id === redeemedItem.itemId);
+    if (usableItem && usableItem.platform && usableItem.platform !== 'all') {
+         const detectedPlatform = socialLinkValidator.getPlatform(sanitizedUrl);
+         if (detectedPlatform !== usableItem.platform) {
+             return { success: false, error: `Link inválido. Este item requer um link do ${usableItem.platform}.` };
+         }
+    }
+    
+    const queueEntry = {
+        id: `q-${Date.now()}`, userId, userName: user.name, userAvatar: user.avatarUrl, redeemedItemId,
+        itemName: redeemedItem.itemName, queuedAt: new Date().toISOString(), postUrl: sanitizedUrl,
+    };
+    
+    QueueEngineV5.addToQueue(queueEntry, 'item');
+
+    // Update Redeemed Item status
+    repo.update("redeemedItems", (ri: any) => ri.id === redeemedItemId, (ri: any) => ({ ...ri, status: 'InProgress' }));
+    saveMockDb();
+    
+    const notifications: Notification[] = [
+        createNotification(userId, "Solicitação Enviada", `Sua solicitação para "${redeemedItem.itemName}" foi enviada para a fila de produção.`, { view: 'inventory', tab: 'usable' })
     ];
+
     return { success: true, notifications };
 });
 
@@ -79,11 +124,10 @@ export const queueForArtistOfTheDay = (userId: string, redeemedItemId: string) =
     return { success: false, error: "Este item foi descontinuado." };
 });
 
-export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
-    if (!user) return { success: false, error: "User not found" };
-
+export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(() => {
+    const user = repo.select("users").find((u: any) => u.id === userId);
+    if(!user) return { success: false, error: "User not found" };
+    
     const newRequest: CoinPurchaseRequest = {
       id: `cpr-${Date.now()}`, 
       userId, 
@@ -94,85 +138,135 @@ export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(async
       price: pack.price, 
       requestedAt: new Date().toISOString(),
       status: 'pending_link_generation',
-      paymentLink: pack.paymentLink,
+      paymentLink: undefined,
     };
     
-    await repo.insertAsync("coinPurchaseRequests", newRequest);
-    return { success: true, newRequest, notifications: [] };
+    repo.insert("coinPurchaseRequests", newRequest);
+    
+    const notification = createNotification(user.id, "Pedido Criado", `Pedido para "${pack.name}" criado. Clique em 'Pagar Agora' para prosseguir.`, { view: 'store', tab: 'orders' });
+    return { success: true, newRequest, notifications: [notification] };
 });
 
-export const initiatePayment = (requestId: string) => withLatency(async () => {
-    const requests = await repo.selectAsync("coinPurchaseRequests");
-    const req = requests.find((r: any) => r.id === requestId);
-    if (!req) return { success: false, error: "Request not found" };
+export const initiatePayment = (requestId: string) => withLatency(() => {
+    const requests = repo.select("coinPurchaseRequests");
+    const requestIndex = requests.findIndex((r: any) => r.id === requestId);
+    if (requestIndex === -1) return { success: false, error: "Request not found" };
+
+    const request = requests[requestIndex];
+    const pack = repo.select("coinPacks").find((p: any) => p.id === request.packId);
+    const generatedLink = pack?.paymentLink || `https://pay.artistworld.com/${requestId}`;
+
+    const updatedRequest = {
+        ...request,
+        status: 'pending_payment',
+        paymentLink: generatedLink,
+        reviewedAt: new Date().toISOString()
+    };
     
-    const updated = { ...req, status: 'pending_payment' };
-    await repo.updateAsync("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => updated);
-    
-    return { success: true, updatedRequest: updated };
+    repo.update("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => updatedRequest);
+
+    return { success: true, updatedRequest };
 });
 
-export const buyCustomCoinPack = (userId: string, coins: number, price: number) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const buyCustomCoinPack = (userId: string, coins: number, price: number) => withLatency(() => {
+    const user = repo.select("users").find((u: any) => u.id === userId);
+    if(!user) return { success: false, error: "User not found" };
     
     const newRequest: CoinPurchaseRequest = {
-      id: `cpr-custom-${Date.now()}`, 
-      userId, 
-      userName: user?.name || "User", 
-      packId: `custom-${coins}`,
-      packName: `Pacote Personalizado (${coins})`, 
-      coins, 
-      price, 
-      requestedAt: new Date().toISOString(),
-      status: 'pending_link_generation',
+      id: `cpr-${Date.now()}`, userId, userName: user.name, packId: `custom-${coins}`,
+      packName: `Pacote Personalizado (${coins} Coins)`, coins, price,
+      requestedAt: new Date().toISOString(), status: 'pending_link_generation',
     };
     
-    await repo.insertAsync("coinPurchaseRequests", newRequest);
+    repo.insert("coinPurchaseRequests", newRequest);
     return { success: true, newRequest, notifications: [] };
 });
 
-export const openPaymentLink = (requestId: string) => withLatency(async () => {
-    return { success: true };
+export const openPaymentLink = (requestId: string) => withLatency(() => {
+     // No-op logic for mock, just returns success
+     // In real app, might log click analytics
+    const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
+    return { success: !!req, updatedRequest: req };
 });
 
-export const cancelCoinPurchaseRequest = (requestId: string) => withLatency(async () => {
-    await repo.updateAsync("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => ({ ...r, status: 'cancelled' }));
-    const requests = await repo.selectAsync("coinPurchaseRequests");
-    return { success: true, updatedRequest: requests.find((r: any) => r.id === requestId), notifications: [] };
+export const cancelCoinPurchaseRequest = (requestId: string) => withLatency(() => {
+    const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
+    if (!req) return { success: false, error: "Request not found" };
+
+    const updatedRequest = { ...req, status: 'cancelled' };
+    repo.update("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => updatedRequest);
+    
+    const notification = createNotification(req.userId, 'Pedido Cancelado', `Seu pedido para "${req.packName}" foi cancelado.`);
+    repo.insert("notifications", notification);
+
+    return { success: true, updatedRequest, notifications: [notification] };
 });
 
-export const submitCoinPurchaseProof = (userId: string, requestId: string, proofDataUrl: string) => withLatency(async () => {
-    await repo.updateAsync("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => ({ ...r, status: 'pending_approval', proofUrl: proofDataUrl }));
-    const requests = await repo.selectAsync("coinPurchaseRequests");
-    return { success: true, updatedRequest: requests.find((r: any) => r.id === requestId), notifications: [] };
+export const submitCoinPurchaseProof = (userId: string, requestId: string, proofDataUrl: string) => withLatency(() => {
+    const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
+    if (!req) return { success: false, error: "Request not found" };
+
+    const updatedRequest = { ...req, proofUrl: proofDataUrl, status: 'pending_approval' };
+    repo.update("coinPurchaseRequests", (r: any) => r.id === requestId, (r: any) => updatedRequest);
+
+    const notifications: Notification[] = [createNotification(userId, "Comprovante Enviado", "Seu comprovante foi enviado.", { view: 'store', tab: 'orders' })];
+    repo.insert("notifications", notifications[0]);
+    
+    return { success: true, updatedRequest, notifications };
 });
 
-export const submitVisualRewardForm = (userId: string, redeemedItemId: string, formData: VisualRewardFormData) => withLatency(async () => {
-    await repo.updateAsync("redeemedItems", (r: any) => r.id === redeemedItemId, (r: any) => ({ ...r, status: 'InProgress', formData }));
-    return { success: true, updatedItem: {}, notifications: [] };
+export const submitVisualRewardForm = (userId: string, redeemedItemId: string, formData: VisualRewardFormData) => withLatency(() => {
+    const item = repo.select("redeemedItems").find((ri: any) => ri.id === redeemedItemId);
+    if (!item) return { success: false, error: "Item not found" };
+
+    const updatedItem: RedeemedItem = {
+      ...item,
+      status: 'InProgress' as const,
+      formData: formData,
+      productionStartedAt: new Date().toISOString(),
+    };
+    
+    repo.update("redeemedItems", (ri: any) => ri.id === redeemedItemId, (ri: any) => updatedItem);
+    saveMockDb();
+
+    const notifications: Notification[] = [createNotification(userId, "Formulário Enviado", `Solicitação para "${item.itemName}" enviada.`, { view: 'inventory', tab: 'history' })];
+    repo.insert("notifications", notifications[0]);
+
+    return { success: true, updatedItem, notifications };
 });
 
 export const buyRaffleTickets = (userId: string, raffleId: string, quantity: number) => withLatency(async () => {
-    const { EconomyEngineV6 } = await import('./economy/economyEngineV6');
-    const raffles = await repo.selectAsync("raffles");
-    const raffle = raffles.find((r: any) => r.id === raffleId);
-    
-    if (!raffle) return { success: false, error: "Raffle not found" };
+    const user = repo.select("users").find((u: any) => u.id === userId);
+    const raffle = repo.select("raffles").find((r: any) => r.id === raffleId);
+
+    if (!user || !raffle) return { success: false, error: "User or Raffle not found" };
+    if (raffle.status !== 'active') return { success: false, error: "Raffle is not active" };
     
     const totalCost = raffle.ticketPrice * quantity;
-    const ecoRes = await EconomyEngineV6.spendCoins(userId, totalCost, `Raffle Tickets: ${raffle.itemName}`);
     
-    if (!ecoRes.success) return { success: false, error: ecoRes.error };
-    
-    for (let i = 0; i < quantity; i++) {
-        await repo.insertAsync("raffleTickets", {
-            id: `rt-${Date.now()}-${i}`,
-            raffleId,
-            userId,
-            purchasedAt: new Date().toISOString()
-        });
+    // V6 Engine handles atomic check, spend, and telemetry
+    const ecoResult = await EconomyEngineV6.spendCoins(userId, totalCost, `Compra de ${quantity} tickets para ${raffle.itemName}`);
+    if (!ecoResult.success) return { success: false, error: ecoResult.error || "Insufficient funds" };
+
+    const existingTickets = repo.select("raffleTickets").filter((t: any) => t.raffleId === raffleId && t.userId === userId).length;
+    if (raffle.ticketLimitPerUser > 0 && existingTickets + quantity > raffle.ticketLimitPerUser) {
+         return { success: false, error: `Limit of ${raffle.ticketLimitPerUser} tickets reached.` };
     }
+
+    const updatedUser = SanityGuard.user(ecoResult.updatedUser!);
+
+    const now = new Date().toISOString();
+    const newTickets = Array.from({ length: quantity }).map((_, i) => ({
+        id: `rt-${Date.now()}-${i}`,
+        raffleId: raffleId,
+        userId: userId,
+        purchasedAt: now
+    }));
     
-    return { success: true, updatedUser: ecoRes.updatedUser };
+    newTickets.forEach(t => repo.insert("raffleTickets", t));
+
+    const notification = createNotification(user.id, 'Tickets Comprados', `Você comprou ${quantity} tickets para o sorteio "${raffle.itemName}". Boa sorte!`);
+    repo.insert("notifications", notification);
+
+    return { success: true, updatedUser, notifications: [notification] };
 });

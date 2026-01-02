@@ -1,129 +1,198 @@
 
+
+// api/events.ts
 import type { Notification, User } from '../types';
+import * as db from './mockData';
 import { withLatency, createNotification, updateUserInDb } from './helpers';
-import { rankingAPI } from './ranking/index'; 
-import { getRepository } from './database/repository.factory';
-import { SanityGuard } from '../services/sanity.guard';
-import { EconomyEngineV6 } from './economy/economyEngineV6';
-import { EventSessionEngine } from './events/session';
+import { sanitizeLink, checkLinkSafety, applyContentRules } from './quality';
+import { processEventEntry } from './economy/economy'; // Centralized Economy
+import { rankingAPI } from './ranking/index'; // V6 Engine
+import { assertMockProvider } from './core/backendGuard';
 
-const repo = getRepository();
+const ensureMockBackend = (feature: string) => assertMockProvider(`events.${feature}`);
 
-export const fetchRankingData = () => withLatency(async () => {
-    return await rankingAPI.getRanking(undefined, 'mensal');
+export const fetchRankingData = () => withLatency(() => {
+    ensureMockBackend('fetchRankingData');
+    // V6: Use the Live Ranking Engine for consistent, sorted, normalized data
+    return rankingAPI.getRanking(undefined, 'mensal');
 });
 
-export const fetchEventsData = (userId: string) => withLatency(async () => {
-    const events = await repo.selectAsync("events");
-    const participations = await repo.selectAsync("participations");
-    const missions = await repo.selectAsync("eventMissions");
-    const submissions = await repo.selectAsync("eventMissionSubmissions");
-    const scoreLog = await repo.selectAsync("event_score_log");
-    const featuredWinners = await repo.selectAsync("featuredWinners");
-
+export const fetchEventsData = (userId: string) => withLatency(() => {
+    ensureMockBackend('fetchEventsData');
     return {
-        events: events.map(SanityGuard.event),
-        allUsers: [], // Optimization: Don't load all users for event dashboard
-        featuredWinners,
-        participations,
-        eventMissions: missions,
-        eventMissionSubmissions: submissions.filter((s: any) => s.userId === userId),
-        eventScoreLog: scoreLog,
+        events: db.eventsData,
+        allUsers: db.allUsersData,
+        featuredWinners: db.featuredWinnersData,
+        participations: db.participationsData,
+        eventMissions: db.eventMissionsData,
+        eventMissionSubmissions: db.eventMissionSubmissionsData.filter(s => s.userId === userId),
+        eventScoreLog: db.eventScoreLogData,
     };
 });
 
 export const joinEvent = (userId: string, eventId: string, cost: number, isGolden: boolean = false) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const events = await repo.selectAsync("events");
-    
-    const user = users.find((u: any) => u.id === userId);
-    const event = events.find((e: any) => e.id === eventId);
-    
+    ensureMockBackend('joinEvent');
+    const user = db.allUsersData.find(u => u.id === userId);
+    const event = db.eventsData.find(e => e.id === eventId);
     if (!user || !event) throw new Error("User or event not found");
 
-    const ecoResult = await EconomyEngineV6.spendCoins(userId, cost, `Inscrição: ${event.title}`);
-    if (!ecoResult.success) {
-        return { success: false, error: ecoResult.error };
+    const notifications: Notification[] = [];
+    if (event.allowedPlans && event.allowedPlans.length > 0 && !event.allowedPlans.includes(user.plan)) {
+        notifications.push(createNotification(userId, 'Acesso Negado', 'Seu plano de assinatura não permite a participação neste evento.'));
+        return { success: false, updatedUser: user, notifications };
+    }
+    if (user.joinedEvents.includes(eventId)) {
+        notifications.push(createNotification(userId, 'Atenção', 'Você já está participando!'));
+        return { success: false, updatedUser: user, notifications };
+    }
+    
+    // --- CENTRALIZED ECONOMY ---
+    const transactionResult = await processEventEntry(user, cost, event.title, isGolden);
+    if (!transactionResult.success) {
+        notifications.push(createNotification(userId, 'Saldo Insuficiente', transactionResult.error || 'Você não tem moedas suficientes para participar.'));
+        return { success: false, updatedUser: user, notifications };
+    }
+    
+    const updatedUser = updateUserInDb({ ...transactionResult.updatedUser, joinedEvents: [...user.joinedEvents, eventId] });
+    
+    if (transactionResult.transaction) {
+        db.coinTransactionsLogData.unshift(transactionResult.transaction);
     }
 
-    const participation = { 
-        id: `p-${Date.now()}`, 
-        userId, 
-        eventId, 
-        joinedAt: new Date().toISOString(), 
-        isGolden 
-    };
-    await repo.insertAsync("participations", participation);
+    const newParticipation = { id: `p-${Date.now()}`, userId, eventId, joinedAt: new Date().toISOString(), isGolden };
+    db.participationsData.push(newParticipation);
     
-    const session = EventSessionEngine.startEventSession(userId, eventId, isGolden ? 'vip' : 'normal');
+    const successMsg = isGolden ? `Você adquiriu o Golden Pass para "${event.title}"! Aproveite os benefícios VIP.` : `Você se inscreveu com sucesso em "${event.title}". Boa sorte!`;
+    notifications.push(createNotification(userId, 'Inscrição Confirmada!', successMsg, { view: 'events' }));
 
-    let updatedUser = { 
-        ...ecoResult.updatedUser, 
-        joinedEvents: [...(ecoResult.updatedUser!.joinedEvents || []), eventId],
-        eventSession: session 
-    };
-    
-    await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
-
-    return { success: true, updatedUser: SanityGuard.user(updatedUser), participation, notifications: [] };
+    return { success: true, updatedUser, newParticipation, notifications };
 });
 
-export const submitEventMission = (userId: string, eventMissionId: string, proofDataUrl: string) => withLatency(async () => {
-    const missions = await repo.selectAsync("eventMissions");
-    const mission = missions.find((m: any) => m.id === eventMissionId);
-    if (!mission) throw new Error("Mission not found");
-
-    const newSubmission = {
-        id: `ems-${Date.now()}`,
-        userId,
-        eventMissionId,
-        eventId: mission.eventId,
-        userName: "User", 
-        missionTitle: mission.title,
-        submittedAtISO: new Date().toISOString(),
-        proofUrl: proofDataUrl,
-        status: 'pending' as const
-    };
+export const submitEventMission = (userId: string, eventMissionId: string, proofDataUrl: string) => withLatency(() => {
+    ensureMockBackend('submitEventMission');
+    // --- QUALITY SHIELD INTEGRATION ---
+    const sanitizedProof = proofDataUrl.startsWith('data:') ? proofDataUrl : sanitizeLink(proofDataUrl);
     
-    await repo.insertAsync("eventMissionSubmissions", newSubmission);
-    
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
-    if (user) {
-        const updatedUser = { ...user, pendingEventMissions: [...(user.pendingEventMissions || []), eventMissionId] };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
-        return { newSubmission, updatedUser: SanityGuard.user(updatedUser), notifications: [] };
+    const rulesCheck = applyContentRules({ proof: sanitizedProof }, userId);
+    if (!rulesCheck.ok) {
+        throw new Error(rulesCheck.reason);
     }
 
-    return { newSubmission, updatedUser: null, notifications: [] };
+    if (!proofDataUrl.startsWith('data:')) {
+        const safetyCheck = checkLinkSafety(sanitizedProof);
+        if (!safetyCheck.safe) {
+            throw new Error(safetyCheck.reason);
+        }
+    }
+    // --- END QUALITY SHIELD ---
+
+    const user = db.allUsersData.find(u => u.id === userId);
+    const eventMission = db.eventMissionsData.find(m => m.id === eventMissionId);
+    if (!user || !eventMission) throw new Error("User or event mission not found");
+
+    const newSubmission = {
+        id: `ems-${Date.now()}`, userId, eventMissionId, eventId: eventMission.eventId, userName: user.name, userAvatar: user.avatarUrl,
+        missionTitle: eventMission.title, submittedAtISO: new Date().toISOString(), proofUrl: sanitizedProof, status: 'pending' as const
+    };
+    db.eventMissionSubmissionsData.unshift(newSubmission);
+    const updatedUser = updateUserInDb({ ...user, pendingEventMissions: [...user.pendingEventMissions, eventMissionId] });
+
+    const notifications: Notification[] = [];
+    const admin = db.allUsersData.find(u => u.role === 'admin');
+    if (admin) {
+        const adminNotification = createNotification(admin.id, "Nova Missão de Evento", `${user.name} enviou uma comprovação para a missão de evento "${eventMission.title}".`, { view: 'admin', tab: 'events' });
+        db.notificationsData.unshift(adminNotification);
+        notifications.push(adminNotification);
+    }
+
+    return { newSubmission, updatedUser, notifications };
 });
 
 export const artistLinkClick = (userId: string, artistId: string, linkType: 'spotify' | 'youtube') => withLatency(() => {
-    return { reward: false, coinsGained: 0, updatedUser: null, notifications: [] };
+    ensureMockBackend('artistLinkClick');
+    const user = db.allUsersData.find(u => u.id === userId);
+    const artist = db.allUsersData.find(u => u.id === artistId);
+    if (!user || !artist) throw new Error("User or artist not found");
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Identify Available Links for the Artist
+    const availableLinks: string[] = [];
+    if (artist.spotifyUrl) availableLinks.push('spotify');
+    if (artist.youtubeUrl) availableLinks.push('youtube');
+    const totalLinks = availableLinks.length;
+
+    // Safety check: if artist has no links (shouldn't happen in carousel), return.
+    if (totalLinks === 0) return { reward: false };
+
+    // 2. Get Existing Claims for Today
+    const existingClaims = user.lastArtistLinkClickClaims?.filter(c => 
+        c.artistId === artist.id && new Date(c.dateISO) >= today
+    ) || [];
+
+    // 3. Record this click if not already recorded
+    const alreadyClickedThisType = existingClaims.some(c => c.linkType === linkType);
+    let newClaimsList = [...(user.lastArtistLinkClickClaims || [])];
+    
+    if (!alreadyClickedThisType) {
+        newClaimsList.push({ artistId: artist.id, linkType, dateISO: new Date().toISOString() });
+    }
+
+    // 4. Calculate Unique Clicks Today (Including current)
+    const uniqueClicksToday = new Set(
+        existingClaims.map(c => c.linkType).concat([linkType])
+    ).size;
+
+    // 5. Determine Reward
+    // We award ONLY if the set is now complete (uniqueClicksToday === totalLinks) 
+    // AND if the user hasn't already completed the set previously today.
+    // We check 'wasSetCompletedBefore' to avoid double rewards if they click again.
+    
+    const uniqueClicksBefore = new Set(existingClaims.map(c => c.linkType)).size;
+    const isSetCompletedNow = uniqueClicksToday === totalLinks;
+    const wasSetCompletedBefore = uniqueClicksBefore === totalLinks;
+
+    let reward = false;
+    let notifications: any[] = [];
+    let updatedUser: User = { ...user, lastArtistLinkClickClaims: newClaimsList };
+
+    if (isSetCompletedNow && !wasSetCompletedBefore) {
+        reward = true;
+        updatedUser.coins += 1;
+        
+        // Log transaction
+        const now = new Date();
+        db.coinTransactionsLogData.unshift({
+            id: `ct-${now.getTime()}`, userId, date: now.toLocaleString('pt-BR'), dateISO: now.toISOString(),
+            description: `Exploração Completa: ${artist.artisticName}`,
+            amount: 1, type: 'earn', source: 'artist_link_click',
+        });
+
+        notifications = [createNotification(user.id, "Exploração Completa!", `Você conheceu o universo de ${artist.artisticName} e ganhou +1 Coin.`)];
+    }
+
+    updatedUser = updateUserInDb(updatedUser);
+
+    return { reward, coinsGained: reward ? 1 : 0, updatedUser, notifications };
 });
 
-export const markArtistOfTheDayAsSeen = (userId: string, announcementId: string) => withLatency(async () => {
-    const users = await repo.selectAsync("users");
-    const user = users.find((u: any) => u.id === userId);
+export const markArtistOfTheDayAsSeen = (userId: string, announcementId: string) => withLatency(() => {
+    ensureMockBackend('markArtistOfTheDayAsSeen');
+    const user = db.allUsersData.find(u => u.id === userId);
     if(user) {
         const updatedUser = { ...user, seenArtistOfTheDayAnnouncements: [...(user.seenArtistOfTheDayAnnouncements || []), announcementId]};
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => updatedUser);
-        return { updatedUser: SanityGuard.user(updatedUser) };
+        return { updatedUser: updateUserInDb(updatedUser) };
     }
     return {};
 });
 
-export const fetchRafflesData = (userId: string) => withLatency(async () => {
-    const raffles = await repo.selectAsync("raffles");
-    const tickets = await repo.selectAsync("raffleTickets");
-    
-    const myTickets = tickets.filter((t: any) => t.userId === userId);
-    
+export const fetchRafflesData = (userId: string) => withLatency(() => {
+    ensureMockBackend('fetchRafflesData');
     return {
-        raffles: raffles.map((r: any) => ({...r, itemId: r.itemId || ''})), 
-        myTickets,
-        allTickets: tickets,
-        allUsers: [], 
-        highlightedRaffleId: null
+        raffles: db.rafflesData,
+        myTickets: db.raffleTicketsData.filter(t => t.userId === userId),
+        allTickets: db.raffleTicketsData,
+        allUsers: db.allUsersData,
     };
 });

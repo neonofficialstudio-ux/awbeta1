@@ -1,7 +1,8 @@
 
 import { getRepository } from "../api/database/repository.factory";
 import { SanityGuard } from "./sanity.guard";
-import { calculateLevelFromXp, calculateDiscountedPrice, PLAN_MULTIPLIERS } from "../api/economy/economy";
+import { calculateLevelFromXp, calculateDiscountedPrice } from "../api/economy/economy";
+import { PLAN_MULTIPLIERS } from "../api/economy/economy-constants"; // Updated Import
 import { DiagnosticCore } from "./diagnostic.core";
 import type { User, Mission, Event, RankingUser, QueueItem, StoreItem, UsableItem } from "../types";
 import type { AppState } from "../state/state.types";
@@ -47,8 +48,11 @@ export const DataConsistency = {
         }
 
         // 3. Plan Multiplier Integrity
-        if (!PLAN_MULTIPLIERS[updatedUser.plan]) {
+        // Use strict check against constants
+        if (PLAN_MULTIPLIERS[updatedUser.plan] === undefined) {
             report.issues.push(`Invalid Plan: ${updatedUser.plan}`);
+            // Note: Actual normalization happens in LegacyUserNormalizer or SanityGuard
+            // This is a fallback catch
             updatedUser.plan = 'Free Flow';
             report.repaired.push('reset_invalid_plan');
         }
