@@ -86,6 +86,10 @@ export const MasterSync = {
     syncJackpot: async (dispatch: any) => {
         try {
             const data = await fetchJackpotState();
+            if (data && (data as any).disabled) {
+                dispatch({ type: 'SET_JACKPOT_DATA', payload: { disabled: true, message: (data as any).message || "Jackpot em breve" } });
+                return;
+            }
             dispatch({ type: 'SET_JACKPOT_DATA', payload: data });
         } catch (e) {
             console.error("[MasterSync] Jackpot Sync Failed", e);
