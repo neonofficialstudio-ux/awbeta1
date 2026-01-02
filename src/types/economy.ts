@@ -1,6 +1,6 @@
 
 import { IconComponent, Metadata } from './shared';
-import { UserPlan } from './user';
+import { User, UserPlan } from './user';
 
 export type CurrencyType = 'COIN' | 'XP';
 

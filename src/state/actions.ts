@@ -1,7 +1,8 @@
-import type { User, Mission, Event, RankingUser, QueueItem, Toast, AdminTab, StoreTab, InventoryTab, AdminNotification, JackpotTicket, JackpotRound, SubscriptionRequest, SubscriptionEvent } from '../types';
+import type { User, Mission, Event, RankingUser, QueueItem, Toast, AdminTab, StoreTab, InventoryTab, AdminNotification, JackpotTicket, JackpotRound } from '../types';
 import { EventSession, ArenaStatus, EventLiveFeedItem } from '../types/event';
 import { MissionDefinition } from '../api/missions/missions.db';
 import { RankingSession, EventRankingEntry } from '../types/ranking';
+import type { AppState } from './state.types';
 
 export type Action =
   // --- Legacy / UI Actions ---
@@ -43,7 +44,7 @@ export type Action =
   | { type: 'EVENT_SET_ACTIVE'; payload: Event | null }
   
   // V8.4
-  | { type: 'REFRESH_EVENT_SETTINGS' }
+  | { type: 'REFRESH_EVENT_SETTINGS'; payload: AppState['eventSettings'] }
 
   // V9.1
   | { type: 'SET_JACKPOT_DATA'; payload: { currentValue: number; ticketPrice: number; nextDraw: string; tickets: JackpotTicket[]; history: JackpotRound[]; status: 'active' | 'in_apuration' | 'waiting_start'; nextStartDate?: string; } }
@@ -52,7 +53,4 @@ export type Action =
   | { type: 'ECONOMY_SYNC'; payload: { coins: number; xp: number; level: number } }
   | { type: 'MISSIONS_SYNC_WEEKLY'; payload: MissionDefinition[] }
   | { type: 'RANKING_SYNC_GLOBAL'; payload: RankingUser[] }
-  | { type: 'QUEUE_SYNC'; payload: QueueItem[] }
-  
-  // V1.4 Sync Fix
-  | { type: 'SUBSCRIPTIONS_SYNC'; payload: { users: User[]; upgradeRequests: SubscriptionRequest[]; events: SubscriptionEvent[] } };
+  | { type: 'QUEUE_SYNC'; payload: QueueItem[] };
