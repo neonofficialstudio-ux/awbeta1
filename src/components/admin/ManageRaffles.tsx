@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Raffle, RaffleTicket, StoreItem, UsableItem, User, JackpotRound } from '../../types';
+import type { JackpotState } from '../../state/state.types';
 import AdminRaffleModal from './AdminRaffleModal';
 import AdminRaffleDrawModalV2 from './AdminRaffleDrawModalV2';
 import ConfirmationModal from './ConfirmationModal';
@@ -351,7 +352,7 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     const [drawParticipants, setDrawParticipants] = useState<User[]>([]);
     const [drawTickets, setDrawTickets] = useState<RaffleTicket[]>([]);
     
-    const [jackpotState, setJackpotState] = useState<{ currentValue: number; tickets: any[]; history: JackpotRound[]; nextDraw: string; ticketPrice: number; status: string; ticketLimits?: any; } | null>(null);
+    const [jackpotState, setJackpotState] = useState<JackpotState | null>(null);
     const [isEditJackpotModalOpen, setIsEditJackpotModalOpen] = useState(false);
     const [newJackpotValue, setNewJackpotValue] = useState<string>('');
     const [newJackpotDate, setNewJackpotDate] = useState<string>('');
@@ -386,17 +387,23 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
 
     const refreshJackpot = async () => {
         const data = await api.fetchJackpotState();
-        setJackpotState(data);
+        if ((data as any)?.disabled) {
+            setJackpotState({ disabled: true, message: (data as any).message || "Jackpot em breve" });
+            setDetailedStats(null);
+            return;
+        }
+
+        setJackpotState(data as JackpotState);
         
         // Pre-fill edit form
-        setNewJackpotValue(String(data.currentValue));
-        setNewJackpotDate(data.nextDraw ? toLocalInputValue(data.nextDraw) : '');
-        setNewTicketPrice(String(data.ticketPrice));
+        setNewJackpotValue(String((data as any).currentValue));
+        setNewJackpotDate((data as any).nextDraw ? toLocalInputValue((data as any).nextDraw) : '');
+        setNewTicketPrice(String((data as any).ticketPrice));
         
         // V13.5 & 13.6: Correctly hydrate limits from fetched state
-        if (data.ticketLimits) {
-             setNewGlobalLimit(String(data.ticketLimits.global || 0));
-             setNewUserLimit(String(data.ticketLimits.perUser || 0)); // Set User Limit
+        if ((data as any).ticketLimits) {
+             setNewGlobalLimit(String((data as any).ticketLimits.global || 0));
+             setNewUserLimit(String((data as any).ticketLimits.perUser || 0)); // Set User Limit
         }
         
         // Fetch detailed stats
@@ -525,6 +532,8 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     const scheduledRaffles = rafflesList.filter(r => r.status === 'scheduled');
     const awaitingDrawRaffles = rafflesList.filter(r => r.status === 'awaiting_draw');
     const finishedRaffles = rafflesList.filter(r => r.status === 'finished' || r.status === 'winner_defined' || r.status === 'ended');
+    const isJackpotDisabled = !!(jackpotState as any)?.disabled;
+    const jackpotDisabledMessage = isJackpotDisabled ? (jackpotState as any)?.message || "Jackpot em breve" : "";
 
     return (
         <>
@@ -536,36 +545,48 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                             <h2 className="text-2xl font-bold text-white flex items-center gap-2 font-chakra uppercase tracking-wider">
                                 <TrophyIcon className="w-8 h-8 text-yellow-400" /> Jackpot Operations
                             </h2>
-                            {jackpotState && (
+                            {isJackpotDisabled ? (
+                                <p className="text-sm mt-1 font-mono font-bold text-yellow-400">{jackpotDisabledMessage || 'Jackpot em breve no Supabase'}</p>
+                            ) : jackpotState && (
                                 <p className={`text-sm mt-1 font-mono font-bold ${jackpotState.status === 'active' ? 'text-green-400' : jackpotState.status === 'waiting_start' ? 'text-blue-400' : 'text-red-400'}`}>
                                     STATUS: {jackpotState.status.toUpperCase().replace('_', ' ')}
                                 </p>
                             )}
                         </div>
-                        <button onClick={() => setIsEditJackpotModalOpen(true)} className="absolute top-6 right-6 p-2 bg-gray-800/50 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors" title="Configurar"><SettingsIcon className="w-5 h-5" /></button>
-                        {jackpotState && (
-                            <div className="flex items-center gap-8 bg-black/40 p-4 rounded-lg border border-yellow-500/30">
-                                <div><p className="text-xs text-gray-400 uppercase font-bold">Valor Atual</p><div className="flex items-center gap-2"><CoinIcon className="w-6 h-6 text-yellow-400" /><span className="text-3xl font-black text-white text-shadow-glow">{jackpotState.currentValue.toLocaleString()}</span></div></div>
-                                <div className="h-10 w-px bg-yellow-500/30"></div>
-                                <div><p className="text-xs text-gray-400 uppercase font-bold">Tickets</p><div className="flex items-center gap-2"><TrendingUpIcon className="w-6 h-6 text-green-400" /><span className="text-3xl font-black text-white">{jackpotState.tickets.length}</span></div></div>
-                            </div>
+                        {!isJackpotDisabled && jackpotState && (
+                            <>
+                                <button onClick={() => setIsEditJackpotModalOpen(true)} className="absolute top-6 right-6 p-2 bg-gray-800/50 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors" title="Configurar"><SettingsIcon className="w-5 h-5" /></button>
+                                <div className="flex items-center gap-8 bg-black/40 p-4 rounded-lg border border-yellow-500/30">
+                                    <div><p className="text-xs text-gray-400 uppercase font-bold">Valor Atual</p><div className="flex items-center gap-2"><CoinIcon className="w-6 h-6 text-yellow-400" /><span className="text-3xl font-black text-white text-shadow-glow">{jackpotState.currentValue.toLocaleString()}</span></div></div>
+                                    <div className="h-10 w-px bg-yellow-500/30"></div>
+                                    <div><p className="text-xs text-gray-400 uppercase font-bold">Tickets</p><div className="flex items-center gap-2"><TrendingUpIcon className="w-6 h-6 text-green-400" /><span className="text-3xl font-black text-white">{jackpotState.tickets.length}</span></div></div>
+                                </div>
+                            </>
                         )}
                      </div>
                      <div className="mt-4 flex flex-col md:flex-row gap-4">
-                        <button onClick={() => setIsInjectModalOpen(true)} className="flex-1 py-4 bg-green-900/30 border border-green-500/50 hover:bg-green-500 hover:text-black text-green-400 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2 group"><TrendingUpIcon className="w-5 h-5 group-hover:animate-bounce" /> Injetar Valor</button>
-                        
-                        {/* Contextual Action Button */}
-                        {jackpotState?.status === 'active' ? (
-                             <button onClick={() => setIsDrawJackpotModalOpen(true)} disabled={jackpotState.tickets.length === 0} className="flex-1 py-4 bg-gradient-to-r from-red-900/40 to-yellow-900/40 border border-red-500/50 hover:from-red-600 hover:to-yellow-600 hover:text-white text-red-200 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><TrophyIcon className="w-5 h-5" /> {jackpotState.tickets.length === 0 ? 'Sem Tickets' : 'Sortear Jackpot'}</button>
+                        {isJackpotDisabled ? (
+                            <div className="flex-1 py-4 bg-yellow-900/30 border border-yellow-600/50 text-yellow-300 font-bold rounded-lg text-center uppercase tracking-wider text-sm">
+                                {jackpotDisabledMessage || 'Jackpot em breve no Supabase'}
+                            </div>
                         ) : (
-                             <button onClick={() => {
-                                 // Default dates for convenience
-                                 const now = new Date();
-                                 setScheduleStart(toLocalInputValue(now));
-                                 now.setDate(now.getDate() + 7);
-                                 setScheduleEnd(toLocalInputValue(now));
-                                 setIsScheduleJackpotModalOpen(true);
-                             }} className="flex-1 py-4 bg-blue-900/30 border border-blue-500/50 hover:bg-blue-500 hover:text-white text-blue-300 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2"><CheckIcon className="w-5 h-5" /> Agendar Novo Ciclo</button>
+                            <>
+                                <button onClick={() => setIsInjectModalOpen(true)} className="flex-1 py-4 bg-green-900/30 border border-green-500/50 hover:bg-green-500 hover:text-black text-green-400 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2 group"><TrendingUpIcon className="w-5 h-5 group-hover:animate-bounce" /> Injetar Valor</button>
+                                
+                                {/* Contextual Action Button */}
+                                {jackpotState?.status === 'active' ? (
+                                     <button onClick={() => setIsDrawJackpotModalOpen(true)} disabled={jackpotState.tickets.length === 0} className="flex-1 py-4 bg-gradient-to-r from-red-900/40 to-yellow-900/40 border border-red-500/50 hover:from-red-600 hover:to-yellow-600 hover:text-white text-red-200 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><TrophyIcon className="w-5 h-5" /> {jackpotState.tickets.length === 0 ? 'Sem Tickets' : 'Sortear Jackpot'}</button>
+                                ) : (
+                                     <button onClick={() => {
+                                         // Default dates for convenience
+                                         const now = new Date();
+                                         setScheduleStart(toLocalInputValue(now));
+                                         now.setDate(now.getDate() + 7);
+                                         setScheduleEnd(toLocalInputValue(now));
+                                         setIsScheduleJackpotModalOpen(true);
+                                     }} className="flex-1 py-4 bg-blue-900/30 border border-blue-500/50 hover:bg-blue-500 hover:text-white text-blue-300 font-bold rounded-lg transition-all uppercase tracking-wider text-sm flex items-center justify-center gap-2"><CheckIcon className="w-5 h-5" /> Agendar Novo Ciclo</button>
+                                )}
+                            </>
                         )}
                      </div>
                 </div>

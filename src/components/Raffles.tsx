@@ -10,7 +10,6 @@ import RiotUpcomingList from './raffles/RiotUpcomingList';
 import { RaffleEngineV2 } from '../api/raffles/raffle.engine';
 import { ModalPortal } from './ui/overlays/ModalPortal'; // Ensure this import exists
 import Button from './ui/base/Button';
-import { getUserJackpotStats } from '../api/games'; // Import helper
 import FaqItem from './ui/patterns/FaqItem';
 
 // --- STYLES & ANIMATIONS (ARCANE RIOT + PURPLE BOOST) ---
@@ -313,18 +312,22 @@ const MainRaffleHero: React.FC<{
     userCoins: number; 
     isBuying: boolean;
     tickets: any[];
-    userId: string;
     nextDraw: string;
     lastRound?: JackpotRound;
     allUsers: User[];
     status: string;
     nextStartDate?: string;
-    planLimit: number; // Renamed concept to limit, but passed value is user limit
-}> = ({ currentValue, ticketPrice, onBuyTicket, userCoins, isBuying, tickets, userId, nextDraw, lastRound, allUsers, status, nextStartDate, planLimit }) => {
+    userTicketCount: number;
+    ticketLimits?: { perUser?: number; global?: number };
+}> = ({ currentValue, ticketPrice, onBuyTicket, userCoins, isBuying, tickets, nextDraw, lastRound, allUsers, status, nextStartDate, userTicketCount, ticketLimits }) => {
     const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
     
-    // V13.7: Centralized Logic for Limits
-    const { bought: currentTickets, limit, remaining } = getUserJackpotStats(userId);
+    const limit = ticketLimits?.perUser || 0;
+    const globalLimit = ticketLimits?.global || 0;
+    const currentTickets = userTicketCount;
+    const remainingByLimit = limit > 0 ? Math.max(0, limit - currentTickets) : Infinity;
+    const remainingByGlobal = globalLimit > 0 ? Math.max(0, globalLimit - tickets.length) : Infinity;
+    const remaining = Math.min(remainingByLimit, remainingByGlobal);
     
     const chance = tickets.length > 0 ? (currentTickets / tickets.length) * 100 : 0;
     const chanceDisplay = chance > 0 && chance < 0.1 ? "< 0.1%" : `${chance.toFixed(1)}%`;
@@ -374,15 +377,15 @@ const MainRaffleHero: React.FC<{
                 <div className="flex flex-col items-center gap-6 relative z-20">
                     <button 
                         onClick={() => setIsBuyModalOpen(true)}
-                        disabled={isBuying || !isActive || (limit > 0 && remaining <= 0)}
+                        disabled={isBuying || !isActive || remaining <= 0}
                         className={`
                             px-12 py-4 rounded-xl font-black text-sm uppercase tracking-[0.2em] transition-all duration-300 shadow-2xl
-                            ${isActive && (limit === 0 || remaining > 0)
+                            ${isActive && remaining > 0
                                 ? 'arcane-btn-bg text-[#050505] hover:scale-105 hover:shadow-[0_0_40px_rgba(255,212,71,0.4)]' 
                                 : 'bg-[#1A1A1A] text-gray-500 cursor-not-allowed border border-gray-800'}
                         `}
                     >
-                        {isBuying ? 'Processando...' : !isActive ? 'Aguardando Próximo Ciclo' : (limit > 0 && remaining <= 0) ? '🔒 Limite Atingido' : 'Entrar no Pote'}
+                        {isBuying ? 'Processando...' : !isActive ? 'Aguardando Próximo Ciclo' : remaining <= 0 ? '🔒 Limite Atingido' : 'Entrar no Pote'}
                     </button>
                     
                     <div className="flex items-center gap-8 bg-[#0A0A0A]/80 border border-[#FFD447]/20 rounded-2xl px-8 py-3 backdrop-blur-md shadow-inner">
@@ -819,13 +822,23 @@ const Raffles: React.FC = () => {
     
     const handleBuyJackpotTicketBulk = async (qty: number) => {
         if (!activeUser) return;
+        if ((state.jackpotData as any)?.disabled) {
+            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Jackpot em breve', message: 'O jackpot ainda não está disponível.' } });
+            return;
+        }
         setIsBuyingJackpot(true);
         try {
             // Use V13.6 Bulk API
             const res = await api.buyJackpotTicketsBulk(activeUser.id, qty);
+            if ((res as any)?.disabled) {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Jackpot em breve', message: (res as any).message || 'O jackpot estará disponível em breve.' } });
+                return;
+            }
             
             if (res.success) {
-                dispatch({ type: 'SET_JACKPOT_DATA', payload: { ...state.jackpotData!, currentValue: res.jackpotValue } });
+                const existingJackpot = state.jackpotData && !(state.jackpotData as any).disabled ? state.jackpotData : null;
+                const payload = existingJackpot ? { ...existingJackpot, currentValue: res.jackpotValue } : { currentValue: res.jackpotValue, ticketPrice: 0, nextDraw: '', tickets: [], history: [], status: 'active' as const };
+                dispatch({ type: 'SET_JACKPOT_DATA', payload });
                 if(res.updatedUser) dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Tickets Confirmados!', message: res.message || `${qty} tickets adicionados!` } });
             } else {
@@ -836,12 +849,15 @@ const Raffles: React.FC = () => {
     
     if (isLoading || !activeUser) return <div className="flex justify-center min-h-[60vh] items-center"><div className="w-10 h-10 border-4 border-dashed rounded-full animate-spin border-yellow-500"></div></div>;
     
-    const jackpot = state.jackpotData || { currentValue: 15000, ticketPrice: 100, nextDraw: '', tickets: [], history: [], status: 'active' as const };
-    const lastJackpotRound = jackpot.history && jackpot.history.length > 0 ? jackpot.history[0] : undefined;
+    const isJackpotDisabled = !!(state.jackpotData as any)?.disabled;
+    const jackpotDisabledMessage = isJackpotDisabled ? (state.jackpotData as any)?.message || "Jackpot em breve" : "";
+    const jackpot = !state.jackpotData || isJackpotDisabled
+        ? { currentValue: 15000, ticketPrice: 100, nextDraw: '', tickets: [], history: [], status: 'active' as const, ticketLimits: { perUser: 0, global: 0 } }
+        : state.jackpotData as any;
+    const lastJackpotRound = !isJackpotDisabled && jackpot.history && jackpot.history.length > 0 ? jackpot.history[0] : undefined;
     
-    // V13.6: Determine User Limit (Replacing Plan Limit)
-    // @ts-ignore
-    const userLimit = jackpot.ticketLimits?.perUser || 0;
+    const userLimit = !isJackpotDisabled ? jackpot.ticketLimits?.perUser || 0 : 0;
+    const userTicketCount = !isJackpotDisabled ? jackpot.tickets.filter((t: any) => t.userId === activeUser.id).length : 0;
 
     // --- RAFFLE DISPLAY LOGIC V1.0 ---
     
@@ -869,21 +885,30 @@ const Raffles: React.FC = () => {
             <style>{ArcaneStyles}</style>
 
             {/* 1. MAIN JACKPOT HERO (Arcane Ultra Edition) */}
-            <MainRaffleHero 
-                currentValue={jackpot.currentValue} 
-                ticketPrice={jackpot.ticketPrice} 
-                onBuyTicket={handleBuyJackpotTicketBulk} 
-                userCoins={activeUser.coins} 
-                isBuying={isBuyingJackpot} 
-                tickets={jackpot.tickets} 
-                userId={activeUser.id} 
-                nextDraw={jackpot.nextDraw} 
-                lastRound={lastJackpotRound}
-                allUsers={allUsers}
-                status={jackpot.status}
-                nextStartDate={jackpot.nextStartDate}
-                planLimit={userLimit} // Passes user specific limit
-            />
+            {isJackpotDisabled ? (
+                <div className="w-full mb-16 relative z-10 px-2 md:px-0">
+                    <div className="rounded-[32px] p-8 md:p-12 bg-gradient-to-r from-[#1a1a1a] to-[#0f0f0f] border border-yellow-500/40 shadow-[0_0_25px_rgba(234,179,8,0.1)] text-center">
+                        <p className="text-3xl font-black text-yellow-300 uppercase tracking-[0.3em]">Jackpot: em breve</p>
+                        <p className="text-gray-400 mt-2 font-medium">{jackpotDisabledMessage || 'Estamos preparando o Jackpot na infraestrutura Supabase.'}</p>
+                    </div>
+                </div>
+            ) : (
+                <MainRaffleHero 
+                    currentValue={jackpot.currentValue} 
+                    ticketPrice={jackpot.ticketPrice} 
+                    onBuyTicket={handleBuyJackpotTicketBulk} 
+                    userCoins={activeUser.coins} 
+                    isBuying={isBuyingJackpot} 
+                    tickets={jackpot.tickets} 
+                    nextDraw={jackpot.nextDraw} 
+                    lastRound={lastJackpotRound}
+                    allUsers={allUsers}
+                    status={jackpot.status}
+                    nextStartDate={jackpot.nextStartDate}
+                    userTicketCount={userTicketCount}
+                    ticketLimits={jackpot.ticketLimits}
+                />
+            )}
             
             {/* 2. STANDARD RAFFLE MAIN CARD (Restored V1.0 with V2 Logic) */}
             {featuredStandardRaffle && (

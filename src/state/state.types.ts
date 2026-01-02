@@ -3,6 +3,19 @@ import { EventSession, ArenaStatus, EventLiveFeedItem } from '../types/event';
 import { MissionDefinition } from '../api/missions/missions.db';
 import { RankingSession, EventRankingEntry } from '../types/ranking';
 
+export type JackpotState =
+  | {
+      currentValue: number;
+      ticketPrice: number;
+      nextDraw: string;
+      tickets: JackpotTicket[];
+      history: JackpotRound[];
+      status: 'active' | 'in_apuration' | 'waiting_start';
+      nextStartDate?: string;
+      ticketLimits?: { global?: number; perUser?: number };
+    }
+  | { disabled: true; message: string };
+
 export interface AppState {
   // --- Core State (Legacy Compatibility) ---
   currentView: string; // View type
@@ -54,15 +67,7 @@ export interface AppState {
   };
 
   // --- Jackpot V9.1 ---
-  jackpotData: {
-      currentValue: number;
-      ticketPrice: number;
-      nextDraw: string;
-      tickets: JackpotTicket[];
-      history: JackpotRound[];
-      status: 'active' | 'in_apuration' | 'waiting_start';
-      nextStartDate?: string;
-  } | null;
+  jackpotData: JackpotState | null;
 
   // V1.4 Subscription State (Flat)
   upgradeRequests: SubscriptionRequest[];
