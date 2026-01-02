@@ -8,7 +8,6 @@ import { ToastProvider } from './components/ui/providers/ToastProvider';
 import { ModalProvider } from './components/ui/providers/ModalProvider';
 import { SanityGuard } from './services/sanity.guard'; 
 import { DataConsistency } from './services/data.consistency'; 
-import { runMockIntegrityScan } from './api/diagnostics/mockIntegrity';
 import { detectDOMTampering } from "./api/anticheat/domTamper";
 import { createHoneypots } from "./api/anticheat/honeypots";
 import { getDeviceFingerprint } from "./api/anticheat/deviceFingerprint";
