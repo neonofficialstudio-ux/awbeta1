@@ -7,6 +7,7 @@ import { getBehaviorLog } from '../../api/telemetry/userBehavior';
 import { TrendingUpIcon, QueueIcon, MissionIcon, ShieldIcon, SearchIcon, FilterIcon } from '../../constants';
 import type { User } from '../../types';
 import TelemetryDetailModal, { DrilldownItem } from './TelemetryDetailModal';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface TelemetryDashboardProps {
     allUsers?: User[];
@@ -144,7 +145,7 @@ const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({ allUsers = [] }
             ? allUsers.filter(u => 
                 u.name.toLowerCase().includes(filterUserSearch.toLowerCase()) || 
                 u.id === filterUserSearch ||
-                u.artisticName.toLowerCase().includes(filterUserSearch.toLowerCase())
+                getDisplayName({ ...u, artistic_name: u.artisticName }).toLowerCase().includes(filterUserSearch.toLowerCase())
               ).map(u => u.id)
             : null;
 

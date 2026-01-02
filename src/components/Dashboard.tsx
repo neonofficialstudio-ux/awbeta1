@@ -12,6 +12,7 @@ import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import { AdsTelemetry } from '../api/ads/adsTelemetry'; 
 import LoadingSkeleton from './ui/base/LoadingSkeleton';
+import { getDisplayName } from '../api/core/getDisplayName';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -101,6 +102,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
     const [isLoading, setIsLoading] = useState(true);
     const [rotationSeconds, setRotationSeconds] = useState<number>(10);
     const current = artists[currentIndex] ?? null;
+    const currentDisplayName = getDisplayName(current ? { ...current, artistic_name: current.artisticName } : null);
 
     useEffect(() => {
         const loadArtists = async () => {
@@ -159,7 +161,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
                      setProgress(updatedMap);
                      localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
                      dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
-                     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Recompensa Coletada', message: `+1 Lummi Coin por apoiar ${current.artisticName}!` } });
+                     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Recompensa Coletada', message: `+1 Lummi Coin por apoiar ${currentDisplayName}!` } });
                 }
             } catch (e) { console.error("Failed to claim reward", e); }
         }
@@ -201,7 +203,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
                         </div>
                         <div className="text-center md:text-left flex-1 w-full space-y-6">
                              <div>
-                                <h3 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight drop-shadow-md mb-2">{current.artisticName}</h3>
+                                <h3 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight drop-shadow-md mb-2">{currentDisplayName}</h3>
                                 <p className="text-[#B3B3B3] text-sm font-medium">{current.name} • {current.plan}</p>
                             </div>
                             <div className="bg-[#111] p-4 rounded-2xl border border-[#222] max-w-md mx-auto md:mx-0">
@@ -315,6 +317,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const { state, dispatch } = useAppContext();
   const { activeUser: user, prevCoins } = state;
+  const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -429,7 +432,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             </div>
             <div className="hidden md:block text-right">
                 <p className="text-[10px] text-gray-400 uppercase tracking-[0.3em] font-bold mb-1">Carreira Musical</p>
-                <p className="text-[#FFD36A] font-bold text-3xl font-chakra tracking-wide drop-shadow-[0_0_10px_rgba(255,211,106,0.4)]">{user.artisticName}</p>
+                <p className="text-[#FFD36A] font-bold text-3xl font-chakra tracking-wide drop-shadow-[0_0_10px_rgba(255,211,106,0.4)]">{userDisplayName}</p>
             </div>
         </div>
         

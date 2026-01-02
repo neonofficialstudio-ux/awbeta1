@@ -4,6 +4,7 @@ import { ModalPortal } from '../ui/overlays/ModalPortal';
 import type { Raffle, User, RaffleTicket } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { TicketIcon, CrownIcon, CheckIcon } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface AdminRaffleDrawModalV2Props {
     raffle: Raffle;
@@ -110,7 +111,7 @@ const AdminRaffleDrawModalV2: React.FC<AdminRaffleDrawModalV2Props> = ({ raffle,
                                     {displayedUser && <AvatarWithFrame user={displayedUser} sizeClass="w-32 h-32" className="relative z-10" />}
                                 </div>
                                 <h3 className="text-2xl font-black text-white font-chakra animate-pulse tracking-wide">
-                                    {displayedUser?.artisticName || '...'}
+                                    {getDisplayName(displayedUser ? { ...displayedUser, artistic_name: displayedUser.artisticName } : null)}
                                 </h3>
                             </div>
                         )}
@@ -126,7 +127,7 @@ const AdminRaffleDrawModalV2: React.FC<AdminRaffleDrawModalV2Props> = ({ raffle,
                                 </div>
                                 <div>
                                     <p className="text-[#FFD86B] font-bold text-xs uppercase tracking-widest mb-2">Vencedor Selecionado</p>
-                                    <h3 className="text-4xl font-black text-white font-chakra tracking-tight leading-none mb-1">{finalWinner.artisticName}</h3>
+                                    <h3 className="text-4xl font-black text-white font-chakra tracking-tight leading-none mb-1">{getDisplayName({ ...finalWinner, artistic_name: finalWinner.artisticName })}</h3>
                                     <p className="text-gray-500 text-sm font-mono">{finalWinner.name}</p>
                                 </div>
                                 

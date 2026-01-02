@@ -18,6 +18,7 @@ import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
 import MetricCard from '../ui/patterns/MetricCard';
 import Tabs from '../ui/navigation/Tabs';
 import Toolbar from '../ui/advanced/Toolbar';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
 interface ManageUsersProps {
   allUsers: User[];
@@ -28,6 +29,8 @@ interface ManageUsersProps {
   onResetMonthlyRanking: () => Promise<void>;
   onViewUserHistory: (user: User) => void;
 }
+
+const getUserDisplayName = (user: User) => getDisplayName({ ...user, artistic_name: user.artisticName });
 
 const KpiCard: React.FC<{ title: string, value: string | number, icon?: React.ElementType, onClick?: () => void }> = ({ title, value, icon: Icon, onClick }) => (
     <div onClick={onClick} className={`cursor-pointer h-full`}>
@@ -312,7 +315,7 @@ const UserMetricsDashboard: React.FC<{ allUsers: User[], missionSubmissions: Mis
                             {topEngagedTotal.map(user => (
                                 <li key={user.id} className="flex items-center p-3 hover:bg-white/5 rounded-lg transition-colors border border-transparent hover:border-white/5">
                                     <AvatarWithFrame user={user} sizeClass="w-10 h-10" className="mr-3" />
-                                    <div className="flex-grow"><span className="font-semibold text-white block">{user.name}</span> <span className="text-xs text-gray-500 font-mono uppercase">{user.artisticName}</span></div>
+                                    <div className="flex-grow"><span className="font-semibold text-white block">{user.name}</span> <span className="text-xs text-gray-500 font-mono uppercase">{getUserDisplayName(user)}</span></div>
                                     <span className="font-bold text-lg text-gold-cinematic">{user.totalMissionsCompleted}</span>
                                 </li>
                             ))}
@@ -324,10 +327,10 @@ const UserMetricsDashboard: React.FC<{ allUsers: User[], missionSubmissions: Mis
                      <Card.Header className="border-white/5"><h4 className="text-lg font-bold text-white font-chakra">Top 5 Engajados (Mês)</h4></Card.Header>
                      <Card.Body>
                         <ul className="space-y-2">
-                             {topEngagedMonth.map(user => user && (
+                         {topEngagedMonth.map(user => user && (
                                 <li key={user.id} className="flex items-center p-3 hover:bg-white/5 rounded-lg transition-colors border border-transparent hover:border-white/5">
                                     <AvatarWithFrame user={user} sizeClass="w-10 h-10" className="mr-3" />
-                                    <div className="flex-grow"><span className="font-semibold text-white block">{user.name}</span> <span className="text-xs text-gray-500 font-mono uppercase">{user.artisticName}</span></div>
+                                    <div className="flex-grow"><span className="font-semibold text-white block">{user.name}</span> <span className="text-xs text-gray-500 font-mono uppercase">{getUserDisplayName(user)}</span></div>
                                     <span className="font-bold text-lg text-neon-cyan">{user.monthlySubmissions}</span>
                                 </li>
                             ))}
@@ -382,7 +385,7 @@ const LeadsTable: React.FC<{ users: User[] }> = ({ users }) => {
         const headers = "Nome\tNome Artístico\tEmail\tTelefone\tInstagram\tTikTok\tPlano\tData de Cadastro";
         const rows = filteredUsers.map(u => [
             u.name,
-            u.artisticName,
+            getUserDisplayName(u),
             u.email,
             u.phone,
             u.instagramUrl.replace('https://www.instagram.com/', '@'),
@@ -455,7 +458,7 @@ const LeadsTable: React.FC<{ users: User[] }> = ({ users }) => {
                                 <tr key={user.id} className="hover:bg-white/5 transition-colors">
                                     <td className="px-6 py-4">
                                         <p className="font-medium text-white">{user.name}</p>
-                                        <p className="text-xs text-gray-500">{user.artisticName}</p>
+                                        <p className="text-xs text-gray-500">{getUserDisplayName(user)}</p>
                                     </td>
                                     <td className="px-6 py-4">
                                         <p className="truncate max-w-[150px]">{user.email}</p>
@@ -494,7 +497,7 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
       const lowercasedFilter = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         user.name.toLowerCase().includes(lowercasedFilter) ||
-        user.artisticName.toLowerCase().includes(lowercasedFilter) ||
+        getUserDisplayName(user).toLowerCase().includes(lowercasedFilter) ||
         user.email.toLowerCase().includes(lowercasedFilter);
 
       const matchesPlan = subscriptionFilter === 'all' || user.plan === subscriptionFilter;

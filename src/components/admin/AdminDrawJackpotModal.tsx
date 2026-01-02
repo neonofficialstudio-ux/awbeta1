@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { JackpotTicket, User } from '../../types';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
 import { CrownIcon, CoinIcon, UsersIcon } from '../../constants';
+import { getDisplayName } from '../../api/core/getDisplayName';
 import AvatarWithFrame from '../AvatarWithFrame';
 
 interface AdminDrawJackpotModalProps {
@@ -117,7 +118,7 @@ const AdminDrawJackpotModal: React.FC<AdminDrawJackpotModalProps> = ({ tickets, 
                          )}
                     </div>
                     <h3 className="text-xl font-bold text-yellow-500 animate-pulse">Sorteando...</h3>
-                    {displayedUser && <p className="text-white mt-2 font-mono">{displayedUser.artisticName}</p>}
+                    {displayedUser && <p className="text-white mt-2 font-mono">{getDisplayName({ ...displayedUser, artistic_name: displayedUser.artisticName })}</p>}
                 </div>
             )}
 
@@ -135,7 +136,7 @@ const AdminDrawJackpotModal: React.FC<AdminDrawJackpotModalProps> = ({ tickets, 
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-black text-white font-chakra mb-1">{winner.artisticName}</h2>
+                    <h2 className="text-3xl font-black text-white font-chakra mb-1">{getDisplayName({ ...winner, artistic_name: winner.artisticName })}</h2>
                     <p className="text-gray-400 text-sm mb-8">{winner.name}</p>
 
                     <div className="grid grid-cols-2 gap-4 mb-8">

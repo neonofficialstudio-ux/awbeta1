@@ -3,8 +3,9 @@ import React from 'react';
 import { CoinIcon, XPIcon } from '../constants';
 import { useAppContext } from '../constants';
 import AvatarWithFrame from './AvatarWithFrame';
-import CountUp from './CountUp';
 import { formatNumber } from './ui/utils/format';
+import CountUp from './CountUp';
+import { getDisplayName } from '../api/core/getDisplayName';
 
 // Premium Gold Stat Component
 const GoldStat: React.FC<{ 
@@ -33,6 +34,7 @@ const GoldStat: React.FC<{
 const Header: React.FC = () => {
   const { state, dispatch } = useAppContext();
   const { activeUser: user } = state;
+  const displayName = getDisplayName({ ...user, artistic_name: user?.artisticName });
 
   if (!user) return null;
 
@@ -100,7 +102,7 @@ const Header: React.FC = () => {
             <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#FFCF5A] rounded-full border-2 border-black shadow-[0_0_5px_rgba(255,207,90,0.8)] animate-pulse z-10"></div>
           </div>
           <div className="hidden md:block text-left">
-            <p className="font-bold text-sm text-white group-hover:text-[#FFCF5A] transition-colors truncate max-w-[100px] font-chakra">{user.artisticName}</p>
+            <p className="font-bold text-sm text-white group-hover:text-[#FFCF5A] transition-colors truncate max-w-[100px] font-chakra">{displayName}</p>
             <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-white transition-colors">Ver Perfil</p>
           </div>
         </button>

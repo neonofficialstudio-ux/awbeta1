@@ -7,6 +7,7 @@ import * as api from '../api/index';
 import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import FaqItem from './ui/patterns/FaqItem';
+import { getDisplayName } from '../api/core/getDisplayName';
 
 // --- COMPONENTS ---
 
@@ -46,6 +47,7 @@ const SocialRow: React.FC<{ user: RankingUser; size?: 'sm' | 'lg' }> = React.mem
 });
 
 const RankingItem: React.FC<{ user: RankingUser; rank: number }> = React.memo(({ user, rank }) => {
+    const displayName = getDisplayName({ ...user, artistic_name: user.artisticName });
     return (
         <div 
             className="relative w-full bg-[#111] rounded-[18px] border border-[#FFD65A]/10 mb-3 overflow-hidden group hover:border-[#FFD65A]/40 transition-all duration-300 animate-fade-in-up"
@@ -72,7 +74,7 @@ const RankingItem: React.FC<{ user: RankingUser; rank: number }> = React.memo(({
 
                 <div className="flex-grow min-w-0 flex flex-col justify-center gap-1">
                     <h4 className="text-white font-bold text-base md:text-lg font-chakra uppercase tracking-tight truncate group-hover:text-[#FFD65A] transition-colors max-w-[180px] md:max-w-none">
-                        {user.artisticName}
+                        {displayName}
                     </h4>
                     
                     <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -95,7 +97,9 @@ const RankingItem: React.FC<{ user: RankingUser; rank: number }> = React.memo(({
     );
 });
 
-const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => (
+const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => {
+    const displayName = getDisplayName({ ...user, artistic_name: user.artisticName });
+    return (
     <div className="relative w-full mb-8 group perspective-1000 animate-fade-in-up z-10">
         <div className="absolute inset-0 bg-[#FFD65A]/20 blur-[60px] rounded-[32px] opacity-60 group-hover:opacity-80 transition-opacity duration-700"></div>
         
@@ -121,7 +125,7 @@ const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => (
                 </div>
 
                 <h1 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight uppercase drop-shadow-lg leading-none mb-8 mt-2">
-                    {user.artisticName}
+                    {displayName}
                 </h1>
 
                 <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8">
@@ -143,7 +147,8 @@ const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => (
             </div>
         </div>
     </div>
-));
+    );
+});
 
 const faqData = [
     { question: "Como funciona a pontuação?", answer: "Sua pontuação é baseada na quantidade de missões realizadas (fator principal) e XP total acumulado (critério de desempate)." },
@@ -249,7 +254,7 @@ const Ranking: React.FC = () => {
                     <div className="space-y-3">
                         {restOfRanking.length > 0 ? (
                             restOfRanking.map((user, idx) => (
-                                <RankingItem key={user.artisticName + idx} user={user} rank={idx + 2} />
+                                <RankingItem key={`${getDisplayName({ ...user, artistic_name: user.artisticName })}-${idx}`} user={user} rank={idx + 2} />
                             ))
                         ) : (
                             <div className="text-center py-16 border-2 border-dashed border-[#222] rounded-[20px] bg-[#0E0E0E]/50">
