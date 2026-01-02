@@ -1,5 +1,5 @@
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../../core/config';
 
 // Acesso seguro às variáveis de ambiente para evitar crash se import.meta.env for undefined
@@ -7,7 +7,7 @@ const env = (import.meta as any).env || {};
 const supabaseUrl = env.VITE_SUPABASE_URL || "";
 const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || "";
 
-let client: any = null;
+let supabaseClient: SupabaseClient | null = null;
 
 if (config.useSupabase && supabaseUrl && supabaseAnonKey) {
     try {
