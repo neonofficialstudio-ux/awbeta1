@@ -14,8 +14,13 @@ import { detectMultiAccount } from "./anticheat/multiAccountDetector";
 import { getRepository } from "./database/repository.factory";
 import { SanitizeString } from "../core/sanitizer.core"; // Updated path
 import { saveMockDb } from "./database/mock-db";
+import { isSupabaseProvider } from "./core/backendGuard";
 
 const repo = getRepository();
+
+if (isSupabaseProvider()) {
+    throw new Error("Jackpot ainda não disponível em Supabase");
+}
 
 /**
  * Logic for the Progressive Jackpot (Single Ticket).

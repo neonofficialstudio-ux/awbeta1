@@ -16,3 +16,9 @@ export const assertNotMockInSupabase = (feature?: string) => {
         throw new Error(`[Supabase Guard] Mock data access blocked${formatContext(feature)}.`);
     }
 };
+
+export const assertSupabaseProvider = (feature?: string) => {
+    if (!isSupabaseProvider()) {
+        throw new Error(`Mock mode: Supabase backend required${formatContext(feature)}.`);
+    }
+};

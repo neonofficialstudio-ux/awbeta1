@@ -11,10 +11,46 @@ import { saveMockDb } from "../database/mock-db";
 import { EconomyEngineV6 } from "../economy/economyEngineV6";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";
 import type { JackpotRound } from "../../types";
-import { assertMockProvider } from "../core/backendGuard";
+import { assertMockProvider, assertSupabaseProvider, isSupabaseProvider } from "../core/backendGuard";
+import { getSupabase } from "../supabase/client";
 
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.raffles.${feature}`);
+
+const requireSupabaseClient = () => {
+    const client = getSupabase();
+    if (!client) throw new Error("[Supabase] Client not initialized");
+    return client;
+};
+
+export async function adminCreateRaffle(payload: any) {
+    assertSupabaseProvider('admin.raffles.create');
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc(
+        "admin_create_raffle",
+        payload
+    );
+
+    if (error) throw error;
+    return data;
+}
+
+export async function adminDrawRaffle(raffleId: string) {
+    assertSupabaseProvider('admin.raffles.draw');
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc(
+        "admin_draw_raffle",
+        {
+            p_raffle: raffleId,
+            p_ref_id: crypto.randomUUID(),
+        }
+    );
+
+    if (error) throw error;
+    return data;
+}
 
 export const adminPrepareRaffleDraw = (raffleId: string) => withLatency(() => {
     ensureMockBackend('adminPrepareRaffleDraw');
@@ -41,6 +77,9 @@ export const adminSetHighlightedRaffle = (raffleId: string) => withLatency(() =>
 });
 
 export const saveRaffle = (raffleData: any) => withLatency(() => {
+    if (isSupabaseProvider()) {
+        return adminCreateRaffle(raffleData);
+    }
     ensureMockBackend('saveRaffle');
     const safeData = { ...raffleData };
     if (!safeData.id) {
@@ -65,6 +104,9 @@ export const deleteRaffle = (raffleId: string) => withLatency(() => {
 });
 
 export const drawRaffleWinner = (raffleId: string) => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        return adminDrawRaffle(raffleId);
+    }
     ensureMockBackend('drawRaffleWinner');
     try {
         const { tickets } = RaffleEngineV2.prepareDraw(raffleId);
