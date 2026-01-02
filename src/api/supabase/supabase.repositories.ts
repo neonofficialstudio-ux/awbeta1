@@ -3,6 +3,7 @@ import { supabaseClient } from './client';
 import { mapProfileToUser, mapStoreItemToApp, mapMissionToApp, mapInventoryToRedeemedItem } from './mappings';
 import type { Repository } from '../database/repository.factory';
 import { SanityGuard } from '../../services/sanity.guard';
+import type { User } from '../../types';
 
 // Helper para garantir que o cliente existe
 const getClient = () => {
@@ -10,19 +11,70 @@ const getClient = () => {
     return supabaseClient;
 };
 
+let cachedProfiles: User[] = [];
+let isRefreshingProfiles = false;
+
+const refreshProfilesCache = async () => {
+    if (isRefreshingProfiles) return;
+    isRefreshingProfiles = true;
+    try {
+        const supabase = getClient();
+        const { data, error } = await supabase.from('profiles').select('*');
+        if (error || !data) return;
+        cachedProfiles = data.map((p: any) => SanityGuard.user(mapProfileToUser(p)));
+    } catch (err) {
+        console.warn('[SupabaseRepo] Failed to refresh profiles cache.', err);
+    } finally {
+        isRefreshingProfiles = false;
+    }
+};
+
+const getProfilesSync = (): User[] => {
+    if (!cachedProfiles.length && !isRefreshingProfiles) {
+        void refreshProfilesCache();
+    }
+    return cachedProfiles;
+};
+
 export const supabaseRepository: Repository = {
     // --- MÉTODOS SÍNCRONOS (LEGACY/MOCK ONLY) ---
     // O Supabase é async por natureza. Se o código antigo chamar estes métodos, 
     // ele deve ser refatorado ou usar o mock-db.
     select: (table: string) => { 
+        if (table === 'users') {
+            return getProfilesSync();
+        }
         console.warn(`[SupabaseRepo] Sync select called for ${table}. Returning empty array. Refactor to selectAsync.`);
         return []; 
     },
-    selectPaged: () => ({ data: [], total: 0, page: 1, limit: 10 }),
-    insert: () => { console.error("[SupabaseRepo] Sync insert not supported."); },
-    update: () => { console.error("[SupabaseRepo] Sync update not supported."); },
-    delete: () => { console.error("[SupabaseRepo] Sync delete not supported."); },
-    filter: () => [],
+    selectPaged: (table: string, page: number, limit: number, filterFn?: (item: any) => boolean) => {
+        if (table === 'users') {
+            const list = getProfilesSync();
+            const filtered = filterFn ? list.filter(filterFn) : list;
+            const start = (page - 1) * limit;
+            return { data: filtered.slice(start, start + limit), total: filtered.length, page, limit };
+        }
+        return { data: [], total: 0, page: 1, limit: 10 };
+    },
+    insert: (table: string) => {
+        if (table === 'users') return null;
+        console.warn(`[SupabaseRepo] Sync insert ignored for ${table}. Use insertAsync instead.`);
+        return null;
+    },
+    update: (table: string) => {
+        if (table === 'users') return;
+        console.warn(`[SupabaseRepo] Sync update ignored for ${table}. Use updateAsync instead.`);
+    },
+    delete: (table: string) => {
+        if (table === 'users') return;
+        console.warn(`[SupabaseRepo] Sync delete ignored for ${table}. Use deleteAsync instead.`);
+    },
+    filter: (table: string, predicate: (item: any) => boolean) => {
+        if (table === 'users') {
+            return getProfilesSync().filter(predicate);
+        }
+        return [];
+    },
 
     // --- MÉTODOS ASSÍNCRONOS (REAL IMPLEMENTATION) ---
     
@@ -32,7 +84,9 @@ export const supabaseRepository: Repository = {
         if (table === 'users') {
             const { data, error } = await supabase.from('profiles').select('*');
             if (error) throw error;
-            return data.map((p: any) => mapProfileToUser(p));
+            const mapped = data.map((p: any) => mapProfileToUser(p));
+            cachedProfiles = mapped.map((p: any) => SanityGuard.user(p));
+            return mapped;
         }
         
         if (table === 'storeItems') {
