@@ -12,6 +12,7 @@ import { config } from '../core/config';
 import { getSupabase } from './supabase/client';
 import { isSupabaseProvider } from './core/backendGuard';
 import { mapProfileToUser } from './supabase/mappings';
+import { ProfileSupabase } from './supabase/profile';
 
 export const login = (email: string, password: string) => withLatency(async () => {
     try {
@@ -237,7 +238,18 @@ export const register = (formData: any) => withLatency(async () => {
 
 export const fetchTerms = () => withLatency(db.termsAndConditionsContentData);
 export const fetchProfileData = (userId: string) => withLatency(() => ({ coinTransactions: db.coinTransactionsLogData.filter(t => t.userId === userId), allAchievements: db.achievementsData }));
-export const updateUser = (user: User) => withLatency(() => { const updatedUser = updateUserInDb(SanityGuard.user(user)); return { updatedUser: SanityGuard.user(updatedUser) }; });
+export const updateUser = (user: User) => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        const result = await ProfileSupabase.updateMyProfile(user);
+        if (!result.success || !result.updatedUser) {
+            throw new Error(result.error || 'Falha ao atualizar perfil');
+        }
+        return { updatedUser: result.updatedUser };
+    }
+
+    const updatedUser = updateUserInDb(SanityGuard.user(user));
+    return { updatedUser: SanityGuard.user(updatedUser) };
+});
 
 export const fetchSubscriptionsPageData = (userId: string) => withLatency(() => {
     const pendingRequest = db.subscriptionRequestsData.find(r => r.userId === userId && (r.status === 'pending_payment' || r.status === 'awaiting_proof' || r.status === 'pending_approval')) || null;

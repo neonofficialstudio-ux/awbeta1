@@ -6,12 +6,20 @@ import { normalizePlan } from '../subscriptions/normalizePlan';
  * MAPPER: Database (Snake_Case) -> App (CamelCase)
  */
 
+const coerceString = (value: any): string => {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    return String(value);
+};
+
 export const mapProfileToUser = (profile: any, extendedData: any = {}): User => {
+    const meta = profile?.meta || profile?.metadata || profile?.profile_meta || {};
+
     return {
         id: profile.id,
         name: profile.name || "Sem Nome",
         artisticName: profile.artistic_name || profile.name || "Artista",
-        email: profile.email || "",
+        email: coerceString(profile.email || meta.email),
         avatarUrl: profile.avatar_url || "https://i.pravatar.cc/150?u=default",
         role: profile.role || 'user',
         
@@ -38,9 +46,11 @@ export const mapProfileToUser = (profile: any, extendedData: any = {}): User => 
         unlockedAchievements: [], // TODO: Table achievements
         
         // Socials & Meta
-        phone: "", // Privacy: Often not in public profile fetch
-        instagramUrl: "", // Add columns to profile if needed
-        tiktokUrl: "",
+        phone: coerceString(profile.phone || meta.phone),
+        instagramUrl: coerceString(profile.instagram_url || meta.instagramUrl || meta.instagram),
+        tiktokUrl: coerceString(profile.tiktok_url || meta.tiktokUrl || meta.tiktok),
+        spotifyUrl: coerceString(profile.spotify_url || meta.spotifyUrl || meta.spotify),
+        youtubeUrl: coerceString(profile.youtube_url || meta.youtubeUrl || meta.youtube),
         weeklyCheckInStreak: profile.check_in_streak || 0,
         lastCheckIn: profile.last_check_in,
         joinedISO: profile.joined_at,
