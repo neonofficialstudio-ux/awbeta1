@@ -3,7 +3,8 @@ export type SubmissionStatus = 'pending' | 'approved' | 'rejected';
 
 export type MissionType = 'instagram' | 'tiktok' | 'creative' | 'special' | 'youtube' | 'event-normal' | 'event-vip' | 'weekly';
 
-export type MissionFormat = 'link' | 'photo' | 'confirmation' | 'video' | 'story' | 'text' | 'ambos' | 'legacy';
+// REFATORADO: Apenas 3 tipos de comprovação permitidos
+export type MissionFormat = 'link' | 'photo' | 'confirmation';
 
 export interface Mission {
   id: string;
@@ -16,16 +17,16 @@ export interface Mission {
   createdAt: string;
   deadline: string;
   status: 'active' | 'expired' | 'scheduled';
-  scheduledFor?: string; 
+  scheduledFor?: string; // ISO String for scheduled release
   format?: MissionFormat; 
-  platform?: string;
+  platform?: string; // 'Instagram', 'TikTok', 'YouTube', etc.
   
+  // Admin Generator Props
   slot?: string;
   repetitionLimit?: number;
   cooldownHours?: number;
   multiplierEnabled?: boolean;
   eventId?: string;
-  tier?: 'normal' | 'vip';
 }
 
 export interface MissionSubmission {
@@ -57,7 +58,7 @@ export interface Achievement {
     id: string;
     title: string;
     description: string;
-    iconUrl?: string; 
+    iconUrl?: string; // Optional if using dynamic icons
     rarity: AchievementRarity;
     rewardCoins: number;
     rewardXP: number;

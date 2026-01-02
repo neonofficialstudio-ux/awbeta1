@@ -5,7 +5,6 @@ import { MissionDefinition } from '../api/missions/missions.db';
 import { RankingSession, EventRankingEntry } from '../types/ranking';
 import { AppState } from './state.types';
 import { calculateLevelFromXp } from '../api/economy/economy';
-import { normalizePlan } from '../api/subscriptions/normalizePlan';
 
 export const normalizeActiveUser = (user: User | null | undefined): User | null => {
     if (!user) return null;
@@ -18,10 +17,7 @@ export const normalizeActiveUser = (user: User | null | undefined): User | null 
     safeUser.artisticName = safeUser.artisticName || safeUser.name || "Artist";
     safeUser.email = safeUser.email || "";
     safeUser.avatarUrl = safeUser.avatarUrl || "https://i.pravatar.cc/150?u=default";
-    
-    // V3.1 Plan Fix
-    safeUser.plan = normalizePlan(safeUser.plan) as User['plan'];
-
+    safeUser.plan = safeUser.plan || 'Free Flow';
     safeUser.role = safeUser.role || 'user';
     
     // Ensure numbers

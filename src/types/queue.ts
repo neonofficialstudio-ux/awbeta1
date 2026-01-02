@@ -6,7 +6,7 @@ export type QueueStatus = 'pending' | 'processing' | 'done';
 export interface QueueItem {
   id: string;
   userId: string;
-  itemId: string; 
+  itemId: string; // Redeemed Item ID
   itemName: string;
   rarity?: string;
   status: QueueStatus;
@@ -15,6 +15,7 @@ export interface QueueItem {
   completedAt?: string;
   metadata?: Metadata;
   
+  // UI Compatibility Fields
   userName?: string;
   userAvatar?: string;
   postUrl?: string;
@@ -22,6 +23,7 @@ export interface QueueItem {
 }
 
 export interface UsableItemQueueEntry extends QueueItem {
+  // Legacy compatibility
   redeemedItemId: string;
   queuedAt: string;
   postUrl: string;

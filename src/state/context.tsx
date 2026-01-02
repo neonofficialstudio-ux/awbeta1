@@ -9,7 +9,7 @@ export const AppContext = createContext<{
   state: AppState;
   dispatch: React.Dispatch<Action>;
 }>({
-  state: normalizeState(initialState), // Ensure context default is also normalized
+  state: normalizeState(initialState),
   dispatch: () => null,
 });
 

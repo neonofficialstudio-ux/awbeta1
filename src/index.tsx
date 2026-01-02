@@ -1,4 +1,4 @@
-import '../src/index.css'; // Ajuste de importação para CSS local
+import './index.css'; // Ajuste de importação para CSS local
 import './core/polyfills';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
