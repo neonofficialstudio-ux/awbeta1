@@ -7,9 +7,15 @@ import { withLatency, createNotification, updateUserInDb } from './helpers';
 import { sanitizeLink, checkLinkSafety, applyContentRules } from './quality';
 import { processEventEntry } from './economy/economy'; // Centralized Economy
 import { rankingAPI } from './ranking/index'; // V6 Engine
-import { assertMockProvider } from './core/backendGuard';
+import { assertMockProvider, assertSupabaseProvider, isSupabaseProvider } from './core/backendGuard';
+import { getSupabase } from './supabase/client';
 
 const ensureMockBackend = (feature: string) => assertMockProvider(`events.${feature}`);
+const requireSupabaseClient = () => {
+    const client = getSupabase();
+    if (!client) throw new Error("[Supabase] Client not initialized");
+    return client;
+};
 
 export const fetchRankingData = () => withLatency(() => {
     ensureMockBackend('fetchRankingData');
@@ -30,7 +36,24 @@ export const fetchEventsData = (userId: string) => withLatency(() => {
     };
 });
 
-export const joinEvent = (userId: string, eventId: string, cost: number, isGolden: boolean = false) => withLatency(async () => {
+const joinEventSupabase = async (eventId: string) => {
+    assertSupabaseProvider('events.joinEvent');
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc(
+        "join_event",
+        { p_event: eventId }
+    );
+
+    if (error) throw error;
+    return data;
+};
+
+export const joinEvent = (userId: string, eventId: string, cost: number, isGolden: boolean = false) => {
+    if (isSupabaseProvider()) {
+        return joinEventSupabase(eventId);
+    }
+    return withLatency(async () => {
     ensureMockBackend('joinEvent');
     const user = db.allUsersData.find(u => u.id === userId);
     const event = db.eventsData.find(e => e.id === eventId);
@@ -66,7 +89,8 @@ export const joinEvent = (userId: string, eventId: string, cost: number, isGolde
     notifications.push(createNotification(userId, 'Inscrição Confirmada!', successMsg, { view: 'events' }));
 
     return { success: true, updatedUser, newParticipation, notifications };
-});
+    });
+};
 
 export const submitEventMission = (userId: string, eventMissionId: string, proofDataUrl: string) => withLatency(() => {
     ensureMockBackend('submitEventMission');

@@ -1,7 +1,32 @@
-
 import { getRepository } from "../database/repository.factory";
+import { getSupabase } from "../supabase/client";
+import { assertMockProvider, assertSupabaseProvider } from "../core/backendGuard";
 
 const repo = getRepository();
+const ensureMockBackend = (feature: string) => assertMockProvider(`telemetry.${feature}`);
+
+const requireSupabaseClient = () => {
+    const client = getSupabase();
+    if (!client) throw new Error("[Supabase] Client not initialized");
+    return client;
+};
+
+export async function adminListTelemetry(limit = 50, offset = 0) {
+    assertSupabaseProvider('telemetry.adminListTelemetry');
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc(
+        "admin_list_telemetry_events",
+        {
+            p_limit: limit,
+            p_offset: offset,
+            p_event: null,
+        }
+    );
+
+    if (error) throw error;
+    return data?.items ?? [];
+}
 
 interface TelemetryMetric {
     name: string;
@@ -11,6 +36,7 @@ interface TelemetryMetric {
 
 export const TelemetryEngineV5 = {
     captureMetric: (name: string, value: number) => {
+        ensureMockBackend('captureMetric');
         const metric: TelemetryMetric = {
             name,
             value,
@@ -22,6 +48,7 @@ export const TelemetryEngineV5 = {
     },
 
     getSystemHealth: () => {
+        ensureMockBackend('getSystemHealth');
         // Mock calculation of system health based on error rate
         const logs = repo.select("telemetry");
         const errors = logs.filter((l: any) => l.category === 'error' && l.timestamp > Date.now() - 3600000); // Last hour
@@ -35,6 +62,7 @@ export const TelemetryEngineV5 = {
     },
 
     getStats: () => {
+        ensureMockBackend('getStats');
         const logs = repo.select("telemetry");
         return {
             totalEvents: logs.length,

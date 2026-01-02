@@ -12,8 +12,15 @@ import { saveMockDb } from './database/mock-db';
 import { socialLinkValidator } from './quality/socialLinkValidator';
 import { StoreSupabase } from './supabase/store';
 import { config } from '../core/config';
+import { assertSupabaseProvider, isSupabaseProvider } from './core/backendGuard';
+import { getSupabase } from './supabase/client';
 
 const repo = getRepository();
+const requireSupabaseClient = () => {
+    const client = getSupabase();
+    if (!client) throw new Error("[Supabase] Client not initialized");
+    return client;
+};
 
 export const fetchStoreData = (userId: string) => withLatency(async () => {
     if (config.backendProvider === 'supabase') {
@@ -235,7 +242,28 @@ export const submitVisualRewardForm = (userId: string, redeemedItemId: string, f
     return { success: true, updatedItem, notifications };
 });
 
-export const buyRaffleTickets = (userId: string, raffleId: string, quantity: number) => withLatency(async () => {
+const buyRaffleTicketsSupabase = async (raffleId: string, quantity: number) => {
+    assertSupabaseProvider('raffles.buyTickets');
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc(
+        "buy_raffle_tickets",
+        {
+            p_raffle: raffleId,
+            p_quantity: quantity,
+            p_ref_id: crypto.randomUUID(),
+        }
+    );
+
+    if (error) throw error;
+    return data;
+};
+
+export const buyRaffleTickets = (userId: string, raffleId: string, quantity: number) => {
+    if (isSupabaseProvider()) {
+        return buyRaffleTicketsSupabase(raffleId, quantity);
+    }
+    return withLatency(async () => {
     const user = repo.select("users").find((u: any) => u.id === userId);
     const raffle = repo.select("raffles").find((r: any) => r.id === raffleId);
 
@@ -269,4 +297,5 @@ export const buyRaffleTickets = (userId: string, raffleId: string, quantity: num
     repo.insert("notifications", notification);
 
     return { success: true, updatedUser, notifications: [notification] };
-});
+    });
+};
