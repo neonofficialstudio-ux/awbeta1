@@ -472,6 +472,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     const channel = supabase.channel(`dashboard:${userId}`);
     realtimeChannelRef.current = channel;
 
+    // Debounce timers (evita burst de refetch)
+    let notifTimer: any = null;
+    let ledgerTimer: any = null;
+    const schedule = (kind: 'notif' | 'ledger', fn: () => Promise<void>) => {
+      if (!isActive) return;
+      if (kind === 'notif') {
+        if (notifTimer) clearTimeout(notifTimer);
+        notifTimer = setTimeout(() => { void fn(); }, 500);
+      } else {
+        if (ledgerTimer) clearTimeout(ledgerTimer);
+        ledgerTimer = setTimeout(() => { void fn(); }, 500);
+      }
+    };
+
     const refetchNotifications = async () => {
       const res = await fetchMyNotifications(20);
       if (!isActive) return;
@@ -506,12 +520,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           filter: `user_id=eq.${userId}`,
         },
         async () => {
-          // novo evento de feed -> refetch notifications
-          try {
-            await refetchNotifications();
-          } catch (e) {
-            console.warn('[Dashboard Realtime] notifications refetch failed', e);
-          }
+          // novo evento de feed -> debounce refetch notifications
+          schedule('notif', async () => {
+            try {
+              await refetchNotifications();
+            } catch (e) {
+              console.warn('[Dashboard Realtime] notifications refetch failed', e);
+            }
+          });
         }
       )
       .on(
@@ -523,12 +539,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           filter: `user_id=eq.${userId}`,
         },
         async () => {
-          // novo ledger -> refetch ledger (saldo/XP refletem)
-          try {
-            await refetchLedger();
-          } catch (e) {
-            console.warn('[Dashboard Realtime] ledger refetch failed', e);
-          }
+          // novo ledger -> debounce refetch ledger (saldo/XP refletem)
+          schedule('ledger', async () => {
+            try {
+              await refetchLedger();
+            } catch (e) {
+              console.warn('[Dashboard Realtime] ledger refetch failed', e);
+            }
+          });
         }
       )
       .subscribe((status: any) => {
@@ -541,6 +559,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
     return () => {
       isActive = false;
+      if (notifTimer) clearTimeout(notifTimer);
+      if (ledgerTimer) clearTimeout(ledgerTimer);
       try {
         supabase.removeChannel(channel);
       } catch (e) {
