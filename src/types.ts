@@ -9,6 +9,7 @@ export * from './types/event';
 export * from './types/admin';
 export * from './types/queue';
 export * from './types/ranking';
+export * from './types/notification';
 
 // Ensure backward compatibility if necessary, but prefer named imports
 import type { User } from './types/user';

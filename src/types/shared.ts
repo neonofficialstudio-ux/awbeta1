@@ -18,13 +18,16 @@ export interface Toast {
 export interface Notification {
   id: string;
   userId: string;
+  type?: string;
   title: string;
   description: string;
   timestamp: string;
+  createdAt?: number;
   read: boolean;
   linkTo?: {
     view: View;
     tab?: string; 
     subTab?: string;
   };
+  metadata?: any;
 }

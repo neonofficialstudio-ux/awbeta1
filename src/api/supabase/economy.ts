@@ -1,6 +1,6 @@
 import { supabaseClient } from './client';
 import { config } from '../../core/config';
-import type { LedgerEntry, TransactionSource, TransactionType, Notification, RankingUser } from '../../types';
+import type { LedgerEntry, TransactionSource, TransactionType, AWNotification, RankingUser, NotificationType } from '../../types';
 import { normalizePlan } from '../subscriptions/normalizePlan';
 
 const ensureClient = () => {
@@ -36,18 +36,24 @@ const normalizeLedgerEntry = (row: any): LedgerEntry => {
     };
 };
 
-const normalizeNotification = (row: any): Notification => {
-    const createdAt = row?.created_at || row?.timestamp || new Date().toISOString();
-    const linkTo = row?.link_to || row?.linkTo || row?.meta?.linkTo;
+const normalizeNotification = (row: any): AWNotification => {
+    const createdAtRaw = row?.created_at || row?.createdAt || row?.timestamp || new Date().toISOString();
+    const createdAtNum = typeof createdAtRaw === 'number' ? createdAtRaw : new Date(createdAtRaw).getTime();
+    const meta = row?.meta || {};
+    const event = (meta?.event || row?.event || 'system_info') as NotificationType;
+    const linkTo = meta?.linkTo || row?.link_to || row?.linkTo;
 
     return {
-        id: row?.id || `notif-${createdAt}`,
+        id: row?.id || `notif-${createdAtNum}`,
         userId: row?.user_id || row?.userId || '',
-        title: row?.title || row?.subject || 'Notificação',
-        description: row?.description || row?.message || '',
-        timestamp: typeof createdAt === 'string' ? new Date(createdAt).toLocaleString('pt-BR') : new Date(createdAt || Date.now()).toLocaleString('pt-BR'),
-        read: Boolean(row?.read || row?.is_read || row?.isRead),
+        type: event,
+        title: row?.title || 'Notificação',
+        description: row?.body || row?.description || row?.message || '',
+        timestamp: new Date(createdAtNum).toLocaleString('pt-BR'),
+        createdAt: createdAtNum,
+        read: Boolean(row?.read),
         linkTo,
+        metadata: meta,
     };
 };
 
@@ -91,7 +97,7 @@ export const fetchMyLedger = async (limit = 20, offset = 0) => {
 
 export const fetchMyNotifications = async (limit = 20) => {
     const supabase = ensureClient();
-    if (!supabase) return { success: false as const, notifications: [] as Notification[], error: 'Supabase client not available' };
+    if (!supabase) return { success: false as const, notifications: [] as AWNotification[], error: 'Supabase client not available' };
 
     try {
         const { data, error } = await supabase.rpc('get_my_notifications', { p_limit: limit });
@@ -104,7 +110,22 @@ export const fetchMyNotifications = async (limit = 20) => {
         };
     } catch (err: any) {
         console.error('[SupabaseEconomy] fetchMyNotifications failed', err);
-        return { success: false as const, notifications: [] as Notification[], error: err?.message || 'Falha ao carregar notificações' };
+        return { success: false as const, notifications: [] as AWNotification[], error: err?.message || 'Falha ao carregar notificações' };
+    }
+};
+
+export const markNotificationRead = async (notificationId: string) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, error: 'Supabase client not available' };
+
+    try {
+        const { data, error } = await supabase.rpc('mark_notification_read', { p_notification_id: notificationId });
+        if (error) throw error;
+        // função retorna boolean
+        return { success: true as const, updated: Boolean(data) };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] markNotificationRead failed', err);
+        return { success: false as const, error: err?.message || 'Falha ao marcar notificação como lida' };
     }
 };
 
