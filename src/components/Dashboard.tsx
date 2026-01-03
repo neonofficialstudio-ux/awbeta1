@@ -268,11 +268,11 @@ const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading
     yesterday.setDate(today.getDate() - 1);
     const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : user.weeklyCheckInStreak;
 
-    const buttonLabel = hasCheckedInToday
-        ? 'CHECK-IN FEITO ✅'
-        : checkInLoading
-            ? 'Sincronizando...'
-            : 'Fazer Check-in Agora';
+    const buttonLabel = checkInLoading
+        ? 'PROCESSANDO...'
+        : hasCheckedInToday
+            ? 'CHECK-IN FEITO ✅'
+            : 'FAZER CHECK-IN AGORA';
 
     return (
         <div className="relative overflow-hidden rounded-[32px] p-[1px] bg-gradient-to-b from-[#FFD36A]/20 to-transparent shadow-[0_0_40px_rgba(255,211,106,0.1)] group h-full flex flex-col transition-all duration-500 hover:shadow-[0_0_60px_rgba(255,211,106,0.15)] hover:-translate-y-1">
