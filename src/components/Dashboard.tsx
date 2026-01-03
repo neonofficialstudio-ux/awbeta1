@@ -478,7 +478,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
       if (res.success) {
         const list = res.notifications || [];
         setNotificationsFeed(list);
-        dispatch({ type: 'ADD_NOTIFICATIONS', payload: list });
+        // Evita duplicar no store: só adiciona as que ainda não existem.
+        const existingIds = new Set((notificationState || []).map(n => n.id));
+        const onlyNew = list.filter(n => !existingIds.has(n.id));
+        if (onlyNew.length) {
+          dispatch({ type: 'ADD_NOTIFICATIONS', payload: onlyNew });
+        }
       }
     };
 
