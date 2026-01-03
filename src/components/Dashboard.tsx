@@ -367,6 +367,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
+  const realtimeChannelRef = useRef<any>(null);
 
   const getTodayRefId = useCallback(() => new Date().toISOString().split('T')[0], []);
 
@@ -444,6 +445,107 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     fetchData();
     return () => { isActive = false; };
   }, [user, isSupabase, onShowArtistOfTheDay, dispatch]);
+
+  // =====================================================
+  // Realtime (Supabase): notifications + economy_ledger
+  // - escuta INSERT somente do próprio user_id
+  // - faz refetch leve para manter UI consistente
+  // =====================================================
+  useEffect(() => {
+    if (!isSupabase || !user?.id) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    // evita canais duplicados ao trocar de usuário / remount
+    try {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+    } catch (e) {
+      // silencioso
+    }
+
+    let isActive = true;
+    const userId = user.id;
+
+    const channel = supabase.channel(`dashboard:${userId}`);
+    realtimeChannelRef.current = channel;
+
+    const refetchNotifications = async () => {
+      const res = await fetchMyNotifications(20);
+      if (!isActive) return;
+      if (res.success) {
+        const list = res.notifications || [];
+        setNotificationsFeed(list);
+        dispatch({ type: 'ADD_NOTIFICATIONS', payload: list });
+      }
+    };
+
+    const refetchLedger = async () => {
+      const res = await fetchMyLedger(20, 0);
+      if (!isActive) return;
+      if (res.success) {
+        const list = res.ledger || [];
+        setLedgerEntries(list);
+      }
+    };
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        async () => {
+          // novo evento de feed -> refetch notifications
+          try {
+            await refetchNotifications();
+          } catch (e) {
+            console.warn('[Dashboard Realtime] notifications refetch failed', e);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'economy_ledger',
+          filter: `user_id=eq.${userId}`,
+        },
+        async () => {
+          // novo ledger -> refetch ledger (saldo/XP refletem)
+          try {
+            await refetchLedger();
+          } catch (e) {
+            console.warn('[Dashboard Realtime] ledger refetch failed', e);
+          }
+        }
+      )
+      .subscribe((status: any) => {
+        // status: SUBSCRIBED / TIMED_OUT / CHANNEL_ERROR / CLOSED
+        if (status !== 'SUBSCRIBED') {
+          // não é fatal
+          // console.log('[Dashboard Realtime] status', status);
+        }
+      });
+
+    return () => {
+      isActive = false;
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) {
+        // silencioso
+      }
+      if (realtimeChannelRef.current === channel) {
+        realtimeChannelRef.current = null;
+      }
+    };
+  }, [isSupabase, user?.id, dispatch]);
 
   useEffect(() => {
     setNotificationsFeed(notificationState || []);
