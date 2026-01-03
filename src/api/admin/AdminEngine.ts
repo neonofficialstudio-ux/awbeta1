@@ -43,7 +43,7 @@ import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
 import { assertMockProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
-import { supabaseAdminRepository } from "../supabase/supabase.repositories.admin";
+import { supabaseAdminRepository, emptyAdminDashboard } from "../supabase/supabase.repositories.admin";
 
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
@@ -122,8 +122,16 @@ export const AdminService = {
 
     getDashboardData: async () => {
         if (config.backendProvider === 'supabase') {
-            const response = await supabaseAdminRepository.fetchAdminDashboard();
-            return response.data;
+            try {
+                const response = await supabaseAdminRepository.fetchAdminDashboard();
+                if (!response?.success) {
+                    console.error('[AdminEngine] Supabase dashboard fetch failed', response?.error);
+                }
+                return response?.data || emptyAdminDashboard;
+            } catch (err) {
+                console.error('[AdminEngine] getDashboardData supabase path failed', err);
+                return emptyAdminDashboard;
+            }
         }
         ensureMockBackend('getDashboardData');
         return CacheService.remember('admin_dashboard_data', 3000, () => {
@@ -202,7 +210,10 @@ export const AdminService = {
     fetchAdminMissions: async () => {
         if (config.backendProvider === 'supabase') {
             const response = await supabaseAdminRepository.fetchAdminMissions();
-            return response;
+            if (!response?.success) {
+                console.error('[AdminEngine] fetchAdminMissions supabase failed', response?.error);
+            }
+            return response || { success: false, missions: [], submissions: [], error: 'Unknown error' };
         }
         ensureMockBackend('fetchAdminMissions');
         return {
@@ -214,7 +225,10 @@ export const AdminService = {
     fetchHallOfFame: async () => {
         if (config.backendProvider === 'supabase') {
             const response = await supabaseAdminRepository.fetchAdminHallOfFame();
-            return response.entries;
+            if (!response?.success) {
+                console.error('[AdminEngine] fetchHallOfFame supabase failed', response?.error);
+            }
+            return response?.entries || [];
         }
         ensureMockBackend('fetchHallOfFame');
         return repo.select("transactions") || [];
@@ -222,7 +236,10 @@ export const AdminService = {
     fetchAdminStats: async () => {
         if (config.backendProvider === 'supabase') {
             const response = await supabaseAdminRepository.fetchAdminStats();
-            return response.stats;
+            if (!response?.success) {
+                console.error('[AdminEngine] fetchAdminStats supabase failed', response?.error);
+            }
+            return response?.stats || null;
         }
         ensureMockBackend('fetchAdminStats');
         return null;
