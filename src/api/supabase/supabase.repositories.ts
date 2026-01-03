@@ -11,6 +11,13 @@ const getClient = () => {
     return supabaseClient;
 };
 
+export async function dailyCheckin() {
+    const supabase = getClient();
+    const { data, error } = await supabase.rpc('daily_checkin');
+    if (error) throw error;
+    return data;
+}
+
 let cachedProfiles: User[] = [];
 let isRefreshingProfiles = false;
 

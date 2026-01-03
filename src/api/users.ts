@@ -145,6 +145,40 @@ export const checkAuthStatus = () => withLatency(async () => {
 });
 
 export const dailyCheckIn = (userId: string) => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        const supabase = getSupabase();
+        if (!supabase) throw new Error("Supabase client indisponível.");
+
+        const { data, error } = await supabase.rpc('daily_checkin');
+        if (error) throw new Error(error.message);
+
+        const { data: profileData, error: profileError } = await supabase.from('profiles').select('*').eq('id', userId).single();
+        if (profileError || !profileData) {
+            throw new Error(profileError?.message || "Perfil não encontrado após check-in.");
+        }
+
+        const updatedUser = SanityGuard.user(mapProfileToUser(profileData as ProfileSupabase));
+
+        const { data: ledgerData, error: ledgerError } = await supabase.from('economy_ledger')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (ledgerError) {
+            throw new Error(ledgerError.message);
+        }
+
+        return { 
+            updatedUser,
+            notifications: [],
+            coinsGained: (data as any)?.coins_gained ?? (data as any)?.coins ?? 0,
+            isBonus: Boolean((data as any)?.is_bonus ?? (data as any)?.isBonus),
+            streak: (data as any)?.streak ?? updatedUser.checkInStreak ?? updatedUser.weeklyCheckInStreak ?? 0,
+            ledger: ledgerData || []
+        };
+    }
+
     let user = db.allUsersData.find(u => u.id === userId);
     if (!user && config.useSupabase) {
          const sb = getSupabase();

@@ -15,6 +15,7 @@ import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { mapProfileToUser } from '../api/supabase/mappings';
+import { dailyCheckin } from '../api/supabase/supabase.repositories';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -359,7 +360,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                     featuredMission: null,
                     artistsOfTheDay: [],
                     processedArtistOfTheDayQueue: [],
-                    artistsOfTheDayIds: []
+                    artistsOfTheDayIds: [],
+                    ledger: []
                 });
             } else {
                 const api = await import('../api/index');
@@ -394,28 +396,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setIsCheckingIn(true);
         Perf.mark('check_in_action');
         try {
-            const { data, error } = await supabase.rpc('daily_checkin');
-            if (error) {
-                console.error(error);
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Tente novamente em instantes.' } });
-                return;
-            }
+            const response = await dailyCheckin();
+            const alreadyCheckedIn = (response as any)?.already_checked_in || (response as any)?.alreadyCheckedIn;
 
-            if (data?.already_checked_in) {
+            if (alreadyCheckedIn) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
             }
 
-            if (data?.success) {
-                const { data: profileData, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-                if (!profileError && profileData) {
-                    const updatedUser = mapProfileToUser(profileData);
-                    dispatch({ type: 'UPDATE_USER', payload: updatedUser });
-                }
+            const [{ data: profileData, error: profileError }, { data: ledgerData, error: ledgerError }] = await Promise.all([
+                supabase.from('profiles').select('*').eq('id', user.id).single(),
+                supabase.from('economy_ledger')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
+                    .limit(10)
+            ]);
+
+            if (profileError) throw profileError;
+            if (ledgerError) throw ledgerError;
+
+            if (profileData) {
+                const updatedUser = mapProfileToUser(profileData);
+                dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+            }
+
+            if (ledgerData) {
+                setData(prev => prev ? { ...prev, ledger: ledgerData } : prev);
+            }
+
+            if (!alreadyCheckedIn) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
             }
-        } catch (e) { 
+        } catch (e: any) { 
             console.error(e); 
-            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
+            const message = typeof e?.message === 'string' ? e.message : '';
+            const normalizedMessage = message.toLowerCase();
+
+            if (normalizedMessage.includes('já realizado hoje')) {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
+            } else if (message.includes('Not authenticated')) {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Sessão expirada', message: 'Faça login novamente para continuar.' } });
+                await supabase.auth.signOut();
+                dispatch({ type: 'LOGOUT' });
+            } else {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
+            }
         } finally { 
             setIsCheckingIn(false); 
             Perf.end('check_in_action');
