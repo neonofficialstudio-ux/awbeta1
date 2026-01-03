@@ -13,6 +13,8 @@ import { AdsTelemetry } from '../api/ads/adsTelemetry';
 import LoadingSkeleton from './ui/base/LoadingSkeleton';
 import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
+import { getSupabase } from '../api/supabase/client';
+import { mapProfileToUser } from '../api/supabase/mappings';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -383,8 +385,41 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const handleDailyCheckIn = useCallback(async () => {
     if (!user || isCheckingIn) return; 
+    const supabase = getSupabase();
     if (isSupabase) {
-        dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in em breve', message: 'Esta função estará disponível em breve para Supabase.' } });
+        if (!supabase) {
+            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Supabase indisponível', message: 'Não foi possível iniciar o check-in.' } });
+            return;
+        }
+        setIsCheckingIn(true);
+        Perf.mark('check_in_action');
+        try {
+            const { data, error } = await supabase.rpc('daily_checkin');
+            if (error) {
+                console.error(error);
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Tente novamente em instantes.' } });
+                return;
+            }
+
+            if (data?.already_checked_in) {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
+            }
+
+            if (data?.success) {
+                const { data: profileData, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                if (!profileError && profileData) {
+                    const updatedUser = mapProfileToUser(profileData);
+                    dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+                }
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
+            }
+        } catch (e) { 
+            console.error(e); 
+            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
+        } finally { 
+            setIsCheckingIn(false); 
+            Perf.end('check_in_action');
+        }
         return;
     }
     setIsCheckingIn(true);
