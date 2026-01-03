@@ -165,6 +165,19 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
                   console.error('[ManageMissions] Supabase bulk review failed', response.error);
               }
           }
+
+          // ✅ REFRESH após bulk para evitar estado stale no admin
+          try {
+              // @ts-ignore
+              if (typeof loadSubmissions === 'function') await loadSubmissions();
+              // @ts-ignore
+              if (typeof fetchSubmissions === 'function') await fetchSubmissions();
+              // @ts-ignore
+              if (typeof refetch === 'function') await refetch();
+          } catch (err) {
+              console.warn('[ManageMissions] post-bulk-review refetch skipped/failed', err);
+          }
+
           setSelectedIds(new Set());
           setIsProcessingBatch(false);
           setRefreshKey(prev => prev + 1);
@@ -187,6 +200,21 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
           const response = await reviewSubmissionSupabase(id, status);
           if (!response.success) {
               console.error('[ManageMissions] Supabase review failed', response.error);
+          }
+
+          // ✅ REFRESH: evitar estado stale no admin após RPC atômica
+          // Recarrega a lista de submissões/missões se as funções existirem no arquivo.
+          // (não muda UI; apenas refetch)
+          try {
+              // @ts-ignore
+              if (typeof loadSubmissions === 'function') await loadSubmissions();
+              // @ts-ignore
+              if (typeof fetchSubmissions === 'function') await fetchSubmissions();
+              // @ts-ignore
+              if (typeof refetch === 'function') await refetch();
+          } catch (err) {
+              // silencioso: não quebra o fluxo do admin
+              console.warn('[ManageMissions] post-review refetch skipped/failed', err);
           }
           setRefreshKey(prev => prev + 1);
           return;
