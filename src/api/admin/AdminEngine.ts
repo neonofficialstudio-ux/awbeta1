@@ -44,6 +44,7 @@ import { UserInspector } from "./userInspector";
 import { assertMockProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
 import { supabaseAdminRepository, emptyAdminDashboard } from "../supabase/supabase.repositories.admin";
+import { reviewSubmissionSupabase } from "../supabase/admins/missions";
 
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
@@ -251,8 +252,11 @@ export const AdminService = {
         delete: (...args: any[]) => { ensureMockBackend('missions.delete'); return MissionEngineUnified.deleteMission(...args as [any]); },
         reviewSubmission: (submissionId: string, status: 'approved' | 'rejected') => {
              // Invalidate cache
-             ensureMockBackend('missions.reviewSubmission');
              CacheService.invalidate('admin_dashboard_data');
+             if (config.backendProvider === 'supabase') {
+                return reviewSubmissionSupabase(submissionId, status);
+             }
+             ensureMockBackend('missions.reviewSubmission');
              return reviewSubmissionFn(submissionId, status);
         },
         editSubmissionStatus: (...args: any[]) => { ensureMockBackend('missions.editSubmissionStatus'); return MissionEngineUnified.editSubmissionStatus(...args as [any]); },

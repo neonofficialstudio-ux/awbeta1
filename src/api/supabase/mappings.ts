@@ -75,6 +75,10 @@ export const mapStoreItemToApp = (item: any): StoreItem => {
 };
 
 export const mapMissionToApp = (mission: any): Mission => {
+    const isActive = mission.active ?? mission.is_active ?? false;
+    const status = mission.status || (isActive ? 'active' : 'expired');
+    const scheduledFor = mission.scheduled_for || mission.available_at;
+
     return {
         id: mission.id,
         title: mission.title,
@@ -85,7 +89,8 @@ export const mapMissionToApp = (mission: any): Mission => {
         actionUrl: mission.action_url,
         createdAt: mission.created_at,
         deadline: mission.deadline || new Date(Date.now() + 86400000).toISOString(),
-        status: mission.is_active ? 'active' : 'expired'
+        status: status as Mission['status'],
+        scheduledFor,
     };
 };
 
