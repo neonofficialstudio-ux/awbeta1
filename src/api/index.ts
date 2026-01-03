@@ -8,6 +8,9 @@ export { adminInsightsAPI } from "./admin/insights";
 // Consolidated Admin Engine
 import { AdminEngine } from "./admin/AdminEngine";
 export { AdminEngine };
+import { config } from "../core/config";
+import { fetchMissionsSupabase, submitMissionSupabase } from "./supabase/missions";
+import { fetchLeaderboard, fetchHallOfFame as fetchHallOfFameSupabase } from "./supabase/economy";
 
 // Auth & Session (V4.0)
 export { AuthEngineV4 } from "./auth/authEngineV4";
@@ -40,9 +43,9 @@ export {
     generateWeeklyMissionsAPI, 
     generateIndividualMissionAPI,
     fetchWeeklyMissions, // Added export
-    submitMission, // Added export
     listAllMissions // Added export for Admin Panel
 } from "./missions/index";
+import { submitMission as submitMissionMock } from "./missions/index";
 export { submitMissionV4 } from "./missions/submit";
 
 // User & Auth (Legacy/Wrappers)
@@ -84,9 +87,9 @@ export {
 } from "./store";
 
 // Events V7.0 (Restored & Normalized)
-export {
+import {
     fetchEventsData,
-    fetchRankingData,
+    fetchRankingData as fetchRankingDataLegacy,
     joinEvent,
     submitEventMission,
     artistLinkClick,
@@ -106,6 +109,25 @@ export {
     claimArtistOfDayReward
 } from "./events/index";
 
+export {
+    fetchEventsData,
+    joinEvent,
+    submitEventMission,
+    artistLinkClick,
+    markArtistOfTheDayAsSeen,
+    fetchRafflesData,
+    EventEngineV7,
+    EventRankingEngine,
+    EventFAQ,
+    getEventMissions,
+    getVipEventMissions,
+    getEventRanking,
+    getEventData,
+    fetchArtistsOfTheDayFull,
+    fetchArtistOfTheDayConfig,
+    claimArtistOfDayReward
+};
+
 export { runEventSelfTest } from "./events/eventSelfTest";
 
 // Games
@@ -117,11 +139,50 @@ export {
 } from "./games";
 
 // Missions (Legacy/Direct)
-export {
+import {
     fetchDashboardData,
-    fetchMissions,
+    fetchMissions as fetchMissionsMock,
     fetchAchievementsData
 } from "./missions";
+
+export {
+    fetchDashboardData,
+    fetchAchievementsData
+};
+
+export const fetchMissions = async (userId: string) => {
+    if (config.backendProvider === 'supabase') {
+        return fetchMissionsSupabase(userId);
+    }
+    return fetchMissionsMock(userId);
+};
+
+export const submitMission = async (userId: string, missionId: string, proof: string) => {
+    if (config.backendProvider === 'supabase') {
+        return submitMissionSupabase(userId, missionId, proof);
+    }
+    return submitMissionMock(userId, missionId, proof);
+};
+
+export const fetchRankingData = async (type: 'mensal' | 'geral' = 'mensal', limit = 50, offset = 0) => {
+    if (config.backendProvider === 'supabase') {
+        const response = await fetchLeaderboard(limit, offset);
+        if (!response.success) {
+            console.error('[API] fetchRankingData supabase failed', response.error);
+            return [];
+        }
+        return response.leaderboard;
+    }
+    return fetchRankingDataLegacy(type);
+};
+
+export const fetchHallOfFame = async (limit = 50, offset = 0) => {
+    if (config.backendProvider === 'supabase') {
+        const response = await fetchHallOfFameSupabase(limit, offset);
+        return response.entries;
+    }
+    return [];
+};
 
 // Admin Actions (Delegating to Consolidated Engine)
 export const fetchAdminData = AdminEngine.getDashboardData; 

@@ -108,12 +108,12 @@ export const fetchMyNotifications = async (limit = 20) => {
     }
 };
 
-export const fetchLeaderboard = async (limit = 50) => {
+export const fetchLeaderboard = async (limit = 50, offset = 0) => {
     const supabase = ensureClient();
     if (!supabase) return { success: false as const, leaderboard: [] as RankingUser[], error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit });
+        const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit, p_offset: offset });
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
@@ -124,5 +124,30 @@ export const fetchLeaderboard = async (limit = 50) => {
     } catch (err: any) {
         console.error('[SupabaseEconomy] fetchLeaderboard failed', err);
         return { success: false as const, leaderboard: [] as RankingUser[], error: err?.message || 'Falha ao carregar leaderboard' };
+    }
+};
+
+export const fetchHallOfFame = async (limit = 50, offset = 0) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: true as const, entries: [] as RankingUser[], error: null as string | null };
+
+    try {
+        const { data, error } = await supabase.rpc('get_hall_of_fame', { p_limit: limit, p_offset: offset });
+
+        if (error) {
+            // RPC pode não existir ainda; preferimos fallback silencioso.
+            console.warn('[SupabaseEconomy] get_hall_of_fame not available yet, returning empty list.', error.message);
+            return { success: true as const, entries: [] as RankingUser[], error: null as string | null };
+        }
+
+        const rows = Array.isArray(data) ? data : [];
+        return {
+            success: true as const,
+            entries: rows.map((row, index) => normalizeLeaderboardEntry(row, index)),
+            error: null as string | null,
+        };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] fetchHallOfFame failed', err);
+        return { success: true as const, entries: [] as RankingUser[], error: null as string | null };
     }
 };
