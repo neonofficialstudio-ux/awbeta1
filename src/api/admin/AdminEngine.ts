@@ -42,6 +42,8 @@ import { SeasonRankingEngine } from "../../services/ranking/seasonRanking.engine
 import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
 import { assertMockProvider } from "../core/backendGuard";
+import { config } from "../../core/config";
+import { supabaseAdminRepository } from "../supabase/supabase.repositories.admin";
 
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
@@ -118,7 +120,11 @@ export const AdminService = {
         return AdminAwardsEngine.getUnifiedAwardHistory();
     },
 
-    getDashboardData: () => {
+    getDashboardData: async () => {
+        if (config.backendProvider === 'supabase') {
+            const response = await supabaseAdminRepository.fetchAdminDashboard();
+            return response.data;
+        }
         ensureMockBackend('getDashboardData');
         return CacheService.remember('admin_dashboard_data', 3000, () => {
             const users = [...(repo.select("users") || [])];
@@ -192,6 +198,34 @@ export const AdminService = {
                 highlightedRaffleId: db.highlightedRaffleIdData || null,
             };
         });
+    },
+    fetchAdminMissions: async () => {
+        if (config.backendProvider === 'supabase') {
+            const response = await supabaseAdminRepository.fetchAdminMissions();
+            return response;
+        }
+        ensureMockBackend('fetchAdminMissions');
+        return {
+            success: true,
+            missions: repo.select("missions") || [],
+            submissions: repo.select("submissions") || [],
+        };
+    },
+    fetchHallOfFame: async () => {
+        if (config.backendProvider === 'supabase') {
+            const response = await supabaseAdminRepository.fetchAdminHallOfFame();
+            return response.entries;
+        }
+        ensureMockBackend('fetchHallOfFame');
+        return repo.select("transactions") || [];
+    },
+    fetchAdminStats: async () => {
+        if (config.backendProvider === 'supabase') {
+            const response = await supabaseAdminRepository.fetchAdminStats();
+            return response.stats;
+        }
+        ensureMockBackend('fetchAdminStats');
+        return null;
     },
 
     missions: {

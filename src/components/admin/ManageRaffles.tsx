@@ -17,6 +17,7 @@ import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
 import { getDisplayName } from '../../api/core/getDisplayName';
+import { config } from '../../core/config';
 
 interface ManageRafflesProps {
     raffles: Raffle[];
@@ -382,7 +383,9 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     }, [initialRaffles]);
 
     useEffect(() => {
-        adminForceUpdateRaffleStates();
+        if (config.backendProvider !== 'supabase') {
+            adminForceUpdateRaffleStates();
+        }
         refreshJackpot();
     }, []);
 
@@ -408,9 +411,11 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
         }
         
         // Fetch detailed stats
-        if (AdminEngine.jackpot.getDetailedStats) {
+        if (config.backendProvider !== 'supabase' && AdminEngine.jackpot.getDetailedStats) {
              const detailed = AdminEngine.jackpot.getDetailedStats();
              setDetailedStats(detailed);
+        } else {
+             setDetailedStats(null);
         }
     };
 

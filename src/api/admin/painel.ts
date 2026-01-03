@@ -6,9 +6,9 @@ import { generateHeatmap } from "../telemetry/heatmap";
 import { telemetryAnalytics } from "../telemetry/analytics";
 import { listTelemetryEvents } from "../telemetry/events/list";
 
-export function adminPainelData() {
+export async function adminPainelData() {
   // Get core data from V7 Engine to ensure consistency
-  const dashboardData = AdminEngineV7.getDashboardData();
+  const dashboardData = await Promise.resolve(AdminEngineV7.getDashboardData());
 
   const analytics = adminAnalyticsAPI();
   const insights = adminInsightsAPI();

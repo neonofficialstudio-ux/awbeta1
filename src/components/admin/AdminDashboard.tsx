@@ -48,9 +48,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     useEffect(() => {
         // Fetch V4.2 Data Structure
-        const data = adminPainelData();
-        setV4Data(data);
-        setIsLoading(false);
+        const loadData = async () => {
+            try {
+                const data = await adminPainelData();
+                setV4Data(data);
+            } catch (error) {
+                console.error('[AdminDashboard] Failed to load painel data', error);
+                setV4Data(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
     }, []);
 
     if (isLoading) return <div className="p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-gold-cinematic border-t-transparent rounded-full mx-auto"></div></div>;
