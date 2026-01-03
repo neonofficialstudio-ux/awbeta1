@@ -5,6 +5,7 @@ import { normalizeActiveUser } from './normalizers';
 export const initialState: AppState = {
   currentView: 'dashboard',
   activeUser: null,
+  isAdmin: null,
   notifications: [],
   showWelcomeModal: false,
   prevCoins: null,
@@ -49,6 +50,8 @@ export const appReducer = (state: AppState, action: Action): AppState => {
     // --- UI / Navigation ---
     case 'SET_VIEW':
       return { ...state, currentView: action.payload };
+    case 'SET_ADMIN_STATUS':
+      return { ...state, isAdmin: action.payload };
     case 'SET_ADMIN_TAB':
       return {
         ...state,
@@ -70,6 +73,7 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       return { 
           ...state, 
           activeUser: loginUser, 
+          isAdmin: null,
           notifications: action.payload.notifications, 
           unseenAdminNotifications: action.payload.unseenAdminNotifications, 
           prevCoins: 0, 

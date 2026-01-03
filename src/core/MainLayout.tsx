@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, Suspense, useMemo } from 'react';
+import React, { useRef, useState, useEffect, Suspense, useMemo, useCallback } from 'react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import Notifications from '../components/Notifications';
@@ -44,7 +44,7 @@ const MenuIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 
 export const MainLayout: React.FC = () => {
     const { state, dispatch } = useAppContext();
-    const { currentView, activeUser, showWelcomeModal, adminActiveTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, unseenAdminNotifications } = state;
+    const { currentView, activeUser, isAdmin, showWelcomeModal, adminActiveTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, unseenAdminNotifications } = state;
     const mainContentRef = useRef<HTMLElement>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -91,6 +91,25 @@ export const MainLayout: React.FC = () => {
         }
         return () => document.body.classList.remove('modal-open');
     }, [isMobileMenuOpen]);
+
+    const handleAccessDenied = useCallback(() => {
+        dispatch({ type: 'SET_VIEW', payload: 'dashboard' });
+        dispatch({ 
+            type: 'ADD_TOAST', 
+            payload: { 
+                id: `admin-denied-${Date.now()}`, 
+                type: 'error', 
+                title: 'Acesso negado', 
+                message: 'Você não tem permissão para acessar esta área.' 
+            } 
+        });
+    }, [dispatch]);
+
+    useEffect(() => {
+        if (currentView === 'admin' && isAdmin === false) {
+            handleAccessDenied();
+        }
+    }, [currentView, isAdmin, handleAccessDenied]);
 
     // Level Up, Notification & Achievement Watchers
     const prevLevelRef = useRef<number | undefined>(undefined);
@@ -177,7 +196,8 @@ export const MainLayout: React.FC = () => {
             case 'events': return <Events />;
             case 'profile': return <Profile />;
             case 'admin':
-                if (activeUser?.role !== 'admin') return <NotFoundState onGoHome={() => dispatch({type: 'SET_VIEW', payload: 'dashboard'})} />;
+                if (isAdmin === null) return <PageSkeleton />;
+                if (!isAdmin) return <NotFoundState onGoHome={() => dispatch({type: 'SET_VIEW', payload: 'dashboard'})} />;
                 return <AdminPanel 
                     key={adminActiveTab}
                     activeTab={adminActiveTab}
