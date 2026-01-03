@@ -274,12 +274,11 @@ export const supabaseAdminRepository = {
         description: mission.description,
         xp_reward: mission.xp,
         coins_reward: mission.coins,
-        coin_reward: (mission as any).coin_reward ?? mission.coins,
         action_url: mission.actionUrl,
         deadline: mission.deadline,
         scope: (mission as any).scope || mission.type,
         is_active: mission.status ? mission.status !== 'expired' : true,
-        active: mission.status === 'active' ? true : mission.status === 'expired' ? false : undefined,
+        meta: (mission as any).meta,
       };
 
       const result = await createMissionSupabase(payload);

@@ -49,12 +49,11 @@ type CreateMissionPayload = {
     description: string;
     xp_reward: number;
     coins_reward: number;
-    coin_reward?: number;
     action_url?: string;
     deadline?: string;
     scope?: string;
     is_active?: boolean;
-    active?: boolean;
+    meta?: any;
 };
 
 export const createMissionSupabase = async (payload: CreateMissionPayload) => {
@@ -68,13 +67,12 @@ export const createMissionSupabase = async (payload: CreateMissionPayload) => {
                 title: payload.title,
                 description: payload.description,
                 xp_reward: payload.xp_reward,
-                coin_reward: payload.coin_reward ?? payload.coins_reward,
                 coins_reward: payload.coins_reward,
                 action_url: payload.action_url,
                 deadline: payload.deadline,
                 scope: payload.scope,
                 is_active: payload.is_active ?? true,
-                active: payload.active ?? payload.is_active ?? true,
+                meta: payload.meta,
             })
             .select('*')
             .single();
