@@ -8,6 +8,7 @@ import BannedUserPage from '../components/BannedUserPage';
 import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
+import { isAdmin as checkIsAdmin } from '../api/supabase/admin';
 
 export const AuthGate = (): React.ReactElement => {
     const { state, dispatch } = useAppContext();
@@ -79,6 +80,33 @@ export const AuthGate = (): React.ReactElement => {
             fetchTermsContent();
         }
     }, [activeUser]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const verifyAdminStatus = async () => {
+            if (!activeUser) {
+                dispatch({ type: 'SET_ADMIN_STATUS', payload: null });
+                return;
+            }
+
+            if (config.backendProvider !== 'supabase') {
+                dispatch({ type: 'SET_ADMIN_STATUS', payload: activeUser.role === 'admin' });
+                return;
+            }
+
+            dispatch({ type: 'SET_ADMIN_STATUS', payload: null });
+            const hasAccess = await checkIsAdmin();
+
+            if (isMounted) {
+                dispatch({ type: 'SET_ADMIN_STATUS', payload: hasAccess });
+            }
+        };
+
+        verifyAdminStatus();
+
+        return () => { isMounted = false; };
+    }, [activeUser, dispatch]);
     
     if (isLoading) {
         return (

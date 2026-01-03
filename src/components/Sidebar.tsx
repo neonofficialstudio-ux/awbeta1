@@ -55,9 +55,8 @@ const NavItem: React.FC<{
 
 const Sidebar: React.FC<SidebarProps> = React.memo(({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const { state, dispatch } = useAppContext();
-  const { currentView, activeUser } = state;
-
-  const isAdmin = activeUser?.role === 'admin';
+  const { currentView, isAdmin: adminAccess } = state;
+  const isAdmin = adminAccess === true;
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },

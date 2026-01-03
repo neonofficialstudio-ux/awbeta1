@@ -20,6 +20,7 @@ export interface AppState {
   // --- Core State (Legacy Compatibility) ---
   currentView: string; // View type
   activeUser: User | null;
+  isAdmin: boolean | null;
   notifications: any[]; // Notification type
   showWelcomeModal: boolean;
   prevCoins: number | null;

@@ -81,6 +81,7 @@ export const normalizeState = (state: any): AppState => {
     return {
         currentView: state.currentView || 'dashboard',
         activeUser: safeUser,
+        isAdmin: typeof state.isAdmin === 'boolean' ? state.isAdmin : null,
         notifications: Array.isArray(state.notifications) ? state.notifications : [],
         showWelcomeModal: !!state.showWelcomeModal,
         prevCoins: state.prevCoins ?? (safeUser ? safeUser.coins : null),
