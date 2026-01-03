@@ -96,10 +96,30 @@ export const reviewSubmissionSupabase = async (submissionId: string, status: 'ap
     if (!supabase) return { success: false as const, error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase.rpc('admin_review_submission', {
-            p_submission_id: submissionId,
-            p_status: status,
-        });
+        // OPÇÃO D (ATÔMICO): aprovação/rejeição executam transação completa no banco.
+        // approved -> admin_approve_submission_atomic(p_submission_id)
+        // rejected -> admin_reject_submission_atomic(p_submission_id, p_reason)
+
+        let data: any = null;
+        let error: any = null;
+
+        if (status === 'approved') {
+            const res = await supabase.rpc('admin_approve_submission_atomic', {
+                p_submission_id: submissionId,
+            });
+            data = res.data;
+            error = res.error;
+        } else if (status === 'rejected') {
+            // Se seu UI tiver motivo, passe aqui. Se não tiver, envia null.
+            const res = await supabase.rpc('admin_reject_submission_atomic', {
+                p_submission_id: submissionId,
+                p_reason: null,
+            });
+            data = res.data;
+            error = res.error;
+        } else {
+            return { success: false as const, error: `Unsupported review status: ${status}` };
+        }
 
         if (error) {
             console.error('[SupabaseAdminMissions] reviewSubmissionSupabase error', error);
