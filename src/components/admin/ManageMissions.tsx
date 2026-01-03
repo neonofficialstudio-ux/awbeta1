@@ -11,6 +11,7 @@ import { TelemetryPRO } from '../../services/telemetry.pro';
 import { AdminMissionReviewEngine } from '../../services/admin/adminMissionReview.engine';
 import { safeString } from '../../api/helpers';
 import { config } from '../../core/config';
+import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
 
 // UI Lib
 import Card from '../ui/base/Card';
@@ -87,34 +88,40 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
 
   // Initial Load & Refresh
   useEffect(() => {
-      const loadData = () => {
+      const loadData = async () => {
           if (config.backendProvider === 'supabase') {
-              const missionLookup = new Map(missions.map((m) => [m.id, m]));
-              let filtered = [...(initialSubmissions || [])];
+              try {
+                  const missionLookup = new Map(missions.map((m) => [m.id, m]));
+                  const statusFilter = filterStatus !== 'all' ? filterStatus : undefined;
+                  const response = await listSubmissionsSupabase({ status: statusFilter as any, limit: 200, offset: 0 });
+                  if (!response.success) {
+                      console.error('[ManageMissions] Failed to load supabase submissions', response.error);
+                  }
+                  let filtered = [...(response.submissions || [])];
 
-              if (filterStatus && filterStatus !== 'all') {
-                  filtered = filtered.filter((s) => s.status === filterStatus);
+                  if (filterType && filterType !== 'all') {
+                      filtered = filtered.filter((s) => {
+                          const mission = missionLookup.get(s.missionId);
+                          return mission && mission.type === filterType;
+                      });
+                  }
+
+                  if (filterSearch) {
+                      const lower = filterSearch.toLowerCase();
+                      filtered = filtered.filter((s) => 
+                          s.userName.toLowerCase().includes(lower) ||
+                          s.missionTitle.toLowerCase().includes(lower) ||
+                          s.userId.includes(lower)
+                      );
+                  }
+
+                  filtered.sort((a, b) => new Date(b.submittedAtISO).getTime() - new Date(a.submittedAtISO).getTime());
+                  setSubmissions(filtered);
+                  if (page !== 1) setPage(1);
+                  return;
+              } catch (err) {
+                  console.error('[ManageMissions] Unexpected supabase submissions error', err);
               }
-
-              if (filterType && filterType !== 'all') {
-                  filtered = filtered.filter((s) => {
-                      const mission = missionLookup.get(s.missionId);
-                      return mission && mission.type === filterType;
-                  });
-              }
-
-              if (filterSearch) {
-                  const lower = filterSearch.toLowerCase();
-                  filtered = filtered.filter((s) => 
-                      s.userName.toLowerCase().includes(lower) ||
-                      s.missionTitle.toLowerCase().includes(lower) ||
-                      s.userId.includes(lower)
-                  );
-              }
-
-              filtered.sort((a, b) => new Date(b.submittedAtISO).getTime() - new Date(a.submittedAtISO).getTime());
-              setSubmissions(filtered);
-              return;
           }
 
           const data = AdminMissionReviewEngine.fetchSubmissions({
@@ -125,7 +132,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
           setSubmissions(data);
       };
       loadData();
-  }, [filterStatus, filterType, filterSearch, refreshKey, initialSubmissions, missions]);
+  }, [filterStatus, filterType, filterSearch, refreshKey, initialSubmissions, missions, page]);
 
   // Handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,6 +158,19 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       setIsProcessingBatch(true);
       
       const ids = Array.from(selectedIds) as string[];
+      if (config.backendProvider === 'supabase') {
+          for (const id of ids) {
+              const response = await reviewSubmissionSupabase(id, action === 'approve' ? 'approved' : 'rejected');
+              if (!response.success) {
+                  console.error('[ManageMissions] Supabase bulk review failed', response.error);
+              }
+          }
+          setSelectedIds(new Set());
+          setIsProcessingBatch(false);
+          setRefreshKey(prev => prev + 1);
+          return;
+      }
+
       if (action === 'approve') {
           await AdminMissionReviewEngine.bulkApprove(ids, "admin");
       } else {
@@ -163,6 +183,15 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   };
 
   const handleSingleReview = async (id: string, status: 'approved' | 'rejected') => {
+      if (config.backendProvider === 'supabase') {
+          const response = await reviewSubmissionSupabase(id, status);
+          if (!response.success) {
+              console.error('[ManageMissions] Supabase review failed', response.error);
+          }
+          setRefreshKey(prev => prev + 1);
+          return;
+      }
+
       if (status === 'approved') await AdminMissionReviewEngine.approve(id, "admin");
       else await AdminMissionReviewEngine.reject(id, "admin");
       setRefreshKey(prev => prev + 1);

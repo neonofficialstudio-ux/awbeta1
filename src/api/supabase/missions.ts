@@ -14,7 +14,7 @@ const ensureClient = () => {
     return supabaseClient;
 };
 
-const mapSubmission = (row: any): MissionSubmission => {
+export const mapSubmission = (row: any): MissionSubmission => {
     const mission = row.missions || row.mission || {};
     const profile = row.profiles || row.profile || {};
     const createdAt = row.created_at || row.submitted_at || new Date().toISOString();
@@ -33,13 +33,33 @@ const mapSubmission = (row: any): MissionSubmission => {
     };
 };
 
+const fetchActiveMissions = async () => {
+    const supabase = ensureClient();
+    if (!supabase) return { data: [] as Mission[], error: null as any };
+
+    // Try using "active" first (new schema), then fallback to "is_active"
+    const attemptActive = await supabase.from('missions').select('*').eq('active', true);
+    if (attemptActive.error && attemptActive.error.code === '42703') {
+        const fallback = await supabase.from('missions').select('*').eq('is_active', true);
+        return fallback;
+    }
+    if (attemptActive.error && attemptActive.error.message?.toLowerCase().includes('column') && attemptActive.error.message?.includes('active')) {
+        const fallback = await supabase.from('missions').select('*').eq('is_active', true);
+        return fallback;
+    }
+    if (attemptActive.error) {
+        return attemptActive;
+    }
+    return attemptActive;
+};
+
 export const fetchMissionsSupabase = async (userId: string) => {
     const supabase = ensureClient();
     if (!supabase) return { missions: [] as Mission[], submissions: [] as MissionSubmission[], hasReachedDailyLimit: false };
 
     try {
         const [missionsRes, submissionsRes, profileRes] = await Promise.all([
-            supabase.from('missions').select('*').eq('is_active', true),
+            fetchActiveMissions(),
             supabase
                 .from('mission_submissions')
                 .select('*, missions(title), profiles(name, avatar_url, email)')
@@ -69,25 +89,28 @@ export const fetchMissionsSupabase = async (userId: string) => {
     }
 };
 
-export const submitMissionSupabase = async (userId: string, missionId: string, proof: string) => {
+export const submitMissionSupabase = async (_userId: string, missionId: string, proof: string) => {
     const supabase = ensureClient();
     if (!supabase) return { success: false as const, newSubmission: undefined, updatedUser: undefined, message: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase
-            .from('mission_submissions')
-            .insert({ user_id: userId, mission_id: missionId, proof_url: proof, status: 'pending' })
-            .select('*, missions(title), profiles(name, avatar_url, email)')
-            .single();
+        const { data, error } = await supabase.rpc('submit_mission', {
+            p_mission_id: missionId,
+            p_proof: proof,
+        });
 
         if (error) {
             console.error('[SupabaseMissions] submitMissionSupabase error', error);
             return { success: false as const, newSubmission: undefined, updatedUser: undefined, message: error.message || 'Falha ao enviar missão' };
         }
 
+        const submissionPayload: any = Array.isArray(data)
+            ? data[0]
+            : (data?.new_submission || data?.submission || data);
+
         return {
             success: true as const,
-            newSubmission: mapSubmission(data),
+            newSubmission: submissionPayload ? mapSubmission(submissionPayload) : undefined,
             updatedUser: undefined,
             message: 'Missão enviada com sucesso.',
         };

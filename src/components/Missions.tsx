@@ -548,48 +548,57 @@ const Missions: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
 
-    useEffect(() => {
+    const fetchData = useCallback(async () => {
         if (!user) return;
-        const fetchData = async () => {
-            setIsLoading(true);
-            setError(null);
-            Perf.mark('missions_data_fetch');
-            try {
-                const data = await api.fetchMissions(user.id);
-                setMissions(data.missions);
-                setMissionSubmissions(data.submissions);
-                setHasReachedDailyLimit(data.hasReachedDailyLimit);
-            } catch (error) {
-                console.error("Failed to fetch missions data:", error);
-                setError("Não foi possível carregar as missões. Por favor, tente novamente mais tarde.");
-            } finally {
-                setIsLoading(false);
-                Perf.end('missions_data_fetch');
-            }
-        };
+        setIsLoading(true);
+        setError(null);
+        Perf.mark('missions_data_fetch');
+        try {
+            const data = await api.fetchMissions(user.id);
+            setMissions(data.missions);
+            setMissionSubmissions(data.submissions);
+            setHasReachedDailyLimit(data.hasReachedDailyLimit);
+        } catch (error) {
+            console.error("Failed to fetch missions data:", error);
+            setError("Não foi possível carregar as missões. Por favor, tente novamente mais tarde.");
+        } finally {
+            setIsLoading(false);
+            Perf.end('missions_data_fetch');
+        }
+    }, [user]);
+
+    useEffect(() => {
         fetchData();
-    }, [user]); 
+    }, [fetchData]); 
 
     const handleSubmitMission = useCallback(async (missionId: string, proof: string) => {
         if (!user) return;
         try {
             const response = await api.submitMission(user.id, missionId, proof);
-            if (response.success) {
-                setMissionSubmissions(prev => [response.newSubmission!, ...prev]);
-                if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
-                const submittedMission = missions.find(m => m.id === missionId);
-                if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
+            if (!response.success) {
+                throw new Error(response.message || 'Falha ao enviar missão.');
             }
+            if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+            await fetchData();
+            const submittedMission = missions.find(m => m.id === missionId);
+            if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
         } catch(e: any) {
             console.error("Mission submission failed", e);
             throw new Error(e.message);
         }
-    }, [user, missions, dispatch]);
+    }, [user, missions, dispatch, fetchData]);
 
     if (isLoading || !user) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD86B]"></div></div>;
     if (error) return <div className="flex flex-col items-center justify-center min-h-[60vh] bg-red-900/5 border border-red-500/20 rounded-xl p-8 text-center"><h3 className="text-2xl font-bold text-red-500 mb-2">Ocorreu um Erro</h3><p className="text-gray-400">{error}</p></div>;
 
     const getMissionStatus = (missionId: string) => {
+        const existingSubmission = missionSubmissions.find((s) => s.missionId === missionId);
+        if (existingSubmission) {
+            if (existingSubmission.status === 'approved') return 'completed';
+            if (existingSubmission.status === 'pending') return 'pending';
+            if (existingSubmission.status === 'rejected') return 'rejected';
+        }
+
         if (user.completedMissions.includes(missionId)) return 'completed';
         if (user.pendingMissions.includes(missionId)) return 'pending';
         if (user.completedEventMissions && user.completedEventMissions.includes(missionId)) return 'completed';
