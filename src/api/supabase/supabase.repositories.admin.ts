@@ -1,6 +1,7 @@
 import { config } from '../../core/config';
 import { supabaseClient } from './client';
 import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStoreItemToApp } from './mappings';
+import { createMissionSupabase } from './admins/missions';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
 const ensureAdminClient = async () => {
@@ -26,13 +27,14 @@ const mapSubmission = (row: any): MissionSubmission => {
   const mission = row.missions || row.mission || {};
   const profile = row.profiles || row.profile || {};
   const createdAt = row.created_at || row.submitted_at || new Date().toISOString();
+  const fallbackName = profile.display_name || profile.name || profile.id || 'Usuário';
 
   return {
     id: row.id,
     userId: row.user_id,
     missionId: row.mission_id,
-    userName: profile.name || profile.email || 'Usuário',
-    userAvatar: profile.avatar_url || profile.avatar || '',
+    userName: fallbackName,
+    userAvatar: profile.avatar_url || profile.avatar || 'https://i.pravatar.cc/150?u=mission-admin',
     missionTitle: mission.title || row.mission_title || 'Missão',
     submittedAt: new Date(createdAt).toLocaleString('pt-BR'),
     submittedAtISO: createdAt,
@@ -115,7 +117,7 @@ export const supabaseAdminRepository = {
         supabase.from('missions').select('*'),
         supabase
           .from('mission_submissions')
-          .select('*, missions(title), profiles(name, avatar_url, email)')
+          .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
           .order('created_at', { ascending: false })
           .limit(50),
         supabase
@@ -263,5 +265,29 @@ export const supabaseAdminRepository = {
       console.error('[SupabaseAdminRepo] fetchAdminStats failed', err);
       return { success: false as const, stats: null as any, error: err?.message || 'Failed to load admin stats' };
     }
+  },
+
+  missions: {
+    async save(mission: Mission) {
+      const payload = {
+        title: mission.title,
+        description: mission.description,
+        xp_reward: mission.xp,
+        coins_reward: mission.coins,
+        coin_reward: (mission as any).coin_reward ?? mission.coins,
+        action_url: mission.actionUrl,
+        deadline: mission.deadline,
+        scope: (mission as any).scope || mission.type,
+        is_active: mission.status ? mission.status !== 'expired' : true,
+        active: mission.status === 'active' ? true : mission.status === 'expired' ? false : undefined,
+      };
+
+      const result = await createMissionSupabase(payload);
+      if (!result.success) {
+        return { success: false as const, mission: null as any, error: result.error || 'Falha ao criar missão' };
+      }
+
+      return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
+    },
   },
 };

@@ -78,13 +78,14 @@ export const mapMissionToApp = (mission: any): Mission => {
     const isActive = mission.active ?? mission.is_active ?? false;
     const status = mission.status || (isActive ? 'active' : 'expired');
     const scheduledFor = mission.scheduled_for || mission.available_at;
+    const coinReward = mission.coin_reward ?? mission.coins_reward ?? mission.coins;
 
     return {
         id: mission.id,
         title: mission.title,
         description: mission.description,
         xp: mission.xp_reward,
-        coins: mission.coin_reward,
+        coins: coinReward,
         type: mission.type || 'creative',
         actionUrl: mission.action_url,
         createdAt: mission.created_at,
