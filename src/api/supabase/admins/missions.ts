@@ -70,7 +70,9 @@ export const createMissionSupabase = async (payload: CreateMissionPayload) => {
                 coins_reward: payload.coins_reward,
                 action_url: payload.action_url,
                 deadline: payload.deadline,
-                scope: payload.scope,
+                // FORCE VALID SCOPE (DB CONSTRAINT: weekly | event)
+                // Admin default = weekly
+                scope: 'weekly',
                 is_active: payload.is_active ?? true,
                 meta: payload.meta,
             })
