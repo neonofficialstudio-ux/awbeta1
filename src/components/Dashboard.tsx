@@ -15,7 +15,7 @@ import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { mapProfileToUser } from '../api/supabase/mappings';
 import { dailyCheckin } from '../api/supabase/supabase.repositories';
-import { fetchMyLedger, fetchMyNotifications } from '../api/supabase/economy';
+import { fetchMyLedger, fetchMyNotifications, markNotificationRead } from '../api/supabase/economy';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -849,7 +849,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                         </>
                     ) : notificationsFeed.length > 0 ? (
                         notificationsFeed.slice(0, 6).map(notification => (
-                            <div key={notification.id} className={`p-4 rounded-2xl border flex items-start gap-3 ${notification.read ? 'bg-[#0A0A0A] border-[#1F1F1F]' : 'bg-[#0F0F0F] border-[#FFD36A]/20'}`}>
+                            <div
+                                key={notification.id}
+                                onClick={async () => {
+                                    if (notification.read) return;
+                                    // optimistic UI
+                                    setNotificationsFeed(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
+                                    dispatch({ type: 'MARK_NOTIFICATION_READ', payload: { id: notification.id } });
+                                    const res = await markNotificationRead(notification.id);
+                                    if (!res.success) {
+                                        // rollback se falhar
+                                        setNotificationsFeed(prev => prev.map(n => n.id === notification.id ? { ...n, read: false } : n));
+                                    }
+                                }}
+                                className={`p-4 rounded-2xl border flex items-start gap-3 cursor-pointer ${notification.read ? 'bg-[#0A0A0A] border-[#1F1F1F]' : 'bg-[#0F0F0F] border-[#FFD36A]/20'}`}
+                            >
                                 <div className={`w-2 h-2 mt-1 rounded-full ${notification.read ? 'bg-gray-600' : 'bg-[#FFD36A]'}`}></div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-white font-bold truncate">{notification.title}</p>
