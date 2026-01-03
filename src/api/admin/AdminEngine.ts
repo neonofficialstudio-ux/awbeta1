@@ -41,7 +41,7 @@ import { CacheService } from "../../services/performance/cache.service";
 import { SeasonRankingEngine } from "../../services/ranking/seasonRanking.engine";
 import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
-import { assertMockProvider } from "../core/backendGuard";
+import { assertMockProvider, isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
 import { supabaseAdminRepository, emptyAdminDashboard } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
@@ -247,7 +247,22 @@ export const AdminService = {
     },
 
     missions: {
-        save: (...args: any[]) => { ensureMockBackend('missions.save'); return MissionEngineUnified.saveMission(...args as [any]); },
+        save: async (mission: any) => {
+            if (isSupabaseProvider()) {
+                try {
+                    const response = await supabaseAdminRepository.missions.save(mission);
+                    if (!response?.success) {
+                        console.error('[AdminEngine] missions.save supabase failed', response?.error);
+                    }
+                    return response;
+                } catch (err) {
+                    console.error('[AdminEngine] missions.save supabase path failed', err);
+                    return { success: false, error: err instanceof Error ? err.message : 'Supabase missão falhou' };
+                }
+            }
+            ensureMockBackend('missions.save');
+            return MissionEngineUnified.saveMission(mission);
+        },
         saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
         delete: (...args: any[]) => { ensureMockBackend('missions.delete'); return MissionEngineUnified.deleteMission(...args as [any]); },
         reviewSubmission: (submissionId: string, status: 'approved' | 'rejected') => {

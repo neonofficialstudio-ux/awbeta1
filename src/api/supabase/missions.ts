@@ -18,13 +18,14 @@ export const mapSubmission = (row: any): MissionSubmission => {
     const mission = row.missions || row.mission || {};
     const profile = row.profiles || row.profile || {};
     const createdAt = row.created_at || row.submitted_at || new Date().toISOString();
+    const fallbackName = profile.display_name || profile.name || profile.id || 'Usuário';
 
     return {
         id: row.id,
         userId: row.user_id,
         missionId: row.mission_id,
-        userName: profile.name || profile.email || 'Usuário',
-        userAvatar: profile.avatar_url || profile.avatar || '',
+        userName: fallbackName,
+        userAvatar: profile.avatar_url || profile.avatar || 'https://i.pravatar.cc/150?u=mission-sub',
         missionTitle: mission.title || row.mission_title || 'Missão',
         submittedAt: new Date(createdAt).toLocaleString('pt-BR'),
         submittedAtISO: createdAt,
@@ -62,10 +63,10 @@ export const fetchMissionsSupabase = async (userId: string) => {
             fetchActiveMissions(),
             supabase
                 .from('mission_submissions')
-                .select('*, missions(title), profiles(name, avatar_url, email)')
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false })
-                .limit(50),
+            .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(50),
             supabase.from('profiles').select('plan').eq('id', userId).limit(1).single(),
         ]);
 
