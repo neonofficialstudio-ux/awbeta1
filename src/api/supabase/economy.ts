@@ -103,7 +103,14 @@ export const fetchMyNotifications = async (limit = 20) => {
         const { data, error } = await supabase.rpc('get_my_notifications', { p_limit: limit });
         if (error) throw error;
 
-        const rows = Array.isArray(data) ? data : [];
+        // Compat: algumas versões do backend retornam array direto,
+        // outras retornam { success: true, items: [...] }
+        const rows =
+            Array.isArray(data)
+                ? data
+                : Array.isArray((data as any)?.items)
+                    ? (data as any).items
+                    : [];
         return {
             success: true as const,
             notifications: rows.map(normalizeNotification),
@@ -122,7 +129,7 @@ export const markNotificationRead = async (notificationId: string) => {
         const { data, error } = await supabase.rpc('mark_notification_read', { p_notification_id: notificationId });
         if (error) throw error;
         // função retorna boolean
-        return { success: true as const, updated: Boolean(data) };
+        return { success: true as const, updated: data === null ? true : Boolean(data) };
     } catch (err: any) {
         console.error('[SupabaseEconomy] markNotificationRead failed', err);
         return { success: false as const, error: err?.message || 'Falha ao marcar notificação como lida' };
