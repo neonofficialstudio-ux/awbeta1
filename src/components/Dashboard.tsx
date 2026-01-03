@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry } from '../types';
 import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon } from '../constants';
 import { useAppContext } from '../constants';
@@ -259,15 +258,21 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
     );
 };
 
-const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, isCheckingIn: boolean }> = React.memo(({ user, onCheckIn, isCheckingIn }) => {
+const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
     if (lastCheckInDate) lastCheckInDate.setHours(0, 0, 0, 0);
-    const hasCheckedInToday = lastCheckInDate?.getTime() === today.getTime();
+    const hasCheckedInToday = checkInDone || lastCheckInDate?.getTime() === today.getTime();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : user.weeklyCheckInStreak;
+
+    const buttonLabel = hasCheckedInToday
+        ? 'CHECK-IN FEITO ✅'
+        : checkInLoading
+            ? 'Sincronizando...'
+            : 'Fazer Check-in Agora';
 
     return (
         <div className="relative overflow-hidden rounded-[32px] p-[1px] bg-gradient-to-b from-[#FFD36A]/20 to-transparent shadow-[0_0_40px_rgba(255,211,106,0.1)] group h-full flex flex-col transition-all duration-500 hover:shadow-[0_0_60px_rgba(255,211,106,0.15)] hover:-translate-y-1">
@@ -314,17 +319,24 @@ const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, isCheckingIn: 
                     </div>
                 </div>
                 <div className="mt-auto">
-                    {hasCheckedInToday ? (
-                         <div className="w-full py-5 rounded-xl bg-[#111] border border-[#333] flex items-center justify-center gap-4 cursor-default shadow-inner">
-                             <div className="w-10 h-10 rounded-full bg-[#3CFF9A]/10 flex items-center justify-center border border-[#3CFF9A]/50 shadow-[0_0_15px_rgba(60,255,154,0.2)]"><CheckIcon className="w-5 h-5 text-[#3CFF9A]" /></div>
-                             <div className="flex flex-col items-start"><span className="text-sm font-bold text-white uppercase tracking-widest">Check-in Realizado</span><span className="text-[10px] text-gray-500 font-mono">Volte amanhã para manter o ritmo</span></div>
-                         </div>
-                    ) : (
-                        <button onClick={onCheckIn} disabled={isCheckingIn} className="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all duration-300 bg-gradient-to-r from-[#FFCA4F] via-[#FFE08F] to-[#FFCA4F] bg-[length:200%_100%] animate-[shine_3s_linear_infinite] text-black border border-[#FFD36A] shadow-[0_0_35px_rgba(255,211,106,0.4)] hover:shadow-[0_0_60px_rgba(255,211,106,0.6)] hover:scale-[1.03] active:scale-[0.98] relative overflow-hidden group/btn">
-                            <span className="relative z-10 flex items-center justify-center gap-3">{isCheckingIn ? <>Sincronizando...</> : <>Fazer Check-in Agora<TrendingUpIcon className="w-5 h-5" /></>}</span>
-                        </button>
-                    )}
-                    {!hasCheckedInToday && <p className="text-center text-[10px] text-[#FFD36A] mt-4 uppercase font-bold tracking-[0.15em] drop-shadow-[0_0_10px_rgba(255,211,106,0.8)] animate-pulse">RESGATE SUAS COINS DISPONÍVEIS</p>}
+                    <button onClick={onCheckIn} disabled={checkInLoading || hasCheckedInToday} className="w-full py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all duration-300 bg-gradient-to-r from-[#FFCA4F] via-[#FFE08F] to-[#FFCA4F] bg-[length:200%_100%] animate-[shine_3s_linear_infinite] text-black border border-[#FFD36A] shadow-[0_0_35px_rgba(255,211,106,0.4)] hover:shadow-[0_0_60px_rgba(255,211,106,0.6)] hover:scale-[1.03] active:scale-[0.98] relative overflow-hidden group/btn disabled:opacity-70 disabled:hover:scale-100">
+                        <span className="relative z-10 flex items-center justify-center gap-3">
+                            {hasCheckedInToday ? (
+                                <>
+                                    {buttonLabel}
+                                    <CheckIcon className="w-5 h-5" />
+                                </>
+                            ) : (
+                                <>
+                                    {buttonLabel}
+                                    {!checkInLoading && <TrendingUpIcon className="w-5 h-5" />}
+                                </>
+                            )}
+                        </span>
+                    </button>
+                    <p className="text-center text-[10px] text-[#FFD36A] mt-4 uppercase font-bold tracking-[0.15em] drop-shadow-[0_0_10px_rgba(255,211,106,0.8)] animate-pulse">
+                        {hasCheckedInToday ? 'VOLTE AMANHÃ' : 'RESGATE SUAS COINS DISPONÍVEIS'}
+                    </p>
                 </div>
             </div>
         </div>
@@ -345,8 +357,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [checkInDone, setCheckInDone] = useState(false);
+  const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+  const lastCheckInDayRef = useRef<string | null>(null);
+
+  const getTodayRefId = useCallback(() => new Date().toISOString().split('T')[0], []);
+
+  const markCheckInDoneForToday = useCallback(() => {
+    lastCheckInDayRef.current = getTodayRefId();
+    setCheckInDone(true);
+  }, [getTodayRefId]);
 
   useEffect(() => {
     if (!user) return;
@@ -385,15 +407,84 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     fetchData();
   }, [user, isSupabase, onShowArtistOfTheDay]);
 
+  useEffect(() => {
+    if (!user) {
+        setCheckInDone(false);
+        lastUserIdRef.current = null;
+        lastCheckInDayRef.current = null;
+        return;
+    }
+
+    if (lastUserIdRef.current !== user.id) {
+        lastCheckInDayRef.current = null;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayRefId = getTodayRefId();
+    const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
+    if (lastCheckInDate) lastCheckInDate.setHours(0, 0, 0, 0);
+    const hasCheckedInToday = lastCheckInDate?.getTime() === today.getTime();
+
+    if (hasCheckedInToday) {
+        markCheckInDoneForToday();
+    } else if (lastCheckInDayRef.current === todayRefId) {
+        markCheckInDoneForToday();
+    } else {
+        setCheckInDone(false);
+    }
+
+    lastUserIdRef.current = user.id;
+  }, [user?.id, user?.lastCheckIn, getTodayRefId, markCheckInDoneForToday]);
+
+  useEffect(() => {
+    if (!isSupabase || !user || checkInDone) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    let isMounted = true;
+
+    const checkLedgerStatus = async () => {
+        setCheckInLoading(true);
+        try {
+            const todayRefId = getTodayRefId();
+            const { data: ledgerRows, error: ledgerStatusError } = await supabase
+                .from('economy_ledger')
+                .select('ref_id, refId, source, created_at')
+                .eq('user_id', user.id)
+                .eq('source', 'daily_checkin')
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (ledgerStatusError) throw ledgerStatusError;
+
+            const latestEntry = ledgerRows?.[0] as any;
+            const refId = latestEntry?.ref_id ?? latestEntry?.refId;
+
+            if (refId === todayRefId && isMounted) {
+                markCheckInDoneForToday();
+            }
+        } catch (ledgerError) {
+            console.error('Failed to verify daily check-in status.', ledgerError);
+        } finally {
+            if (isMounted) setCheckInLoading(false);
+        }
+    };
+
+    void checkLedgerStatus();
+
+    return () => { isMounted = false; };
+  }, [isSupabase, user?.id, checkInDone, getTodayRefId, markCheckInDoneForToday]);
+
   const handleDailyCheckIn = useCallback(async () => {
-    if (!user || isCheckingIn) return; 
+    if (!user || checkInLoading || checkInDone) return; 
     const supabase = getSupabase();
     if (isSupabase) {
         if (!supabase) {
             dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Supabase indisponível', message: 'Não foi possível iniciar o check-in.' } });
             return;
         }
-        setIsCheckingIn(true);
+        setCheckInLoading(true);
         Perf.mark('check_in_action');
         try {
             const response = await dailyCheckin();
@@ -401,6 +492,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
             if (alreadyCheckedIn) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
+                markCheckInDoneForToday();
             }
 
             const [{ data: profileData, error: profileError }, { data: ledgerData, error: ledgerError }] = await Promise.all([
@@ -426,6 +518,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
             if (!alreadyCheckedIn) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
+                markCheckInDoneForToday();
             }
         } catch (e: any) { 
             console.error(e); 
@@ -434,6 +527,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
             if (normalizedMessage.includes('já realizado hoje')) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
+                markCheckInDoneForToday();
             } else if (message.includes('Not authenticated')) {
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Sessão expirada', message: 'Faça login novamente para continuar.' } });
                 await supabase.auth.signOut();
@@ -442,12 +536,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
             }
         } finally { 
-            setIsCheckingIn(false); 
+            setCheckInLoading(false); 
             Perf.end('check_in_action');
         }
         return;
     }
-    setIsCheckingIn(true);
+    setCheckInLoading(true);
     Perf.mark('check_in_action');
     try {
         const api = await import('../api/index');
@@ -471,11 +565,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 updatedUser: response.updatedUser,
             });
         }
+        markCheckInDoneForToday();
     } catch (e) { console.error(e); } finally { 
-        setIsCheckingIn(false); 
+        setCheckInLoading(false); 
         Perf.end('check_in_action');
     }
-  }, [user, isCheckingIn, dispatch, isSupabase]);
+  }, [user, checkInLoading, checkInDone, dispatch, isSupabase, markCheckInDoneForToday]);
 
   const handleCloseCheckInModal = useCallback(() => {
     if (checkInResult?.updatedUser) dispatch({ type: 'UPDATE_USER', payload: checkInResult.updatedUser });
@@ -610,7 +705,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
-            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} isCheckingIn={isCheckingIn} />
+            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} />
 
             {/* FEATURED MISSION */}
             {data.featuredMission ? (
