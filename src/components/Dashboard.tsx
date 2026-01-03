@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry } from '../types';
 import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon } from '../constants';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
 import { fetchArtistOfTheDayConfig } from '../api/events/index';
 import CheckInSuccessModal from './CheckInSuccessModal';
 import CountUp from './CountUp';
@@ -13,6 +12,9 @@ import { Perf } from '../services/perf.engine';
 import { AdsTelemetry } from '../api/ads/adsTelemetry'; 
 import LoadingSkeleton from './ui/base/LoadingSkeleton';
 import { getDisplayName } from '../api/core/getDisplayName';
+import { isSupabaseProvider } from '../api/core/backendGuard';
+import { getSupabase } from '../api/supabase/client';
+import { mapProfileToUser } from '../api/supabase/mappings';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -93,7 +95,7 @@ const AdvertisementCarousel: React.FC<{ ads: Advertisement[] }> = React.memo(({ 
     );
 });
 
-const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initialArtists }) => {
+const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: boolean }> = ({ initialArtists, isSupabase }) => {
     const { state, dispatch } = useAppContext();
     const { activeUser } = state;
     const [artists, setArtists] = useState<any[]>([]);
@@ -106,7 +108,13 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
 
     useEffect(() => {
         const loadArtists = async () => {
+            if (isSupabase) {
+                setArtists(initialArtists || []);
+                setIsLoading(false);
+                return;
+            }
             try {
+                const api = await import('../api/index');
                 const data = await api.fetchArtistsOfTheDayFull();
                 setArtists(data);
                 setCurrentIndex(0);
@@ -124,7 +132,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
         loadArtists();
         const savedProgress = JSON.parse(localStorage.getItem("daily-artist-progress") || "{}");
         setProgress(savedProgress);
-    }, [state.eventSettings]);
+    }, [state.eventSettings, isSupabase, initialArtists]);
 
     useEffect(() => {
         if (!artists || artists.length <= 1) return;
@@ -153,8 +161,9 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
         if (current.links?.youtube) required++;
         
         const completedCount = Object.values(updatedArtistProgress).filter(v => v === true).length;
-        if (completedCount >= required && !updatedArtistProgress._rewarded && required > 0) {
+        if (completedCount >= required && !updatedArtistProgress._rewarded && required > 0 && !isSupabase) {
             try {
+                const api = await import('../api/index');
                 const res = await api.claimArtistOfDayReward(activeUser.id, current.id);
                 if (res.success && res.updatedUser) {
                      updatedMap[key]._rewarded = true;
@@ -166,6 +175,19 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[] }> = ({ initia
             } catch (e) { console.error("Failed to claim reward", e); }
         }
     };
+
+    if (isSupabase) {
+        return (
+            <div className="bg-[#111] p-10 rounded-[40px] border border-[#333] text-center text-gray-400 shadow-inner mt-12">
+                <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-[#222] border border-[#333] mb-4">
+                    <CrownIcon className="w-5 h-5 text-[#FFD36A]" />
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-[#FFD36A]">Em breve</span>
+                </div>
+                <p className="text-lg font-bold text-white mb-2">Artistas do Dia</p>
+                <p className="text-sm text-gray-500">Este recurso chegará em breve no modo Supabase.</p>
+            </div>
+        );
+    }
 
     if (isLoading && !current) return <LoadingSkeleton height={400} className="mt-12 rounded-[40px]" />;
     if (!current) return null;
@@ -317,6 +339,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const { state, dispatch } = useAppContext();
   const { activeUser: user, prevCoins } = state;
+  const isSupabase = isSupabaseProvider();
   const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -330,12 +353,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setIsLoading(true);
         setError(null);
         try {
-            const dashboardData = await api.fetchDashboardData();
-            setData(dashboardData);
-            if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
-                const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
-                if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
-                    onShowArtistOfTheDay(processedEntry.id);
+            if (isSupabase) {
+                setData({
+                    advertisements: [],
+                    featuredMission: null,
+                    artistsOfTheDay: [],
+                    processedArtistOfTheDayQueue: [],
+                    artistsOfTheDayIds: []
+                });
+            } else {
+                const api = await import('../api/index');
+                const dashboardData = await api.fetchDashboardData();
+                setData(dashboardData);
+                if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
+                    const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
+                    if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
+                        onShowArtistOfTheDay(processedEntry.id);
+                    }
                 }
             }
         } catch (error) {
@@ -347,13 +381,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         }
     };
     fetchData();
-  }, []);
+  }, [user, isSupabase, onShowArtistOfTheDay]);
 
   const handleDailyCheckIn = useCallback(async () => {
     if (!user || isCheckingIn) return; 
+    const supabase = getSupabase();
+    if (isSupabase) {
+        if (!supabase) {
+            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Supabase indisponível', message: 'Não foi possível iniciar o check-in.' } });
+            return;
+        }
+        setIsCheckingIn(true);
+        Perf.mark('check_in_action');
+        try {
+            const { data, error } = await supabase.rpc('daily_checkin');
+            if (error) {
+                console.error(error);
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Tente novamente em instantes.' } });
+                return;
+            }
+
+            if (data?.already_checked_in) {
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
+            }
+
+            if (data?.success) {
+                const { data: profileData, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+                if (!profileError && profileData) {
+                    const updatedUser = mapProfileToUser(profileData);
+                    dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+                }
+                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
+            }
+        } catch (e) { 
+            console.error(e); 
+            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
+        } finally { 
+            setIsCheckingIn(false); 
+            Perf.end('check_in_action');
+        }
+        return;
+    }
     setIsCheckingIn(true);
     Perf.mark('check_in_action');
     try {
+        const api = await import('../api/index');
         const response = await api.dailyCheckIn(user.id);
         if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
         if (response.coinsGained > 0 && response.updatedUser) {
@@ -378,7 +450,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setIsCheckingIn(false); 
         Perf.end('check_in_action');
     }
-  }, [user, isCheckingIn, dispatch]);
+  }, [user, isCheckingIn, dispatch, isSupabase]);
 
   const handleCloseCheckInModal = useCallback(() => {
     if (checkInResult?.updatedUser) dispatch({ type: 'UPDATE_USER', payload: checkInResult.updatedUser });
@@ -561,7 +633,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             )}
         </div>
 
-        <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} />
+        <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} isSupabase={isSupabase} />
         
         {checkInResult && <CheckInSuccessModal onClose={handleCloseCheckInModal} coinsGained={checkInResult.coinsGained} isBonus={checkInResult.isBonus} streak={checkInResult.streak} />}
       </div>
