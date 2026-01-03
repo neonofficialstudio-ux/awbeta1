@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import type { Mission, MissionFormat } from '../../types';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
 import { safeDate } from '../../api/utils/dateSafe';
+import { config } from '../../core/config';
 
 interface AdminMissionModalProps {
   mission: Mission | null;
@@ -123,9 +124,11 @@ const AdminMissionModal: React.FC<AdminMissionModalProps> = ({ mission, onClose,
         finalScheduledFor = safeScheduled.toISOString();
     }
 
+    const missionId = mission?.id || (config.backendProvider === 'supabase' ? `mission-${Date.now()}` : '');
+
     onSave({ 
         ...formData, 
-        id: mission?.id || '',
+        id: missionId,
         createdAt: mission?.createdAt || new Date().toISOString(),
         status: mission?.status || 'active',
         deadline: finalDeadlineISO,

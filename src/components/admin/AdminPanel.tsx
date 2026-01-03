@@ -1,10 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Event, Participation, UsableItemQueueEntry, CoinTransaction, FeaturedWinner, Advertisement, SubscriptionPlan, SubscriptionRequest, EventMission, EventMissionSubmission, ManualEventPointsLog, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
+import { emptyAdminDashboard } from '../../api/supabase/supabase.repositories.admin';
 
 // Component Imports
 import ManageMissions from './ManageMissions';
@@ -58,21 +59,21 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
-    const [adminData, setAdminData] = useState<any>(null);
+    const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
     
     // Local state
     const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(adminSettingsInitialSubTab || 'telemetry_pro');
     const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro' | 'stress'>('console');
 
-    const refreshAdminData = async () => {
+    const refreshAdminData = useCallback(async () => {
         try {
-            // V7 Engine Call - Background update
-            const data = AdminEngine.getDashboardData();
-            setAdminData(data);
+            const data = await Promise.resolve(AdminEngine.getDashboardData());
+            setAdminData({ ...emptyAdminDashboard, ...(data || {}) });
         } catch (error) {
             console.error("Failed to refresh admin data:", error);
+            setAdminData(emptyAdminDashboard);
         }
-    };
+    }, []);
 
     useEffect(() => {
         // Initial load only
@@ -80,7 +81,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         refreshAdminData().finally(() => {
             setIsLoading(false);
         });
-    }, []);
+    }, [refreshAdminData]);
 
     // Updated to handle sync/async returns
     const handleAdminAction = async (actionResult: any | Promise<any>) => {

@@ -2,17 +2,29 @@
 import React, { useState, useEffect } from 'react';
 import { listAllMissions } from '../../../api/index'; // Updated import path to api/index where listAllMissions is exported
 import { MissionIcon } from '../../../constants';
+import { config } from '../../../core/config';
+import { supabaseAdminRepository } from '../../../api/supabase/supabase.repositories.admin';
 
 export default function WeeklyMissionsPanel() {
   const [missions, setMissions] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchMissions = async () => {
-        // Use the API wrapper which might be async
-        const allMissions = await listAllMissions();
-        // Filter for what looks like generated weekly missions (usually contain slot info or scheduled)
-        const weekly = allMissions.filter((x: any) => x.slot || (x.status === 'scheduled' && !x.userId));
-        setMissions(weekly.slice(0, 6)); // Show only this week's batch usually
+        try {
+            let allMissions: any[] = [];
+            if (config.backendProvider === 'supabase') {
+                const { missions } = await supabaseAdminRepository.fetchAdminMissions();
+                allMissions = missions || [];
+            } else {
+                allMissions = await listAllMissions();
+            }
+            // Filter for what looks like generated weekly missions (usually contain slot info or scheduled)
+            const weekly = allMissions.filter((x: any) => !x.eventId && (x.slot || (x.status === 'scheduled' && !x.userId)));
+            setMissions(weekly.slice(0, 6)); // Show only this week's batch usually
+        } catch (error) {
+            console.error('[WeeklyMissionsPanel] Failed to load missions', error);
+            setMissions([]);
+        }
     };
     fetchMissions();
   }, []);

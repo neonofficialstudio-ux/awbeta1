@@ -10,6 +10,7 @@ import MissionGenerator from './MissionGenerator';
 import { TelemetryPRO } from '../../services/telemetry.pro';
 import { AdminMissionReviewEngine } from '../../services/admin/adminMissionReview.engine';
 import { safeString } from '../../api/helpers';
+import { config } from '../../core/config';
 
 // UI Lib
 import Card from '../ui/base/Card';
@@ -87,6 +88,35 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   // Initial Load & Refresh
   useEffect(() => {
       const loadData = () => {
+          if (config.backendProvider === 'supabase') {
+              const missionLookup = new Map(missions.map((m) => [m.id, m]));
+              let filtered = [...(initialSubmissions || [])];
+
+              if (filterStatus && filterStatus !== 'all') {
+                  filtered = filtered.filter((s) => s.status === filterStatus);
+              }
+
+              if (filterType && filterType !== 'all') {
+                  filtered = filtered.filter((s) => {
+                      const mission = missionLookup.get(s.missionId);
+                      return mission && mission.type === filterType;
+                  });
+              }
+
+              if (filterSearch) {
+                  const lower = filterSearch.toLowerCase();
+                  filtered = filtered.filter((s) => 
+                      s.userName.toLowerCase().includes(lower) ||
+                      s.missionTitle.toLowerCase().includes(lower) ||
+                      s.userId.includes(lower)
+                  );
+              }
+
+              filtered.sort((a, b) => new Date(b.submittedAtISO).getTime() - new Date(a.submittedAtISO).getTime());
+              setSubmissions(filtered);
+              return;
+          }
+
           const data = AdminMissionReviewEngine.fetchSubmissions({
               status: filterStatus,
               type: filterType,
@@ -95,7 +125,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
           setSubmissions(data);
       };
       loadData();
-  }, [filterStatus, filterType, filterSearch, refreshKey, initialSubmissions]);
+  }, [filterStatus, filterType, filterSearch, refreshKey, initialSubmissions, missions]);
 
   // Handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
