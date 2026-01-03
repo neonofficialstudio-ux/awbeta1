@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry } from '../types';
-import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon } from '../constants';
+import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry, Notification, LedgerEntry } from '../types';
+import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon, BellIcon, HistoryIcon } from '../constants';
 import { useAppContext } from '../constants';
 import { fetchArtistOfTheDayConfig } from '../api/events/index';
 import CheckInSuccessModal from './CheckInSuccessModal';
@@ -15,6 +15,7 @@ import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { mapProfileToUser } from '../api/supabase/mappings';
 import { dailyCheckin } from '../api/supabase/supabase.repositories';
+import { fetchMyLedger, fetchMyNotifications } from '../api/supabase/economy';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -351,12 +352,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, []);
 
   const { state, dispatch } = useAppContext();
-  const { activeUser: user, prevCoins } = state;
+  const { activeUser: user, prevCoins, notifications: notificationState } = state;
   const isSupabase = isSupabaseProvider();
   const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [notificationsFeed, setNotificationsFeed] = useState<Notification[]>([]);
+  const [isLedgerLoading, setIsLedgerLoading] = useState(false);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
   const [checkInDone, setCheckInDone] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
@@ -371,24 +376,52 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [getTodayRefId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+        setLedgerEntries([]);
+        setNotificationsFeed([]);
+        return;
+    }
+    let isActive = true;
     const fetchData = async () => {
         setIsLoading(true);
         setError(null);
         try {
             if (isSupabase) {
+                setIsLedgerLoading(true);
+                setIsNotificationsLoading(true);
+                const [ledgerResponse, notificationsResponse] = await Promise.all([
+                    fetchMyLedger(20, 0),
+                    fetchMyNotifications(20),
+                ]);
+
+                if (!isActive) return;
+
+                const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
+                const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
+
+                setLedgerEntries(ledgerList);
+                const newNotifications = notificationList.filter(n => !notificationState.some(existing => existing.id === n.id));
+                const mergedNotifications = [...newNotifications, ...notificationState];
+                setNotificationsFeed(mergedNotifications.length ? mergedNotifications : notificationList);
+                if (newNotifications.length) {
+                    dispatch({ type: 'ADD_NOTIFICATIONS', payload: newNotifications });
+                }
+
                 setData({
                     advertisements: [],
                     featuredMission: null,
                     artistsOfTheDay: [],
                     processedArtistOfTheDayQueue: [],
                     artistsOfTheDayIds: [],
-                    ledger: []
+                    ledger: ledgerList
                 });
             } else {
                 const api = await import('../api/index');
                 const dashboardData = await api.fetchDashboardData();
+                if (!isActive) return;
                 setData(dashboardData);
+                setLedgerEntries(dashboardData?.ledger || []);
+                setNotificationsFeed(notificationState || []);
                 if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
                     const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
                     if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
@@ -400,12 +433,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             console.error("Failed to fetch dashboard data:", error);
             setError("Não foi possível carregar os dados do dashboard.");
         } finally {
-            setIsLoading(false);
+            if (isActive) {
+                setIsLoading(false);
+                setIsLedgerLoading(false);
+                setIsNotificationsLoading(false);
+            }
             Perf.end('dashboard_mount');
         }
     };
     fetchData();
-  }, [user, isSupabase, onShowArtistOfTheDay]);
+    return () => { isActive = false; };
+  }, [user, isSupabase, onShowArtistOfTheDay, dispatch]);
+
+  useEffect(() => {
+    setNotificationsFeed(notificationState || []);
+  }, [notificationState]);
 
   useEffect(() => {
     if (!user) {
@@ -439,8 +481,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   useEffect(() => {
     if (!isSupabase || !user || checkInDone) return;
-    const supabase = getSupabase();
-    if (!supabase) return;
 
     let isMounted = true;
 
@@ -448,18 +488,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setCheckInLoading(true);
         try {
             const todayRefId = getTodayRefId();
-            const { data: ledgerRows, error: ledgerStatusError } = await supabase
-                .from('economy_ledger')
-                .select('ref_id, refId, source, created_at')
-                .eq('user_id', user.id)
-                .eq('source', 'daily_checkin')
-                .order('created_at', { ascending: false })
-                .limit(1);
+            const ledgerResponse = await fetchMyLedger(1, 0);
+            if (!ledgerResponse.success) return;
 
-            if (ledgerStatusError) throw ledgerStatusError;
-
-            const latestEntry = ledgerRows?.[0] as any;
-            const refId = latestEntry?.ref_id ?? latestEntry?.refId;
+            const sortedLedger = [...ledgerResponse.ledger].sort((a, b) => b.timestamp - a.timestamp);
+            const checkInEntries = sortedLedger.filter(entry => entry.source === 'daily_check_in' || entry.source === 'daily_checkin');
+            const latestEntry = (checkInEntries[0] || sortedLedger?.[0]) as any;
+            const refId = latestEntry?.metadata?.refId ?? latestEntry?.metadata?.ref_id;
 
             if (refId === todayRefId && isMounted) {
                 markCheckInDoneForToday();
@@ -485,6 +520,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             return;
         }
         setCheckInLoading(true);
+        setIsLedgerLoading(true);
         Perf.mark('check_in_action');
         try {
             const response = await dailyCheckin();
@@ -495,25 +531,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 markCheckInDoneForToday();
             }
 
-            const [{ data: profileData, error: profileError }, { data: ledgerData, error: ledgerError }] = await Promise.all([
+            const [{ data: profileData, error: profileError }, ledgerResponse] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', user.id).single(),
-                supabase.from('economy_ledger')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
-                    .limit(10)
+                fetchMyLedger(10, 0)
             ]);
 
             if (profileError) throw profileError;
-            if (ledgerError) throw ledgerError;
 
             if (profileData) {
                 const updatedUser = mapProfileToUser(profileData);
                 dispatch({ type: 'UPDATE_USER', payload: updatedUser });
             }
 
-            if (ledgerData) {
-                setData(prev => prev ? { ...prev, ledger: ledgerData } : prev);
+            if (ledgerResponse?.success) {
+                setLedgerEntries(ledgerResponse.ledger);
+                setData(prev => prev ? { ...prev, ledger: ledgerResponse.ledger } : prev);
             }
 
             if (!alreadyCheckedIn) {
@@ -536,7 +568,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
             }
         } finally { 
-            setCheckInLoading(false); 
+            setCheckInLoading(false);
+            setIsLedgerLoading(false);
             Perf.end('check_in_action');
         }
         return;
@@ -751,6 +784,87 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                     <p className="text-gray-600 mt-2 text-sm tracking-wide">Fique de olho para novas missões!</p>
                 </div>
             )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
+            <div className="bg-[#050505]/90 border border-[#FFD36A]/20 rounded-[28px] p-8 shadow-[0_0_30px_rgba(255,211,106,0.08)]">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-2xl bg-[#FFD36A]/10 border border-[#FFD36A]/30"><HistoryIcon className="w-5 h-5 text-[#FFD36A]" /></div>
+                        <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-[#FFD36A] font-black">Histórico</p>
+                            <h3 className="text-xl font-black text-white font-chakra uppercase tracking-tight">Transações</h3>
+                        </div>
+                    </div>
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">{ledgerEntries.length} registros</span>
+                </div>
+                <div className="space-y-3">
+                    {isLedgerLoading ? (
+                        <>
+                            <LoadingSkeleton height={64} className="rounded-2xl" />
+                            <LoadingSkeleton height={64} className="rounded-2xl" />
+                            <LoadingSkeleton height={64} className="rounded-2xl" />
+                        </>
+                    ) : ledgerEntries.length > 0 ? (
+                        ledgerEntries.slice(0, 5).map(entry => (
+                            <div key={entry.id} className="p-4 rounded-2xl bg-[#0A0A0A] border border-white/5 flex items-center justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-white font-bold truncate">{entry.description}</p>
+                                    <p className="text-[11px] text-gray-500 mt-1 uppercase tracking-wide">{entry.source || 'transação'}</p>
+                                    <p className="text-xs text-gray-600 mt-1">{new Date(entry.timestamp).toLocaleString('pt-BR')}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className={`text-lg font-black ${entry.transactionType === 'earn' ? 'text-green-400' : 'text-red-400'}`}>
+                                        {entry.transactionType === 'earn' ? '+' : '-'}{formatNumber(Math.abs(entry.amount))} {entry.type === 'XP' ? 'XP' : 'LC'}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Saldo: {formatNumber(entry.balanceAfter || 0)}</p>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="p-6 text-center text-gray-500 bg-[#0A0A0A] rounded-2xl border border-white/5">
+                            Nenhuma transação recente.
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-[#050505]/90 border border-[#3C3C3C] rounded-[28px] p-8 shadow-[0_0_30px_rgba(60,60,60,0.15)]">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-2xl bg-[#111] border border-[#333]"><BellIcon className="w-5 h-5 text-white" /></div>
+                        <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-black">Feed</p>
+                            <h3 className="text-xl font-black text-white font-chakra uppercase tracking-tight">Notificações</h3>
+                        </div>
+                    </div>
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">{notificationsFeed.length} itens</span>
+                </div>
+                <div className="space-y-3">
+                    {isNotificationsLoading ? (
+                        <>
+                            <LoadingSkeleton height={60} className="rounded-2xl" />
+                            <LoadingSkeleton height={60} className="rounded-2xl" />
+                            <LoadingSkeleton height={60} className="rounded-2xl" />
+                        </>
+                    ) : notificationsFeed.length > 0 ? (
+                        notificationsFeed.slice(0, 6).map(notification => (
+                            <div key={notification.id} className={`p-4 rounded-2xl border flex items-start gap-3 ${notification.read ? 'bg-[#0A0A0A] border-[#1F1F1F]' : 'bg-[#0F0F0F] border-[#FFD36A]/20'}`}>
+                                <div className={`w-2 h-2 mt-1 rounded-full ${notification.read ? 'bg-gray-600' : 'bg-[#FFD36A]'}`}></div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-white font-bold truncate">{notification.title}</p>
+                                    <p className="text-sm text-gray-400 mt-1 line-clamp-2">{notification.description}</p>
+                                    <p className="text-[11px] text-gray-500 mt-1">{notification.timestamp}</p>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="p-6 text-center text-gray-500 bg-[#0A0A0A] rounded-2xl border border-white/5">
+                            Nenhuma notificação por aqui.
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
 
         <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} isSupabase={isSupabase} />

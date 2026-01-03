@@ -8,6 +8,8 @@ import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import FaqItem from './ui/patterns/FaqItem';
 import { getDisplayName } from '../api/core/getDisplayName';
+import { isSupabaseProvider } from '../api/core/backendGuard';
+import { fetchLeaderboard } from '../api/supabase/economy';
 
 // --- COMPONENTS ---
 
@@ -167,6 +169,7 @@ const Ranking: React.FC = () => {
 
     const { state } = useAppContext();
     const { activeUser } = state;
+    const isSupabase = isSupabaseProvider();
     const [ranking, setRanking] = useState<RankingUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -178,7 +181,16 @@ const Ranking: React.FC = () => {
             setIsLoading(true);
             try {
                 // PATCH: Pass timeFilter to API to fetch correct ranking type (mensal vs geral)
-                let rankingData = await api.fetchRankingData(timeFilter);
+                let rankingData: RankingUser[] = [];
+
+                if (isSupabase) {
+                    const response = await fetchLeaderboard(50);
+                    if (!response.success) throw new Error(response.error || 'Falha ao carregar leaderboard');
+                    rankingData = response.leaderboard;
+                } else {
+                    rankingData = await api.fetchRankingData(timeFilter);
+                }
+
                 if (activeUser) {
                     rankingData = rankingData.map(user => ({
                         ...user,
@@ -196,7 +208,7 @@ const Ranking: React.FC = () => {
             }
         };
         fetchRanking();
-    }, [activeUser, timeFilter]); 
+    }, [activeUser, timeFilter, isSupabase]); 
 
     if (isLoading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-[#FFD65A]"></div></div>;
     if (error) return <div className="text-center text-red-500 p-10 font-bold bg-red-900/10 rounded-xl border border-red-500/30">{error}</div>;

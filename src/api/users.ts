@@ -13,6 +13,7 @@ import { getSupabase } from './supabase/client';
 import { isSupabaseProvider } from './core/backendGuard';
 import { mapProfileToUser } from './supabase/mappings';
 import { ProfileSupabase } from './supabase/profile';
+import { fetchMyLedger, fetchMyNotifications } from './supabase/economy';
 
 export const login = (email: string, password: string) => withLatency(async () => {
     try {
@@ -57,9 +58,11 @@ export const login = (email: string, password: string) => withLatency(async () =
                 joined_at: data.user?.created_at
             });
 
+            const notificationsResponse = await fetchMyNotifications(20);
+
             return {
                 user: SanityGuard.user(user),
-                notifications: [],
+                notifications: notificationsResponse.success ? notificationsResponse.notifications : [],
                 unseenAdminNotifications: [],
                 isFirstLogin: false
             };
@@ -127,7 +130,13 @@ export const checkAuthStatus = () => withLatency(async () => {
             });
         }
 
-        return { user: SanityGuard.user(profileUser), notifications: [], unseenAdminNotifications: [] };
+        const notificationsResponse = await fetchMyNotifications(20);
+
+        return { 
+            user: SanityGuard.user(profileUser), 
+            notifications: notificationsResponse.success ? notificationsResponse.notifications : [], 
+            unseenAdminNotifications: [] 
+        };
     }
 
     const rawUser = await AuthEngineV4.restoreSession();
@@ -159,23 +168,16 @@ export const dailyCheckIn = (userId: string) => withLatency(async () => {
 
         const updatedUser = SanityGuard.user(mapProfileToUser(profileData as ProfileSupabase));
 
-        const { data: ledgerData, error: ledgerError } = await supabase.from('economy_ledger')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(10);
-
-        if (ledgerError) {
-            throw new Error(ledgerError.message);
-        }
+        const ledgerResponse = await fetchMyLedger(10, 0);
+        const notificationsResponse = await fetchMyNotifications(20);
 
         return { 
             updatedUser,
-            notifications: [],
+            notifications: notificationsResponse.success ? notificationsResponse.notifications : [],
             coinsGained: (data as any)?.coins_gained ?? (data as any)?.coins ?? 0,
             isBonus: Boolean((data as any)?.is_bonus ?? (data as any)?.isBonus),
             streak: (data as any)?.streak ?? updatedUser.checkInStreak ?? updatedUser.weeklyCheckInStreak ?? 0,
-            ledger: ledgerData || []
+            ledger: ledgerResponse.success ? ledgerResponse.ledger : []
         };
     }
 
