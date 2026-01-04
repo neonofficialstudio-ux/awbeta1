@@ -72,7 +72,7 @@ export const createMissionSupabase = async (payload: CreateMissionPayload) => {
                 deadline: payload.deadline,
                 // FORCE VALID SCOPE (DB CONSTRAINT: weekly | event)
                 // Admin default = weekly
-                scope: 'weekly',
+                scope: payload.scope ?? 'weekly',
                 is_active: payload.is_active ?? true,
                 meta: payload.meta,
             })
@@ -88,6 +88,46 @@ export const createMissionSupabase = async (payload: CreateMissionPayload) => {
     } catch (err: any) {
         console.error('[SupabaseAdminMissions] createMissionSupabase failed', err);
         return { success: false as const, mission: null as any, error: err?.message || 'Falha ao criar missão' };
+    }
+};
+
+type UpdateMissionPayload = CreateMissionPayload & {
+    id: string;
+};
+
+export const updateMissionSupabase = async (payload: UpdateMissionPayload) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, mission: null as any, error: 'Supabase client not available' };
+
+    try {
+        const { data, error } = await supabase
+            .from('missions')
+            .update({
+                title: payload.title,
+                description: payload.description,
+                xp_reward: payload.xp_reward,
+                coins_reward: payload.coins_reward,
+                action_url: payload.action_url,
+                deadline: payload.deadline,
+                scope: payload.scope ?? 'weekly',
+                is_active: payload.is_active ?? true,
+                // IMPORTANTE: manter alinhado com mapMissionToApp (mission.active ?? mission.is_active)
+                active: payload.is_active ?? true,
+                meta: payload.meta,
+            })
+            .eq('id', payload.id)
+            .select('*')
+            .single();
+
+        if (error) {
+            console.error('[SupabaseAdminMissions] updateMissionSupabase error', error);
+            return { success: false as const, mission: null as any, error: error.message || 'Falha ao atualizar missão' };
+        }
+
+        return { success: true as const, mission: data, error: null as any };
+    } catch (err: any) {
+        console.error('[SupabaseAdminMissions] updateMissionSupabase failed', err);
+        return { success: false as const, mission: null as any, error: err?.message || 'Falha ao atualizar missão' };
     }
 };
 

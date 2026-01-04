@@ -1,7 +1,7 @@
 import { config } from '../../core/config';
 import { supabaseClient } from './client';
 import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStoreItemToApp } from './mappings';
-import { createMissionSupabase } from './admins/missions';
+import { createMissionSupabase, updateMissionSupabase } from './admins/missions';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
 const ensureAdminClient = async () => {
@@ -269,6 +269,8 @@ export const supabaseAdminRepository = {
 
   missions: {
     async save(mission: Mission) {
+      const isExpired = mission.status ? mission.status === 'expired' : false;
+
       const payload = {
         title: mission.title,
         description: mission.description,
@@ -276,12 +278,22 @@ export const supabaseAdminRepository = {
         coins_reward: mission.coins,
         action_url: mission.actionUrl,
         deadline: mission.deadline,
-        scope: (mission as any).scope || mission.type,
-        is_active: mission.status ? mission.status !== 'expired' : true,
+        scope: (mission as any).scope || (mission as any).type || 'weekly',
+        is_active: !isExpired,
         meta: (mission as any).meta,
       };
 
-      const result = await createMissionSupabase(payload);
+      // UPDATE se já existe id
+      if (mission.id) {
+        const result = await updateMissionSupabase({ ...payload, id: mission.id });
+        if (!result.success) {
+          return { success: false as const, mission: null as any, error: result.error || 'Falha ao atualizar missão' };
+        }
+        return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
+      }
+
+      // CREATE se não tem id
+      const result = await createMissionSupabase(payload as any);
       if (!result.success) {
         return { success: false as const, mission: null as any, error: result.error || 'Falha ao criar missão' };
       }
