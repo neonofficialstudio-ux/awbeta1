@@ -264,7 +264,22 @@ export const AdminService = {
             return MissionEngineUnified.saveMission(mission);
         },
         saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
-        delete: (...args: any[]) => { ensureMockBackend('missions.delete'); return MissionEngineUnified.deleteMission(...args as [any]); },
+        delete: async (missionId: string) => {
+            if (isSupabaseProvider()) {
+                try {
+                    const response = await supabaseAdminRepository.missions.delete(missionId);
+                    if (!response?.success) {
+                        console.error('[AdminEngine] missions.delete supabase failed', response?.error);
+                    }
+                    return response;
+                } catch (err) {
+                    console.error('[AdminEngine] missions.delete supabase path failed', err);
+                    return { success: false, error: err instanceof Error ? err.message : 'Supabase delete missão falhou' };
+                }
+            }
+            ensureMockBackend('missions.delete');
+            return MissionEngineUnified.deleteMission(missionId);
+        },
         reviewSubmission: (submissionId: string, status: 'approved' | 'rejected') => {
              // Invalidate cache
              CacheService.invalidate('admin_dashboard_data');
