@@ -253,7 +253,23 @@ export const AdminService = {
                     // 🔴 REGRA DE OURO
                     if (mission.id) {
                         // UPDATE
-                        const response = await supabaseAdminRepository.missions.update(mission.id, mission);
+                        const existing = await supabaseAdminRepository.missions.getById(mission.id);
+                        if (!existing?.success || !existing.mission) {
+                            const error = existing?.error || 'Missão não encontrada';
+                            console.error('[AdminEngine] missions.getById failed', error);
+                            return { success: false, error };
+                        }
+
+                        const safeMission = {
+                            ...existing.mission,
+                            ...mission,
+                            scope: mission.scope ?? existing.mission.scope ?? 'global',
+                        };
+
+                        const response = await supabaseAdminRepository.missions.update(
+                            mission.id,
+                            safeMission
+                        );
                         if (!response.success) {
                             console.error('[AdminEngine] missions.update failed', response.error);
                         }
