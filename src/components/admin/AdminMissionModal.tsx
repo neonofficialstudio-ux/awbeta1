@@ -124,11 +124,11 @@ const AdminMissionModal: React.FC<AdminMissionModalProps> = ({ mission, onClose,
         finalScheduledFor = safeScheduled.toISOString();
     }
 
-    const missionId = mission?.id || (config.backendProvider === 'supabase' ? `mission-${Date.now()}` : '');
+    const missionId = mission?.id; // keep DB uuid; do not generate fake ids
 
     onSave({ 
         ...formData, 
-        id: missionId,
+        ...(missionId ? { id: missionId } : {}),
         createdAt: mission?.createdAt || new Date().toISOString(),
         status: mission?.status || 'active',
         deadline: finalDeadlineISO,
