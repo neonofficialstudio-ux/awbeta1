@@ -1,7 +1,7 @@
 import { config } from '../../core/config';
 import { supabaseClient } from './client';
 import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStoreItemToApp } from './mappings';
-import { createMissionSupabase, updateMissionSupabase } from './admins/missions';
+import { missionsAdminRepository } from './repositories/admin/missions';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
 const ensureAdminClient = async () => {
@@ -57,6 +57,24 @@ const mapLedgerToTransaction = (row: any): CoinTransaction => {
     amount,
     type: amount < 0 ? 'spend' : 'earn',
     source: (row.source as any) || 'unknown',
+  };
+};
+
+const mapMissionToSupabasePayload = (mission: Mission) => {
+  const isExpired = mission.status ? mission.status === 'expired' : false;
+  const isActive = !isExpired;
+
+  return {
+    title: mission.title,
+    description: mission.description,
+    xp_reward: mission.xp,
+    coins_reward: mission.coins,
+    action_url: mission.actionUrl,
+    deadline: mission.deadline,
+    scope: (mission as any).scope || (mission as any).type || 'weekly',
+    is_active: isActive,
+    active: isActive,
+    meta: (mission as any).meta,
   };
 };
 
@@ -268,37 +286,43 @@ export const supabaseAdminRepository = {
   },
 
   missions: {
-    async save(mission: Mission) {
-      const isExpired = mission.status ? mission.status === 'expired' : false;
+    async create(mission: Mission) {
+      try {
+        const payload = mapMissionToSupabasePayload(mission);
+        const result = await missionsAdminRepository.create(payload);
 
-      const payload = {
-        title: mission.title,
-        description: mission.description,
-        xp_reward: mission.xp,
-        coins_reward: mission.coins,
-        action_url: mission.actionUrl,
-        deadline: mission.deadline,
-        scope: (mission as any).scope || (mission as any).type || 'weekly',
-        is_active: !isExpired,
-        meta: (mission as any).meta,
-      };
+        if (!result.success) {
+          return { success: false as const, mission: null as any, error: result.error || 'Falha ao criar missão' };
+        }
 
-      // UPDATE se já existe id
-      if (mission.id) {
-        const result = await updateMissionSupabase({ ...payload, id: mission.id });
+        return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] missions.create failed', err);
+        return { success: false as const, mission: null as any, error: err?.message || 'Falha ao criar missão' };
+      }
+    },
+
+    async update(missionId: string, mission: Mission) {
+      try {
+        const payload = mapMissionToSupabasePayload(mission);
+        const result = await missionsAdminRepository.update(missionId, payload);
+
         if (!result.success) {
           return { success: false as const, mission: null as any, error: result.error || 'Falha ao atualizar missão' };
         }
+
         return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] missions.update failed', err);
+        return { success: false as const, mission: null as any, error: err?.message || 'Falha ao atualizar missão' };
       }
+    },
 
-      // CREATE se não tem id
-      const result = await createMissionSupabase(payload as any);
-      if (!result.success) {
-        return { success: false as const, mission: null as any, error: result.error || 'Falha ao criar missão' };
+    async save(mission: Mission) {
+      if (mission?.id) {
+        return supabaseAdminRepository.missions.update(mission.id, mission);
       }
-
-      return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
+      return supabaseAdminRepository.missions.create(mission);
     },
 
     async delete(missionId: string) {

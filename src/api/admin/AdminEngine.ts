@@ -250,17 +250,30 @@ export const AdminService = {
         save: async (mission: any) => {
             if (isSupabaseProvider()) {
                 try {
-                    const response = await supabaseAdminRepository.missions.save(mission);
-                    if (!response?.success) {
-                        console.error('[AdminEngine] missions.save supabase failed', response?.error);
+                    // 🔴 REGRA DE OURO
+                    if (mission.id) {
+                        // UPDATE
+                        const response = await supabaseAdminRepository.missions.update(mission.id, mission);
+                        if (!response.success) {
+                            console.error('[AdminEngine] missions.update failed', response.error);
+                        }
+                        return response;
+                    } else {
+                        // INSERT
+                        const response = await supabaseAdminRepository.missions.create(mission);
+                        if (!response.success) {
+                            console.error('[AdminEngine] missions.create failed', response.error);
+                        }
+                        return response;
                     }
-                    return response;
                 } catch (err) {
-                    console.error('[AdminEngine] missions.save supabase path failed', err);
-                    return { success: false, error: err instanceof Error ? err.message : 'Supabase missão falhou' };
+                    console.error('[AdminEngine] missions.save supabase failed', err);
+                    return {
+                        success: false,
+                        error: err instanceof Error ? err.message : 'Erro ao salvar missão',
+                    };
                 }
             }
-            ensureMockBackend('missions.save');
             return MissionEngineUnified.saveMission(mission);
         },
         saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
