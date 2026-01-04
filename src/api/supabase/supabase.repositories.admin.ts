@@ -288,5 +288,22 @@ export const supabaseAdminRepository = {
 
       return { success: true as const, mission: mapMissionToApp(result.mission), error: null as any };
     },
+
+    async delete(missionId: string) {
+      const supabase = await ensureAdminClient();
+      if (!supabase) {
+        return { success: false as const, error: 'Supabase provider not enabled' };
+      }
+
+      try {
+        const { data, error } = await supabase.rpc('admin_deactivate_mission', { p_mission_id: missionId });
+        if (error) throw error;
+        const ok = (data as any)?.success !== false;
+        return { success: ok as const, error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] missions.delete failed', err);
+        return { success: false as const, error: err?.message || 'Falha ao desativar missão' };
+      }
+    },
   },
 };
