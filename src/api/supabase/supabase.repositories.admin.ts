@@ -64,28 +64,18 @@ const mapMissionToSupabasePayload = (mission: Mission) => {
   const isExpired = mission.status ? mission.status === 'expired' : false;
   const isActive = !isExpired;
 
-  // IMPORTANT: Do not guess "scope".
-  // The database has a CHECK constraint (missions_scope_check).
-  // Earlier code was incorrectly setting scope from unrelated fields (type/weekly),
-  // which breaks updates/creates. Only send scope if it truly exists.
-  const payload: any = {
+  return {
     title: mission.title,
     description: mission.description,
     xp_reward: mission.xp,
     coins_reward: mission.coins,
     action_url: mission.actionUrl,
-    deadline_at: mission.deadline,
+    deadline: mission.deadline,
+    scope: (mission as any).scope || (mission as any).type || 'weekly',
     is_active: isActive,
-    is_expired: isExpired,
-    status: mission.status,
+    active: isActive,
+    meta: (mission as any).meta,
   };
-
-  const rawScope = (mission as any)?.scope;
-  if (rawScope !== undefined && rawScope !== null && String(rawScope).trim() !== '') {
-    payload.scope = rawScope;
-  }
-
-  return payload;
 };
 
 export const emptyAdminDashboard = {
@@ -296,28 +286,23 @@ export const supabaseAdminRepository = {
   },
 
   missions: {
-    async getById(missionId: string) {
-      try {
-        const supabase = await ensureAdminClient();
-        const { data, error } = await supabase
-          .from('missions')
-          .select('*')
-          .eq('id', missionId)
-          .maybeSingle();
+        getById: async (id: string) => {
+            try {
+                const { data, error } = await supabase
+                    .from('missions')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
 
-        if (error) {
-          return { success: false as const, error: error.message, mission: null as any };
-        }
+                if (error) throw error;
+                return { success: true as const, mission: mapMissionToApp(data), error: null as any };
+            } catch (err: any) {
+                console.error('[SupabaseAdminMissions] getById failed', err);
+                return { success: false as const, mission: null as any, error: err?.message || 'Falha ao buscar missão' };
+            }
+        },
 
-        if (!data) {
-          return { success: true as const, mission: null as any };
-        }
 
-        return { success: true as const, mission: mapMissionToApp(data) };
-      } catch (e: any) {
-        return { success: false as const, error: e?.message ?? 'Falha ao buscar missão', mission: null as any };
-      }
-    },
     async create(mission: Mission) {
       try {
         const payload = mapMissionToSupabasePayload(mission);
