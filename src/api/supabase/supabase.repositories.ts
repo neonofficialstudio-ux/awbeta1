@@ -103,9 +103,14 @@ export const supabaseRepository: Repository = {
         }
 
         if (table === 'missions') {
-            const { data, error } = await supabase.from('missions').select('*').eq('is_active', true);
+            let { data, error } = await supabase.from('missions').select('*').eq('active', true);
+            if (error && (error.code === '42703' || error.message?.toLowerCase().includes('active'))) {
+                const fallback = await supabase.from('missions').select('*').eq('is_active', true);
+                data = fallback.data;
+                error = fallback.error;
+            }
             if (error) throw error;
-            return data.map((m: any) => mapMissionToApp(m));
+            return (data || []).map((m: any) => mapMissionToApp(m));
         }
 
         if (table === 'event_settings') {
