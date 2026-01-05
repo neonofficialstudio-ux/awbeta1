@@ -14,28 +14,20 @@ const ensureClient = () => {
 
 const normalizeLedgerEntry = (row: any): LedgerEntry => {
     const createdAt = row?.created_at || row?.timestamp || Date.now();
-    // RPC/backends may return different field names for the same concept.
-    // Keep broad fallbacks to avoid rendering +0 when a real credit happened.
-    const amount = Number(
-        row?.amount ??
-        row?.delta ??
-        row?.coins_delta ??
-        row?.xp_delta ??
-        row?.delta_coins ??
-        row?.delta_xp ??
-        row?.value ??
-        row?.change ??
-        row?.points ??
-        0
-    );
-    const typeRaw = (row?.currency_type || row?.currency || row?.type || 'coin').toString().toUpperCase();
+    // Current DB schema uses delta_coins / delta_xp. Keep broad fallbacks to avoid rendering +0 when a real credit happened.
+    const deltaCoins = row?.delta_coins ?? row?.deltaCoins ?? row?.coins_delta ?? row?.coinsDelta ?? row?.value ?? row?.change ?? row?.points ?? 0;
+    const deltaXp = row?.delta_xp ?? row?.deltaXp ?? row?.xp_delta ?? row?.xpDelta ?? 0;
+    const legacyAmount = row?.amount ?? row?.delta ?? row?.meta?.amount;
+    const amount = Number(legacyAmount ?? (deltaCoins !== 0 ? deltaCoins : deltaXp));
+    const typeRaw = (row?.currency_type || row?.currency || row?.type || '').toString().toUpperCase();
+    const type: LedgerEntry['type'] = typeRaw === 'XP' ? 'XP' : (deltaXp !== 0 || row?.xp_delta !== undefined || row?.delta_xp !== undefined ? 'XP' : 'COIN');
     const metadata = row?.metadata || row?.meta || {};
     const refId = row?.ref_id || row?.refId;
 
     return {
         id: row?.id || row?.ledger_id || `ledger-${createdAt}`,
         userId: row?.user_id || row?.userId || '',
-        type: typeRaw === 'XP' ? 'XP' : 'COIN',
+        type,
         amount,
         transactionType: ((row?.transaction_type || row?.direction) as TransactionType) || (amount < 0 ? 'spend' : 'earn'),
         source: (row?.source || 'unknown') as TransactionSource,
