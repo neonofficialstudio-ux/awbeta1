@@ -6,6 +6,24 @@ import { BillingBridge } from './billingBridge';
 import type { User } from '../../types';
 import { getRepository } from '../database/repository.factory';
 
+// ================================
+// TEMPORARY UNLIMITED MISSIONS BYPASS
+// ================================
+// ⚠️ TEMPORÁRIO – remover quando assinaturas entrarem
+export const UNLIMITED_MISSION_USERS = [
+  // coloque aqui SEU user_id (uuid)
+  'PUT_YOUR_USER_ID_HERE'
+];
+
+export function hasUnlimitedMissionAccess(user: { id: string; role?: string }) {
+  if (!user) return false;
+
+  if (user.role === 'admin') return true;
+  if (UNLIMITED_MISSION_USERS.includes(user.id)) return true;
+
+  return false;
+}
+
 const repo = getRepository();
 
 export const SubscriptionEngineV5 = {
@@ -38,6 +56,10 @@ export const SubscriptionEngineV5 = {
      * Verifica se o usuário atingiu o limite diário.
      */
     checkDailyLimit: (user: User): { allowed: boolean; limit: number; current: number } => {
+        if (hasUnlimitedMissionAccess(user)) {
+            return { allowed: true, limit: 9999, current: 0 };
+        }
+
         const limit = SubscriptionEngineV5.getDailyMissionLimit(user);
         
         if (limit === Infinity) return { allowed: true, limit: 9999, current: 0 };

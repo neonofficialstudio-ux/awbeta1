@@ -4,6 +4,7 @@ import type { Mission, MissionSubmission } from '../../types';
 import { mapMissionToApp } from './mappings';
 import { getDailyMissionLimit } from '../economy/economy';
 import { normalizePlan } from '../subscriptions/normalizePlan';
+import { hasUnlimitedMissionAccess } from '../subscriptions/subscriptionEngineV5';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -67,7 +68,7 @@ export const fetchMissionsSupabase = async (userId: string) => {
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(50),
-            supabase.from('profiles').select('plan').eq('id', userId).limit(1).single(),
+            supabase.from('profiles').select('plan, role').eq('id', userId).limit(1).single(),
         ]);
 
         const missions = missionsRes.error || !missionsRes.data ? [] : missionsRes.data.map(mapMissionToApp);
@@ -75,8 +76,10 @@ export const fetchMissionsSupabase = async (userId: string) => {
 
         let hasReachedDailyLimit = false;
         const plan = normalizePlan(profileRes?.data?.plan);
+        const profileRole = profileRes?.data?.role;
+        const userContext = { id: userId, role: profileRole };
         const dailyLimit = getDailyMissionLimit(plan);
-        if (dailyLimit !== null && submissions.length) {
+        if (dailyLimit !== null && submissions.length && !hasUnlimitedMissionAccess(userContext)) {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const todayCount = submissions.filter(sub => new Date(sub.submittedAtISO) >= startOfDay).length;

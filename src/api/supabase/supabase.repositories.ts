@@ -35,6 +35,22 @@ export async function dailyCheckin() {
     return data;
 }
 
+export async function hasCheckedInToday(userId: string) {
+    const supabase = getClient();
+
+    const { data, error } = await supabase
+        .rpc('has_checked_in_today', {
+            p_user_id: userId,
+        });
+
+    if (error) {
+        console.error('[CheckIn] hasCheckedInToday failed', error);
+        return false; // fallback seguro
+    }
+
+    return Boolean(data);
+}
+
 let cachedProfiles: User[] = [];
 let isRefreshingProfiles = false;
 
