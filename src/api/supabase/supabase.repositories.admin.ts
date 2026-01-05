@@ -47,8 +47,14 @@ const mapSubmission = (row: any): MissionSubmission => {
 
 const mapLedgerToTransaction = (row: any): CoinTransaction => {
   const createdAt = row.created_at || row.timestamp || new Date().toISOString();
-  const amount = Number(row.amount ?? row.delta ?? 0);
-  const description = row.description || row.title || row.source || 'Transação';
+  // Support current economy_ledger schema: delta_coins / delta_xp
+  const deltaCoins = row?.delta_coins ?? row?.coins_delta ?? row?.delta ?? 0;
+  const deltaXp = row?.delta_xp ?? row?.xp_delta ?? 0;
+  const baseAmount = row?.amount ?? row?.delta ?? null;
+  const amount = Number(baseAmount ?? (deltaCoins !== 0 ? deltaCoins : deltaXp));
+
+  const description =
+    row.description || row.title || row.source || row?.meta?.description || 'Transação';
 
   return {
     id: row.id || row.ledger_id || `ledger-${createdAt}`,
