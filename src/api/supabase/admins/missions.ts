@@ -1,5 +1,6 @@
-import type { MissionSubmission, SubmissionStatus } from '../../../types';
+import type { MissionSubmission, Notification, SubmissionStatus } from '../../../types';
 import { config } from '../../../core/config';
+import { EconomyEngine } from '../../economy';
 import { supabaseClient } from '../client';
 import { mapSubmission } from '../missions';
 
@@ -10,6 +11,178 @@ const ensureClient = () => {
         return null;
     }
     return supabaseClient;
+};
+
+const mapSupabaseNotification = (row: any): Notification => {
+    const createdAt = row?.created_at || row?.createdAt || new Date().toISOString();
+    const createdAtMs = typeof createdAt === 'number' ? createdAt : new Date(createdAt).getTime();
+
+    return {
+        id: row?.id || `notif-${createdAtMs}`,
+        userId: row?.user_id || row?.userId || '',
+        type: row?.type || row?.meta?.event,
+        title: row?.title || 'Notificação',
+        description: row?.description || row?.body || '',
+        timestamp: new Date(createdAtMs).toLocaleString('pt-BR'),
+        createdAt: createdAtMs,
+        read: Boolean(row?.read),
+        metadata: row?.meta || row?.metadata,
+    };
+};
+
+const getCurrentUserId = async () => {
+    try {
+        const supabase = ensureClient();
+        if (!supabase) return null;
+        const { data } = await supabase.auth.getUser();
+        return data?.user?.id || null;
+    } catch (err) {
+        console.warn('[SupabaseAdminMissions] Failed to fetch current user id', err);
+        return null;
+    }
+};
+
+const approveSubmissionFallback = async (submissionId: string) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, error: 'Supabase client not available' };
+
+    const { data: submission, error: submissionError } = await supabase
+        .from('mission_submissions')
+        .select('*, missions(*)')
+        .eq('id', submissionId)
+        .single();
+
+    if (submissionError || !submission) {
+        return { success: false as const, error: submissionError?.message || 'Submission não encontrada' };
+    }
+
+    if (submission.status === 'approved') {
+        return { success: true as const, data: submission, notifications: [] as Notification[] };
+    }
+
+    const mission = submission.missions;
+    if (!mission) {
+        return { success: false as const, error: 'Missão não encontrada para esta submissão' };
+    }
+
+    const xpReward = mission.xp_reward ?? 0;
+    const coinReward = mission.coins_reward ?? 0;
+
+    let updatedUser: any = null;
+
+    if (xpReward > 0) {
+        const xpRes = await EconomyEngine.addXP(submission.user_id, xpReward, `Missão: ${mission.title}`);
+        if (xpRes.success) {
+            updatedUser = xpRes.updatedUser || updatedUser;
+        } else {
+            console.warn('[SupabaseAdminMissions] XP reward failed', xpRes.error);
+        }
+    }
+
+    if (coinReward > 0) {
+        const coinRes = await EconomyEngine.addCoins(submission.user_id, coinReward, `Missão: ${mission.title}`);
+        if (coinRes.success) {
+            updatedUser = coinRes.updatedUser || updatedUser;
+        } else {
+            console.warn('[SupabaseAdminMissions] Coin reward failed', coinRes.error);
+        }
+    }
+
+    const reviewerId = await getCurrentUserId();
+    const { data: updatedSubmission, error: updateError } = await supabase
+        .from('mission_submissions')
+        .update({
+            status: 'approved',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: reviewerId,
+        })
+        .eq('id', submissionId)
+        .select('*, missions(*)')
+        .single();
+
+    if (updateError) {
+        return { success: false as const, error: updateError.message || 'Falha ao aprovar submissão' };
+    }
+
+    const { data: notifRow, error: notifError } = await supabase
+        .from('notifications')
+        .insert({
+            user_id: submission.user_id,
+            type: 'MISSION_REWARD',
+            title: 'Missão concluída!',
+            description: `Você ganhou ${xpReward} XP e ${coinReward} Coins`,
+            meta: {
+                xp: xpReward,
+                coins: coinReward,
+                mission_id: mission.id,
+                title: mission.title,
+            },
+        })
+        .select('*')
+        .single();
+
+    const notifications = notifError || !notifRow ? [] : [mapSupabaseNotification(notifRow)];
+
+    if (notifError) {
+        console.warn('[SupabaseAdminMissions] Falha ao criar notificação de missão', notifError.message);
+    }
+
+    return { success: true as const, data: updatedSubmission, updatedUser, notifications };
+};
+
+const rejectSubmissionFallback = async (submissionId: string) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, error: 'Supabase client not available' };
+
+    const { data: submission, error: submissionError } = await supabase
+        .from('mission_submissions')
+        .select('*, missions(*)')
+        .eq('id', submissionId)
+        .single();
+
+    if (submissionError || !submission) {
+        return { success: false as const, error: submissionError?.message || 'Submission não encontrada' };
+    }
+
+    if (submission.status === 'rejected') {
+        return { success: true as const, data: submission, notifications: [] as Notification[] };
+    }
+
+    const reviewerId = await getCurrentUserId();
+    const { data: updatedSubmission, error: updateError } = await supabase
+        .from('mission_submissions')
+        .update({
+            status: 'rejected',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: reviewerId,
+        })
+        .eq('id', submissionId)
+        .select('*, missions(*)')
+        .single();
+
+    if (updateError) {
+        return { success: false as const, error: updateError.message || 'Falha ao rejeitar submissão' };
+    }
+
+    const mission = updatedSubmission?.missions;
+    const { data: notifRow } = await supabase
+        .from('notifications')
+        .insert({
+            user_id: submission.user_id,
+            type: 'MISSION_REJECTED',
+            title: 'Missão rejeitada',
+            description: `Sua comprovação para "${mission?.title || 'Missão'}" foi rejeitada.`,
+            meta: {
+                mission_id: mission?.id,
+                title: mission?.title,
+            },
+        })
+        .select('*')
+        .single();
+
+    const notifications = notifRow ? [mapSupabaseNotification(notifRow)] : [];
+
+    return { success: true as const, data: updatedSubmission, notifications };
 };
 
 export const listSubmissionsSupabase = async (options: { limit?: number; offset?: number; status?: SubmissionStatus } = {}) => {
@@ -163,12 +336,28 @@ export const reviewSubmissionSupabase = async (submissionId: string, status: 'ap
 
         if (error) {
             console.error('[SupabaseAdminMissions] reviewSubmissionSupabase error', error);
-            return { success: false as const, error: error.message || 'Falha ao revisar submissão' };
+            if (status === 'approved') {
+                return approveSubmissionFallback(submissionId);
+            }
+            return rejectSubmissionFallback(submissionId);
         }
 
+        // Alguns ambientes podem retornar null/undefined quando a função não existe ou não retorna payload.
+        if (!data) {
+            console.warn('[SupabaseAdminMissions] RPC retornou vazio, usando fallback para manter recompensa/estado.');
+            if (status === 'approved') {
+                return approveSubmissionFallback(submissionId);
+            }
+            return rejectSubmissionFallback(submissionId);
+        }
+
+        // RPC SUCCESSO
         return { success: true as const, data };
     } catch (err: any) {
         console.error('[SupabaseAdminMissions] reviewSubmissionSupabase failed', err);
-        return { success: false as const, error: err?.message || 'Falha ao revisar submissão' };
+        if (status === 'approved') {
+            return approveSubmissionFallback(submissionId);
+        }
+        return rejectSubmissionFallback(submissionId);
     }
 };
