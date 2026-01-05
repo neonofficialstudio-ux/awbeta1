@@ -4,6 +4,8 @@ import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStore
 import { missionsAdminRepository } from './repositories/admin/missions';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
+export type AdminMissionFilter = 'active' | 'expired' | 'all';
+
 const ensureAdminClient = async () => {
   if (config.backendProvider !== 'supabase') return null;
   if (!supabaseClient) throw new Error('[SupabaseAdminRepo] Supabase client not initialized');
@@ -246,14 +248,61 @@ export const supabaseAdminRepository = {
     }
   },
 
-  async fetchAdminMissions() {
-    const result = await this.fetchAdminDashboard();
-    return {
-      success: result.success,
-      missions: result.data.missions,
-      submissions: result.data.missionSubmissions,
-      error: result.error,
-    };
+  async fetchAdminMissions(filter: AdminMissionFilter = 'active') {
+    const supabase = await ensureAdminClient();
+    if (!supabase) {
+      return { success: false as const, missions: [] as Mission[], submissions: [] as MissionSubmission[], error: 'Supabase provider not enabled' };
+    }
+
+    try {
+      let missionQuery = supabase.from('missions').select('*').order('created_at', { ascending: false });
+      if (filter === 'active') missionQuery = missionQuery.eq('active', true);
+      if (filter === 'expired') missionQuery = missionQuery.eq('active', false);
+
+      let missionsRes = await missionQuery;
+      if (missionsRes.error && (missionsRes.error.code === '42703' || missionsRes.error.message?.toLowerCase().includes('active'))) {
+        let fallbackQuery = supabase.from('missions').select('*').order('created_at', { ascending: false });
+        if (filter === 'active') fallbackQuery = fallbackQuery.eq('is_active', true);
+        if (filter === 'expired') fallbackQuery = fallbackQuery.eq('is_active', false);
+        missionsRes = await fallbackQuery;
+      }
+
+      const submissionsRes = await supabase
+        .from('mission_submissions')
+        .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const queryErrors = [missionsRes.error, submissionsRes.error].filter(Boolean);
+      if (queryErrors.length) {
+        throw new Error(queryErrors.map((err: any) => err.message).join(' | '));
+      }
+
+      const missions = (missionsRes.data || []).map((m: any) => mapMissionToApp(m));
+      const submissions = (submissionsRes.data || []).map((s: any) => mapSubmission(s));
+
+      return { success: true as const, missions, submissions, error: null as any };
+    } catch (err: any) {
+      console.error('[SupabaseAdminRepo] fetchAdminMissions failed', err);
+      return { success: false as const, missions: [] as Mission[], submissions: [] as MissionSubmission[], error: err?.message || 'Failed to load admin missions' };
+    }
+  },
+
+  async archiveExpiredMissions() {
+    const supabase = await ensureAdminClient();
+    if (!supabase) {
+      return { success: false as const, error: 'Supabase provider not enabled' };
+    }
+
+    try {
+      const { error } = await supabase.rpc('archive_expired_missions');
+      if (error) throw error;
+
+      return { success: true as const, error: null as any };
+    } catch (err: any) {
+      console.error('[SupabaseAdminRepo] archiveExpiredMissions failed', err);
+      return { success: false as const, error: err?.message || 'Failed to archive expired missions' };
+    }
   },
 
   async fetchAdminHallOfFame() {

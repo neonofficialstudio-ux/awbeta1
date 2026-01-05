@@ -43,7 +43,7 @@ import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
 import { assertMockProvider, isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
-import { supabaseAdminRepository, emptyAdminDashboard } from "../supabase/supabase.repositories.admin";
+import { supabaseAdminRepository, emptyAdminDashboard, type AdminMissionFilter } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
 
 // Missions scope in DB is restricted by constraint missions_scope_check:
@@ -217,18 +217,25 @@ export const AdminService = {
             };
         });
     },
-    fetchAdminMissions: async () => {
+    fetchAdminMissions: async (filter: AdminMissionFilter = 'active') => {
         if (config.backendProvider === 'supabase') {
-            const response = await supabaseAdminRepository.fetchAdminMissions();
+            const response = await supabaseAdminRepository.fetchAdminMissions(filter);
             if (!response?.success) {
                 console.error('[AdminEngine] fetchAdminMissions supabase failed', response?.error);
             }
             return response || { success: false, missions: [], submissions: [], error: 'Unknown error' };
         }
         ensureMockBackend('fetchAdminMissions');
+        const allMissions = repo.select("missions") || [];
+        const filteredMissions = filter === 'all'
+            ? allMissions
+            : allMissions.filter((m: any) => {
+                const isActive = m.isActive ?? m.active ?? m.status === 'active';
+                return filter === 'active' ? isActive : !isActive || m.status === 'expired';
+            });
         return {
             success: true,
-            missions: repo.select("missions") || [],
+            missions: filteredMissions,
             submissions: repo.select("submissions") || [],
         };
     },

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Mission, MissionSubmission, User, SubmissionStatus } from '../../types';
 import AdminMissionModal from './AdminMissionModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -12,6 +12,7 @@ import { AdminMissionReviewEngine } from '../../services/admin/adminMissionRevie
 import { safeString } from '../../api/helpers';
 import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
+import { supabaseAdminRepository, type AdminMissionFilter } from '../../api/supabase/supabase.repositories.admin';
 
 // UI Lib
 import Card from '../ui/base/Card';
@@ -63,6 +64,10 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   // State Management
   const [activeTab, setActiveTab] = useState<'manage' | 'review' | 'generator'>(initialSubTab as any || 'manage');
   const [submissions, setSubmissions] = useState<MissionSubmission[]>(initialSubmissions);
+  const [missionsData, setMissionsData] = useState<Mission[]>(missions);
+  const [missionFilter, setMissionFilter] = useState<AdminMissionFilter>('active');
+  const [isLoadingMissions, setIsLoadingMissions] = useState(false);
+  const [isArchivingExpired, setIsArchivingExpired] = useState(false);
   
   // Filters
   const [filterStatus, setFilterStatus] = useState<SubmissionStatus | 'all'>('pending');
@@ -86,12 +91,48 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   const [page, setPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
 
+  const applyLocalMissionFilter = useCallback((source: Mission[], filter: AdminMissionFilter) => {
+      if (filter === 'all') return source;
+      const isActiveFilter = filter === 'active';
+      return source.filter((mission) => {
+          const status = mission.status;
+          const isActive = mission.isActive ?? mission.active ?? (status === 'active' || status === 'scheduled');
+          return isActiveFilter ? isActive : !isActive || status === 'expired';
+      });
+  }, []);
+
+  const loadMissions = useCallback(async (filter: AdminMissionFilter) => {
+      if (config.backendProvider === 'supabase') {
+          setIsLoadingMissions(true);
+          try {
+              const response = await supabaseAdminRepository.fetchAdminMissions(filter);
+              if (response?.success) {
+                  setMissionsData(response.missions || []);
+              } else {
+                  console.error('[ManageMissions] Failed to load supabase missions', response?.error);
+                  setMissionsData([]);
+              }
+          } catch (err) {
+              console.error('[ManageMissions] Unexpected supabase missions error', err);
+              setMissionsData([]);
+          } finally {
+              setIsLoadingMissions(false);
+          }
+          return;
+      }
+      setMissionsData(applyLocalMissionFilter(missions, filter));
+  }, [applyLocalMissionFilter, missions, config.backendProvider]);
+
+  useEffect(() => {
+      void loadMissions(missionFilter);
+  }, [loadMissions, missionFilter]);
+
   // Initial Load & Refresh
   useEffect(() => {
       const loadData = async () => {
           if (config.backendProvider === 'supabase') {
               try {
-                  const missionLookup = new Map(missions.map((m) => [m.id, m]));
+                  const missionLookup = new Map(missionsData.map((m) => [m.id, m]));
                   const statusFilter = filterStatus !== 'all' ? filterStatus : undefined;
                   const response = await listSubmissionsSupabase({ status: statusFilter as any, limit: 200, offset: 0 });
                   if (!response.success) {
@@ -132,7 +173,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
           setSubmissions(data);
       };
       loadData();
-  }, [filterStatus, filterType, filterSearch, refreshKey, initialSubmissions, missions, page]);
+  }, [filterStatus, filterType, filterSearch, refreshKey, missionsData, page]);
 
   // Handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,6 +266,24 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       setRefreshKey(prev => prev + 1);
   };
 
+  const handleArchiveExpired = async () => {
+      if (config.backendProvider !== 'supabase') return;
+      setIsArchivingExpired(true);
+      try {
+          const response = await supabaseAdminRepository.archiveExpiredMissions();
+          if (!response?.success) {
+              console.error('[ManageMissions] Supabase archive expired failed', response?.error);
+          } else {
+              await loadMissions(missionFilter);
+              setRefreshKey(prev => prev + 1);
+          }
+      } catch (err) {
+          console.error('[ManageMissions] Unexpected archive expired error', err);
+      } finally {
+          setIsArchivingExpired(false);
+      }
+  };
+
   // Pagination Logic
   const paginatedData = useMemo(() => {
       const start = (page - 1) * ITEMS_PER_PAGE;
@@ -259,13 +318,54 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
         {activeTab === 'manage' && (
             <div className="p-6 bg-slate-dark border border-white/5 rounded-xl shadow-lg">
               <Toolbar 
-                start={<h3 className="text-xl font-bold text-white font-chakra">Catálogo de Missões</h3>}
+                start={
+                  <div className="flex flex-col gap-3">
+                    <h3 className="text-xl font-bold text-white font-chakra">Catálogo de Missões</h3>
+                    <div className="flex flex-wrap gap-2">
+                        <button 
+                          onClick={() => setMissionFilter('active')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border transition-all ${missionFilter === 'active' ? 'bg-green-500/20 border-green-500 text-green-400' : 'border-white/10 text-gray-400 hover:bg-white/5'}`}
+                        >
+                          Ativas
+                        </button>
+                        <button 
+                          onClick={() => setMissionFilter('expired')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border transition-all ${missionFilter === 'expired' ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-white/10 text-gray-400 hover:bg-white/5'}`}
+                        >
+                          Expiradas
+                        </button>
+                        <button 
+                          onClick={() => setMissionFilter('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border transition-all ${missionFilter === 'all' ? 'bg-white/10 border-white/30 text-white' : 'border-white/10 text-gray-400 hover:bg-white/5'}`}
+                        >
+                          Todas
+                        </button>
+                    </div>
+                  </div>
+                }
                 end={
-                  <Button onClick={() => handleOpenModal()} leftIcon={<span className="text-xl leading-none">+</span>} className="bg-navy-deep border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan hover:text-black font-bold">
-                    Adicionar Missão
-                  </Button>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    {config.backendProvider === 'supabase' && (
+                      <Button 
+                        onClick={handleArchiveExpired} 
+                        disabled={isArchivingExpired || isLoadingMissions}
+                        className="bg-gray-900 border border-yellow-500/50 text-yellow-300 hover:bg-yellow-500 hover:text-black font-bold"
+                      >
+                        {isArchivingExpired ? 'Arquivando...' : 'Arquivar expiradas agora'}
+                      </Button>
+                    )}
+                    <Button onClick={() => handleOpenModal()} leftIcon={<span className="text-xl leading-none">+</span>} className="bg-navy-deep border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan hover:text-black font-bold">
+                      Adicionar Missão
+                    </Button>
+                  </div>
                 }
               />
+              {config.backendProvider === 'supabase' && isLoadingMissions && (
+                <div className="text-xs text-gray-400 px-1 pb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    Atualizando catálogo...
+                </div>
+              )}
               <TableResponsiveWrapper className="border border-white/5 rounded-xl overflow-hidden shadow-inner">
                 <table className="w-full text-sm text-left text-gray-300">
                   <thead className="text-xs text-gray-500 uppercase bg-navy-deep/80 border-b border-white/5">
@@ -278,7 +378,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 bg-navy-deep">
-                    {missions.map(mission => (
+                    {missionsData.map(mission => (
                         <tr key={mission.id} className="hover:bg-white/5 transition-colors group">
                            <td className="px-6 py-4 text-center">
                             <button onClick={() => setFeaturedMissionId(mission.id)} className={`p-2 rounded-full transition-all ${featuredMissionId === mission.id ? 'bg-gold-cinematic/20 text-gold-cinematic' : 'text-gray-600 hover:text-white'}`}>
