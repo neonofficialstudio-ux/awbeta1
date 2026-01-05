@@ -14,7 +14,7 @@ import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { mapProfileToUser } from '../api/supabase/mappings';
-import { dailyCheckin } from '../api/supabase/supabase.repositories';
+import { dailyCheckin, hasCheckedInToday } from '../api/supabase/supabase.repositories';
 import { fetchMyLedger, fetchMyNotifications, markNotificationRead } from '../api/supabase/economy';
 
 interface DashboardProps {
@@ -259,7 +259,15 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
     );
 };
 
-const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone }) => {
+const SkeletonCheckIn = () => (
+    <LoadingSkeleton height={360} className="rounded-[32px]" />
+);
+
+const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean, isLoading?: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone, isLoading = false }) => {
+    if (isLoading) {
+        return <SkeletonCheckIn />;
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
@@ -355,6 +363,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const { activeUser: user, prevCoins, notifications: notificationState } = state;
   const isSupabase = isSupabaseProvider();
   const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
+  const isCheckInStatusLoading = isSupabase && checkedIn === null;
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -364,6 +373,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
   const [checkInDone, setCheckInDone] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
+  const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
@@ -577,8 +587,39 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [notificationState]);
 
   useEffect(() => {
+    if (!isSupabase || !user) {
+        setCheckedIn(false);
+        return;
+    }
+
+    let isActive = true;
+    setCheckedIn(null);
+
+    const loadCheckinStatus = async () => {
+        try {
+            const result = await hasCheckedInToday(user.id);
+            if (!isActive) return;
+            setCheckedIn(result);
+            if (result) {
+                markCheckInDoneForToday();
+            } else {
+                setCheckInDone(false);
+            }
+        } catch (error) {
+            console.error('[CheckIn] failed to load status', error);
+            if (isActive) setCheckedIn(false);
+        }
+    };
+
+    void loadCheckinStatus();
+
+    return () => { isActive = false; };
+  }, [isSupabase, user?.id, markCheckInDoneForToday]);
+
+  useEffect(() => {
     if (!user) {
         setCheckInDone(false);
+        setCheckedIn(null);
         lastUserIdRef.current = null;
         lastCheckInDayRef.current = null;
         return;
@@ -607,7 +648,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [user?.id, user?.lastCheckIn, getTodayRefId, markCheckInDoneForToday]);
 
   useEffect(() => {
-    if (!isSupabase || !user || checkInDone) return;
+    if (!isSupabase || !user || checkInDone || checkedIn === null) return;
 
     let isMounted = true;
 
@@ -636,10 +677,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     void checkLedgerStatus();
 
     return () => { isMounted = false; };
-  }, [isSupabase, user?.id, checkInDone, getTodayRefId, markCheckInDoneForToday]);
+  }, [isSupabase, user?.id, checkInDone, checkedIn, getTodayRefId, markCheckInDoneForToday]);
 
   const handleDailyCheckIn = useCallback(async () => {
-    if (!user || checkInLoading || checkInDone) return; 
+    if (!user || checkInLoading || checkInDone || isCheckInStatusLoading) return; 
     const supabase = getSupabase();
     if (isSupabase) {
         if (!supabase) {
@@ -730,7 +771,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setCheckInLoading(false); 
         Perf.end('check_in_action');
     }
-  }, [user, checkInLoading, checkInDone, dispatch, isSupabase, markCheckInDoneForToday]);
+  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, isSupabase, markCheckInDoneForToday]);
 
   const handleCloseCheckInModal = useCallback(() => {
     if (checkInResult?.updatedUser) dispatch({ type: 'UPDATE_USER', payload: checkInResult.updatedUser });
@@ -865,7 +906,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
-            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} />
+            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} isLoading={isCheckInStatusLoading} />
 
             {/* FEATURED MISSION */}
             {data.featuredMission ? (

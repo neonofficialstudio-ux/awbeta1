@@ -22,6 +22,7 @@ import { validateEconomyTransaction } from './consistency/consistencyEngine';
 import { checkDailyLimitsRespected } from './economy/economySanityCheck';
 import { applyUserHeals } from './economy/economyAutoHeal';
 import { addPerformanceLog } from './logs/performance';
+import { hasUnlimitedMissionAccess } from './subscriptions/subscriptionEngineV5';
 
 export const fetchDashboardData = () => withLatency(() => {
     const now = new Date();
@@ -59,7 +60,7 @@ export const fetchMissions = (userId: string) => withLatency(() => {
     const limit = getDailyMissionLimit(user.plan);
     let hasReachedDailyLimit = false;
 
-    if (limit !== null) {
+    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const submissionsToday = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
@@ -144,7 +145,7 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
     const notifications: Notification[] = [];
     const limit = getDailyMissionLimit(user.plan);
     
-    if (limit !== null) {
+    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const submissionsToday = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
@@ -213,7 +214,7 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
     }
 
     let hasReachedDailyLimit = false;
-    if (limit !== null) {
+    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const submissionsTodayAfter = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
