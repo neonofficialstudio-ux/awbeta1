@@ -248,49 +248,46 @@ export const AdminService = {
 
     missions: {
         save: async (mission: any) => {
-            if (isSupabaseProvider()) {
-                try {
-                    // 🔴 REGRA DE OURO
-                    if (mission.id) {
-                        // UPDATE
-                        const existing = await supabaseAdminRepository.missions.getById(mission.id);
-                        if (!existing?.success || !existing.mission) {
-                            const error = existing?.error || 'Missão não encontrada';
-                            console.error('[AdminEngine] missions.getById failed', error);
-                            return { success: false, error };
-                        }
-
-                        const safeMission = {
-                            ...existing.mission,
-                            ...mission,
-                            scope: mission.scope ?? existing.mission.scope ?? 'global',
-                        };
-
-                        const response = await supabaseAdminRepository.missions.update(
-                            mission.id,
-                            safeMission
-                        );
-                        if (!response.success) {
-                            console.error('[AdminEngine] missions.update failed', response.error);
-                        }
-                        return response;
-                    } else {
-                        // INSERT
-                        const response = await supabaseAdminRepository.missions.create(mission);
-                        if (!response.success) {
-                            console.error('[AdminEngine] missions.create failed', response.error);
-                        }
-                        return response;
-                    }
-                } catch (err) {
-                    console.error('[AdminEngine] missions.save supabase failed', err);
-                    return {
-                        success: false,
-                        error: err instanceof Error ? err.message : 'Erro ao salvar missão',
-                    };
-                }
+            if (!isSupabaseProvider()) {
+                return MissionEngineUnified.saveMission(mission);
             }
-            return MissionEngineUnified.saveMission(mission);
+
+            try {
+                // 🔒 NORMALIZAÇÃO OBRIGATÓRIA
+                const safeMission = {
+                    ...mission,
+                    scope: mission.scope ?? 'global',
+                };
+
+                // UPDATE
+                if (safeMission.id) {
+                    const response = await supabaseAdminRepository.missions.update(
+                        safeMission.id,
+                        safeMission
+                    );
+
+                    if (!response.success) {
+                        console.error('[AdminEngine] missions.update failed', response.error);
+                    }
+
+                    return response;
+                }
+
+                // CREATE
+                const response = await supabaseAdminRepository.missions.create(safeMission);
+
+                if (!response.success) {
+                    console.error('[AdminEngine] missions.create failed', response.error);
+                }
+
+                return response;
+            } catch (err) {
+                console.error('[AdminEngine] missions.save failed', err);
+                return {
+                    success: false,
+                    error: err instanceof Error ? err.message : 'Erro ao salvar missão',
+                };
+            }
         },
         saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
         delete: async (missionId: string) => {
