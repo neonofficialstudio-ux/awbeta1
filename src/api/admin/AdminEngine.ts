@@ -261,21 +261,13 @@ export const AdminService = {
                 try {
                     // UPDATE
                     if (mission.id) {
-                        const existing = await supabaseAdminRepository.missions.getById(mission.id);
-                        if (!existing?.success || !existing?.mission) {
-                            const error = existing?.error || 'Missão não encontrada';
-                            console.error('[AdminEngine] missions.getById failed', error);
-                            return { success: false, error };
-                        }
-
                         const safeMission = {
-                            ...existing.mission,
                             ...mission,
-                            scope: normalizeMissionScope(mission.scope ?? existing.mission.scope ?? mission.type),
+                            scope: normalizeMissionScope(mission.scope ?? mission.type),
                         };
 
                         const response = await supabaseAdminRepository.missions.update(
-                            safeMission.id,
+                            mission.id,
                             safeMission
                         );
 
