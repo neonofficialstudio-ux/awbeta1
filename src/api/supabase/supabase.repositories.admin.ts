@@ -60,6 +60,22 @@ const mapLedgerToTransaction = (row: any): CoinTransaction => {
   };
 };
 
+const normalizeMissionScope = (raw: any) => {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return 'global';
+
+  // Compat com valores antigos/legados
+  const map: Record<string, string> = {
+    weekly: 'global',
+    daily: 'global',
+    public: 'global',
+    all: 'global',
+    general: 'global',
+  };
+
+  return map[s] ?? s;
+};
+
 const mapMissionToSupabasePayload = (mission: Mission) => {
   const isExpired = mission.status ? mission.status === 'expired' : false;
   const isActive = !isExpired;
@@ -71,7 +87,7 @@ const mapMissionToSupabasePayload = (mission: Mission) => {
     coins_reward: mission.coins,
     action_url: mission.actionUrl,
     deadline: mission.deadline,
-    scope: (mission as any).scope || (mission as any).type || 'weekly',
+    scope: normalizeMissionScope((mission as any).scope ?? (mission as any).type),
     is_active: isActive,
     active: isActive,
     meta: (mission as any).meta,
