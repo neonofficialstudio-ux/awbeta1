@@ -21,6 +21,8 @@ const normalizeLedgerEntry = (row: any): LedgerEntry => {
         row?.delta ??
         row?.coins_delta ??
         row?.xp_delta ??
+        row?.delta_coins ??
+        row?.delta_xp ??
         row?.value ??
         row?.change ??
         row?.points ??
