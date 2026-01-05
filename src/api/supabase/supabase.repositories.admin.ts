@@ -80,11 +80,12 @@ const mapMissionToSupabasePayload = (mission: Mission) => {
   const isExpired = mission.status ? mission.status === 'expired' : false;
   const isActive = !isExpired;
 
-  // Persist UI-only fields (format/platform/icon) inside meta jsonb.
-  // The missions table doesn't have dedicated columns for these.
+  // Persist UI-only fields (format/platform/icon) inside meta jsonb
+  // and mirror "format" into the dedicated column for analytics/filters.
+  const format = (mission as any).format;
   const baseMeta: Record<string, any> = (mission as any).meta ?? {};
   const mergedMeta: Record<string, any> = { ...baseMeta };
-  if ((mission as any).format) mergedMeta.format = (mission as any).format;
+  if (format !== undefined) mergedMeta.format = format;
   if ((mission as any).platform) mergedMeta.platform = (mission as any).platform;
   if ((mission as any).icon) mergedMeta.icon = (mission as any).icon;
 
@@ -96,6 +97,7 @@ const mapMissionToSupabasePayload = (mission: Mission) => {
     action_url: mission.actionUrl,
     deadline: mission.deadline,
     scope: normalizeMissionScope((mission as any).scope ?? (mission as any).type),
+    format,
     is_active: isActive,
     active: isActive,
     meta: mergedMeta,
