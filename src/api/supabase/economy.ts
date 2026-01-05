@@ -14,7 +14,18 @@ const ensureClient = () => {
 
 const normalizeLedgerEntry = (row: any): LedgerEntry => {
     const createdAt = row?.created_at || row?.timestamp || Date.now();
-    const amount = Number(row?.amount ?? row?.delta ?? 0);
+    // RPC/backends may return different field names for the same concept.
+    // Keep broad fallbacks to avoid rendering +0 when a real credit happened.
+    const amount = Number(
+        row?.amount ??
+        row?.delta ??
+        row?.coins_delta ??
+        row?.xp_delta ??
+        row?.value ??
+        row?.change ??
+        row?.points ??
+        0
+    );
     const typeRaw = (row?.currency_type || row?.currency || row?.type || 'coin').toString().toUpperCase();
     const metadata = row?.metadata || row?.meta || {};
     const refId = row?.ref_id || row?.refId;
