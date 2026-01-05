@@ -17,9 +17,13 @@ export interface Mission {
   createdAt: string;
   deadline: string;
   status: 'active' | 'expired' | 'scheduled';
-  scheduledFor?: string; // ISO String for scheduled release
+  scheduledFor?: string | null; // ISO String for scheduled release
   format?: MissionFormat; 
   platform?: string; // 'Instagram', 'TikTok', 'YouTube', etc.
+  icon?: string;
+  scope?: string;
+  isActive?: boolean;
+  meta?: Record<string, any>;
   
   // Admin Generator Props
   slot?: string;

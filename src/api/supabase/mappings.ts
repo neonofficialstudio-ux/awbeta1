@@ -79,19 +79,30 @@ export const mapMissionToApp = (mission: any): Mission => {
     const status = mission.status || (isActive ? 'active' : 'expired');
     const scheduledFor = mission.scheduled_for || mission.available_at;
     const coinReward = mission.coins_reward ?? mission.coins;
+    const meta = mission.meta ?? {};
+    const format = meta.format ?? mission.format ?? 'link';
+    const platform = meta.platform ?? mission.platform;
+    const icon = meta.icon ?? mission.icon;
+    const scope = mission.scope;
 
     return {
         id: mission.id,
         title: mission.title,
         description: mission.description,
-        xp: mission.xp_reward,
-        coins: coinReward,
+        xp: mission.xp_reward || 0,
+        coins: coinReward || 0,
         type: mission.type || 'creative',
         actionUrl: mission.action_url,
         createdAt: mission.created_at,
         deadline: mission.deadline || new Date(Date.now() + 86400000).toISOString(),
         status: status as Mission['status'],
-        scheduledFor,
+        scheduledFor: scheduledFor || null,
+        isActive,
+        scope,
+        format,
+        platform,
+        icon,
+        meta,
     };
 };
 
