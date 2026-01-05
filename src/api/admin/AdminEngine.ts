@@ -46,6 +46,15 @@ import { config } from "../../core/config";
 import { supabaseAdminRepository, emptyAdminDashboard } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
 
+// Missions scope in DB is restricted by constraint missions_scope_check:
+// allowed: 'weekly' | 'event'
+const normalizeMissionScope = (value: any): 'weekly' | 'event' => {
+    const s = String(value ?? '').toLowerCase().trim();
+    if (s === 'event') return 'event';
+    // Anything else (including 'global', 'daily', '', null) => 'weekly'
+    return 'weekly';
+};
+
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
 
@@ -248,46 +257,48 @@ export const AdminService = {
 
     missions: {
         save: async (mission: any) => {
-            if (!isSupabaseProvider()) {
-                return MissionEngineUnified.saveMission(mission);
-            }
+            if (isSupabaseProvider()) {
+                try {
+                    // UPDATE
+                    if (mission.id) {
+                        const existing = await supabaseAdminRepository.missions.getById(mission.id);
+                        if (!existing?.success || !existing?.mission) {
+                            const error = existing?.error || 'Missão não encontrada';
+                            console.error('[AdminEngine] missions.getById failed', error);
+                            return { success: false, error };
+                        }
 
-            try {
-                // 🔒 NORMALIZAÇÃO OBRIGATÓRIA
-                const safeMission = {
-                    ...mission,
-                    scope: mission.scope ?? 'global',
-                };
+                        const safeMission = {
+                            ...existing.mission,
+                            ...mission,
+                            scope: normalizeMissionScope(mission.scope ?? existing.mission.scope ?? mission.type),
+                        };
 
-                // UPDATE
-                if (safeMission.id) {
-                    const response = await supabaseAdminRepository.missions.update(
-                        safeMission.id,
-                        safeMission
-                    );
+                        const response = await supabaseAdminRepository.missions.update(
+                            safeMission.id,
+                            safeMission
+                        );
 
-                    if (!response.success) {
-                        console.error('[AdminEngine] missions.update failed', response.error);
+                        if (!response.success) {
+                            console.error('[AdminEngine] missions.update failed', response.error);
+                        }
+                        return response;
                     }
 
+                    // CREATE
+                    const safeMission = { ...mission, scope: normalizeMissionScope(mission.scope ?? mission.type) };
+                    const response = await supabaseAdminRepository.missions.create(safeMission);
+                    if (!response.success) {
+                        console.error('[AdminEngine] missions.create failed', response.error);
+                    }
                     return response;
+                } catch (err) {
+                    console.error('[AdminEngine] missions.save supabase failed', err);
+                    return { success: false, error: err instanceof Error ? err.message : 'Erro ao salvar missão' };
                 }
-
-                // CREATE
-                const response = await supabaseAdminRepository.missions.create(safeMission);
-
-                if (!response.success) {
-                    console.error('[AdminEngine] missions.create failed', response.error);
-                }
-
-                return response;
-            } catch (err) {
-                console.error('[AdminEngine] missions.save failed', err);
-                return {
-                    success: false,
-                    error: err instanceof Error ? err.message : 'Erro ao salvar missão',
-                };
             }
+
+            return MissionEngineUnified.saveMission(mission);
         },
         saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
         delete: async (missionId: string) => {
