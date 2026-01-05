@@ -15,6 +15,23 @@ export async function dailyCheckin() {
     const supabase = getClient();
     const { data, error } = await supabase.rpc('daily_checkin');
     if (error) throw error;
+
+    // UI uses profiles.last_check_in to decide if the check-in button should appear after reload.
+    // Some DB implementations only write ledger rows; ensure last_check_in is updated.
+    try {
+        if (data?.success) {
+            const { data: userData } = await supabase.auth.getUser();
+            const uid = userData?.user?.id;
+            if (uid) {
+                await supabase
+                    .from('profiles')
+                    .update({ last_check_in: new Date().toISOString() })
+                    .eq('id', uid);
+            }
+        }
+    } catch {
+        // non-fatal: even if this fails, check-in still works via RPC
+    }
     return data;
 }
 
