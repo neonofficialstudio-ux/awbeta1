@@ -74,9 +74,11 @@ export const fetchMissionsSupabase = async (userId: string) => {
         const submissions = submissionsRes.error || !submissionsRes.data ? [] : submissionsRes.data.map(mapSubmission);
 
         let hasReachedDailyLimit = false;
-        const plan = normalizePlan(profileRes?.data?.plan);
-        const profileRole = profileRes?.data?.role;
-        const userContext = { id: userId, plan, role: profileRole } as any;
+        const userContext = {
+            id: userId,
+            role: (profileRes.data as any)?.role || ('user' as const),
+            plan: normalizePlan((profileRes.data as any)?.plan) || null,
+        };
         const rawLimit = SubscriptionEngineV5.getDailyMissionLimit(userContext);
         const dailyLimit = Number.isFinite(rawLimit) ? rawLimit : null;
 
