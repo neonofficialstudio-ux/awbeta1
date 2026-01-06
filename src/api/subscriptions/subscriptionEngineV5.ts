@@ -56,6 +56,11 @@ export const SubscriptionEngineV5 = {
      * Verifica se o usuário atingiu o limite diário.
      */
     checkDailyLimit: (user: User): { allowed: boolean; limit: number; current: number } => {
+        // 🔓 Hitmaker bypass – always allow submissions for this plan
+        if (user?.plan === 'Hitmaker') {
+            return { allowed: true, limit: 9999, current: 0 };
+        }
+
         if (hasUnlimitedMissionAccess(user)) {
             return { allowed: true, limit: 9999, current: 0 };
         }
