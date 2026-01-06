@@ -57,17 +57,16 @@ export const fetchMissions = (userId: string) => withLatency(() => {
     const user = db.allUsersData.find(u => u.id === userId);
     if (!user) throw new Error("User not found");
 
-    const limit = getDailyMissionLimit(user.plan);
-    let hasReachedDailyLimit = false;
+    const dailyLimit = getDailyMissionLimit(user.plan);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const submissionsTodayCount = db.missionSubmissionsData
+        .filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
 
-    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const submissionsToday = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
-        if (submissionsToday >= limit) {
-            hasReachedDailyLimit = true;
-        }
-    }
+    const hasReachedDailyLimit =
+        dailyLimit === null
+            ? false
+            : (!hasUnlimitedMissionAccess(user) && submissionsTodayCount >= dailyLimit);
 
     // Filter logic: Only show missions that are NOT scheduled for the future
     // If scheduledFor is undefined/null, it is shown immediately.
@@ -143,20 +142,21 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
     }
     
     const notifications: Notification[] = [];
-    const limit = getDailyMissionLimit(user.plan);
-    
-    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const submissionsToday = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
+    const dailyLimit = getDailyMissionLimit(user.plan);
+    const hasUnlimitedAccess = hasUnlimitedMissionAccess(user);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const submissionsToday = db.missionSubmissionsData
+        .filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
 
+    if (dailyLimit !== null && !hasUnlimitedAccess) {
       // --- ECONOMY SANITY CHECK ---
       const limitCheck = checkDailyLimitsRespected(user, submissionsToday + 1);
       if (!limitCheck.ok) console.warn("[ECONOMY SANITY WARNING]", limitCheck.reason);
       // ----------------------------
 
-      if (submissionsToday >= limit) {
-        throw new Error(`Você já enviou o máximo de ${limit} ${limit > 1 ? 'missões' : 'missão'} hoje.`);
+      if (submissionsToday >= dailyLimit) {
+        throw new Error(`Você já enviou o máximo de ${dailyLimit} ${dailyLimit > 1 ? 'missões' : 'missão'} hoje.`);
       }
     }
 
@@ -213,15 +213,12 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
         notifications.push(adminNotification);
     }
 
-    let hasReachedDailyLimit = false;
-    if (limit !== null && !hasUnlimitedMissionAccess(user)) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const submissionsTodayAfter = db.missionSubmissionsData.filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
-        if (submissionsTodayAfter >= limit) {
-            hasReachedDailyLimit = true;
-        }
-    }
+    const submissionsTodayAfter = db.missionSubmissionsData
+        .filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
+    const hasReachedDailyLimit =
+        dailyLimit === null
+            ? false
+            : (!hasUnlimitedAccess && submissionsTodayAfter >= dailyLimit);
 
     return { updatedUser, newSubmission, notifications, hasReachedDailyLimit };
 });
