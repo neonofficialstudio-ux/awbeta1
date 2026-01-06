@@ -363,7 +363,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const { activeUser: user, prevCoins, notifications: notificationState } = state;
   const isSupabase = isSupabaseProvider();
   const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
-  const isCheckInStatusLoading = isSupabase && checkedIn === null;
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -374,6 +373,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkInDone, setCheckInDone] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
+  const isCheckInStatusLoading = isSupabase && checkedIn === null;
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
