@@ -16,15 +16,15 @@ export const UNLIMITED_MISSION_USERS = [
 ];
 
 export const hasUnlimitedMissionAccess = (user: { id: string; role?: string; plan?: string | null }) => {
-  const role = (user.role || '').toLowerCase();
-  const plan = (user.plan || '').toLowerCase();
+  const role = (user.role || '').trim().toLowerCase();
+  const plan = (user.plan || '').trim().toLowerCase();
 
   // admin/owner sempre ilimitado
   if (role === 'admin' || role === 'owner') return true;
 
   // Hitmaker ilimitado (por role OU por plan)
   if (role === 'hitmaker') return true;
-  if (plan.includes('hitmaker')) return true;
+  if (plan === 'hitmaker') return true;
 
   return false;
 };
