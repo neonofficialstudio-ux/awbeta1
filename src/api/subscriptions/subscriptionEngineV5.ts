@@ -15,11 +15,16 @@ export const UNLIMITED_MISSION_USERS = [
   'PUT_YOUR_USER_ID_HERE'
 ];
 
-export function hasUnlimitedMissionAccess(user: { id: string; role?: string }) {
+export function hasUnlimitedMissionAccess(user: { id: string; role?: string; plan?: string }) {
   if (!user) return false;
 
   if (user.role === 'admin') return true;
   if (UNLIMITED_MISSION_USERS.includes(user.id)) return true;
+
+  // ✅ Plano com missões ilimitadas
+  // (mantém compatibilidade com chamadas antigas que só passam {id, role})
+  const plan = (user.plan || '').trim();
+  if (plan === 'Hitmaker' || plan === 'Legendary') return true;
 
   return false;
 }
