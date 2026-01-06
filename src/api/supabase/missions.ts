@@ -2,9 +2,8 @@ import { supabaseClient } from './client';
 import { config } from '../../core/config';
 import type { Mission, MissionSubmission } from '../../types';
 import { mapMissionToApp } from './mappings';
-import { getDailyMissionLimit } from '../economy/economy';
 import { normalizePlan } from '../subscriptions/normalizePlan';
-import { hasUnlimitedMissionAccess } from '../subscriptions/subscriptionEngineV5';
+import { SubscriptionEngineV5 } from '../subscriptions';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -77,9 +76,11 @@ export const fetchMissionsSupabase = async (userId: string) => {
         let hasReachedDailyLimit = false;
         const plan = normalizePlan(profileRes?.data?.plan);
         const profileRole = profileRes?.data?.role;
-        const userContext = { id: userId, role: profileRole };
-        const dailyLimit = getDailyMissionLimit(plan);
-        if (dailyLimit !== null && submissions.length && !hasUnlimitedMissionAccess(userContext)) {
+        const userContext = { id: userId, plan, role: profileRole } as any;
+        const rawLimit = SubscriptionEngineV5.getDailyMissionLimit(userContext);
+        const dailyLimit = Number.isFinite(rawLimit) ? rawLimit : null;
+
+        if (dailyLimit !== null && submissions.length) {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const todayCount = submissions.filter(sub => new Date(sub.submittedAtISO) >= startOfDay).length;
