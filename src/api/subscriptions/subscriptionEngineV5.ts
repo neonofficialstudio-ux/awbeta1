@@ -15,19 +15,19 @@ export const UNLIMITED_MISSION_USERS = [
   'PUT_YOUR_USER_ID_HERE'
 ];
 
-export function hasUnlimitedMissionAccess(user: { id: string; role?: string; plan?: string }) {
-  if (!user) return false;
+export const hasUnlimitedMissionAccess = (user: { id: string; role?: string; plan?: string | null }) => {
+  const role = (user.role || '').toLowerCase();
+  const plan = (user.plan || '').toLowerCase();
 
-  if (user.role === 'admin') return true;
-  if (UNLIMITED_MISSION_USERS.includes(user.id)) return true;
+  // admin/owner sempre ilimitado
+  if (role === 'admin' || role === 'owner') return true;
 
-  // ✅ Plano com missões ilimitadas
-  // (mantém compatibilidade com chamadas antigas que só passam {id, role})
-  const plan = (user.plan || '').trim();
-  if (plan === 'Hitmaker' || plan === 'Legendary') return true;
+  // Hitmaker ilimitado (por role OU por plan)
+  if (role === 'hitmaker') return true;
+  if (plan.includes('hitmaker')) return true;
 
   return false;
-}
+};
 
 const repo = getRepository();
 
