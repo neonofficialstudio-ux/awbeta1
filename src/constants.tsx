@@ -1,7 +1,10 @@
 
 import React from 'react';
 import type { IconComponent } from './types';
-import { AppContext } from './state/context';
+
+// Re-export do hook real do AppState.
+// Mantém compatibilidade com imports legados: import { useAppContext } from '../constants'
+export { useAppContext } from './state/context';
 
 // Icons
 export const DashboardIcon: IconComponent = (props) => (
