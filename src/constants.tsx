@@ -1,7 +1,6 @@
 
 import React from 'react';
 import type { IconComponent } from './types';
-import { AppContext } from './state/context';
 
 // Icons
 export const DashboardIcon: IconComponent = (props) => (
