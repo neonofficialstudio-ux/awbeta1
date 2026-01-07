@@ -98,31 +98,73 @@ export const fetchMissionsSupabase = async (userId: string) => {
 
 export const submitMissionSupabase = async (_userId: string, missionId: string, proof: string) => {
     const supabase = ensureClient();
-    if (!supabase) return { success: false as const, newSubmission: undefined, updatedUser: undefined, message: 'Supabase client not available' };
+    if (!supabase) {
+        return {
+            success: false as const,
+            newSubmission: undefined,
+            updatedUser: undefined,
+            message: 'Supabase client not available',
+        };
+    }
 
     try {
-        const { data, error } = await supabase.rpc('submit_mission', {
+        // ✅ Use the idempotent RPC: submit_mission(uuid, text, jsonb) returns uuid
+        const { data: submissionId, error } = await supabase.rpc('submit_mission', {
             p_mission_id: missionId,
-            p_proof: proof,
+            p_proof_url: proof,
+            p_meta: {},
         });
 
         if (error) {
-            console.error('[SupabaseMissions] submitMissionSupabase error', error);
-            return { success: false as const, newSubmission: undefined, updatedUser: undefined, message: error.message || 'Falha ao enviar missão' };
+            console.error('[SupabaseMissions] submitMissionSupabase rpc error', error);
+            return {
+                success: false as const,
+                newSubmission: undefined,
+                updatedUser: undefined,
+                message: error.message || 'Falha ao enviar missão',
+            };
         }
 
-        const submissionPayload: any = Array.isArray(data)
-            ? data[0]
-            : (data?.new_submission || data?.submission || data);
+        // If RPC returned an existing submission id (idempotent), fetch it to map correctly
+        if (!submissionId) {
+            return {
+                success: true as const,
+                newSubmission: undefined,
+                updatedUser: undefined,
+                message: 'Missão enviada com sucesso.',
+            };
+        }
+
+        const { data: row, error: fetchErr } = await supabase
+            .from('mission_submissions')
+            .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+            .eq('id', submissionId)
+            .limit(1)
+            .single();
+
+        if (fetchErr) {
+            console.error('[SupabaseMissions] submitMissionSupabase fetch error', fetchErr);
+            return {
+                success: true as const,
+                newSubmission: undefined,
+                updatedUser: undefined,
+                message: 'Missão enviada com sucesso.',
+            };
+        }
 
         return {
             success: true as const,
-            newSubmission: submissionPayload ? mapSubmission(submissionPayload) : undefined,
+            newSubmission: row ? mapSubmission(row) : undefined,
             updatedUser: undefined,
             message: 'Missão enviada com sucesso.',
         };
     } catch (err: any) {
         console.error('[SupabaseMissions] submitMissionSupabase failed', err);
-        return { success: false as const, newSubmission: undefined, updatedUser: undefined, message: err?.message || 'Falha ao enviar missão' };
+        return {
+            success: false as const,
+            newSubmission: undefined,
+            updatedUser: undefined,
+            message: err?.message || 'Falha ao enviar missão',
+        };
     }
 };
