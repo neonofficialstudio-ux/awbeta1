@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { RedeemedItem, StoreItem, UsableItem, User, UsableItemQueueEntry, InventoryTab, VisualRewardFormData, ArtistOfTheDayQueueEntry } from '../types';
 import { MicIcon, CubeIcon, StoreIcon, StarIcon, InstagramIcon, TikTokIcon, YoutubeIcon, GlobeIcon } from '../constants';
 import VisualRewardFormModal from './VisualRewardFormModal';
@@ -511,6 +511,8 @@ const Inventory: React.FC = () => {
     const [redeemedItems, setRedeemedItems] = useState<RedeemedItem[]>([]);
     const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
     const [usableItems, setUsableItems] = useState<UsableItem[]>([]);
+    const lastLoadRef = useRef<number>(0);
+    const CACHE_TTL_MS = 30_000; // 30s
     
     // Use the new hook for the queue instead of static fetch
     const liveUsableItemQueue = useProductionQueue();
@@ -524,7 +526,12 @@ const Inventory: React.FC = () => {
     const [visualItemToUse, setVisualItemToUse] = useState<RedeemedItem | null>(null);
     const [queueSuccessInfo, setQueueSuccessInfo] = useState<{ itemName: string; isSpotlight: boolean; isVisualReward: boolean; } | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async (force = false) => {
+        const now = Date.now();
+        if (!force && lastLoadRef.current && (now - lastLoadRef.current) < CACHE_TTL_MS) {
+            return;
+        }
+        lastLoadRef.current = now;
         if (!currentUser) return;
         setError(null);
         try {
@@ -542,14 +549,20 @@ const Inventory: React.FC = () => {
             console.error("Failed to fetch inventory data:", e);
             setError("Não foi possível carregar seu inventário.");
         } finally {
-            if (isLoading) setIsLoading(false);
+            setIsLoading(false);
         }
-    };
+    }, [currentUser]);
     
     useEffect(() => {
         setIsLoading(true);
-        fetchData();
-    }, []); 
+        fetchData(false);
+    }, [fetchData]); 
+
+    useEffect(() => {
+        // quando o componente monta novamente, tenta refetch leve apenas se TTL expirou
+        // (se quiser forçar ao entrar, altere para fetchData(true))
+        fetchData(false);
+    }, [fetchData]);
 
     useEffect(() => {
         setActiveTab(inventoryInitialTab);
@@ -569,7 +582,7 @@ const Inventory: React.FC = () => {
         const response = await api.submitVisualRewardForm(currentUser.id, redeemedItemId, formData);
         processApiResponse(response);
         if (response.updatedItem) {
-            await fetchData();
+            await fetchData(true);
             const item = redeemedItems.find(i => i.id === redeemedItemId);
             if (item) {
                 setQueueSuccessInfo({ itemName: item.itemName, isSpotlight: false, isVisualReward: true });
@@ -586,7 +599,7 @@ const Inventory: React.FC = () => {
         processApiResponse(response);
         
         if (response.success) {
-            await fetchData();
+            await fetchData(true);
             setQueueSuccessInfo({ itemName: usableItemToActivate.name, isSpotlight: false, isVisualReward: false });
         }
         setUsableItemToActivate(null);
