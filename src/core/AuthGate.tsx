@@ -2,198 +2,68 @@
 import React, { useEffect, useState } from 'react';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
-import { StabilizationEngine } from './stabilization/stabilizationEngine';
 import AuthPage from '../components/AuthPage';
 import BannedUserPage from '../components/BannedUserPage';
-import BootSplash from '../components/BootSplash';
+import BootScreen from '../components/BootScreen';
 import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
 import { isAdmin as checkIsAdmin } from '../api/supabase/admin';
-import { fetchMyNotifications } from '../api/supabase/economy';
 
 export const AuthGate = (): React.ReactElement => {
     const { state, dispatch } = useAppContext();
     const { activeUser } = state;
     const [termsContent, setTermsContent] = useState('');
     const [isLoading, setIsLoading] = useState(true);
-    const [bootStage, setBootStage] = useState<string>('AUTH');
-    const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-        let timeoutId: any;
-        const timeoutPromise = new Promise<T>((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
-        });
-
-        try {
-            return await Promise.race([promise, timeoutPromise]) as T;
-        } finally {
-            clearTimeout(timeoutId);
-        }
-    };
-    const USER_CACHE_KEY = 'aw_supabase_user_cache_v1';
-
-    const writeUserCache = (userObj: any) => {
-        try {
-            if (config.backendProvider !== 'supabase') return;
-            if (!userObj?.id) return;
-            localStorage.setItem(USER_CACHE_KEY, JSON.stringify({
-                savedAt: Date.now(),
-                user: userObj,
-            }));
-        } catch {}
-    };
-
-    const readUserCache = (): any | null => {
-        try {
-            if (config.backendProvider !== 'supabase') return null;
-            const raw = localStorage.getItem(USER_CACHE_KEY);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            const u = parsed?.user;
-            if (!u?.id) return null;
-            return u;
-        } catch {
-            return null;
-        }
-    };
 
     // Initial Load Logic
     useEffect(() => {
-        const checkLoginStatus = async () => {
-            setIsLoading(true);
+        let unsub: (() => void) | null = null;
+        let mounted = true;
+        const supabase = getSupabase();
+
+        const boot = async () => {
             try {
-                setBootStage('AUTH');
-                const { user, notifications, unseenAdminNotifications } =
-                    await withTimeout(api.checkAuthStatus(), 15000, 'checkAuthStatus');
-                if (user) {
-                    setBootStage('PROFILE');
-                    await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
+                // 1. Check sessão atual (1x apenas)
+                const {
+                    data: { session },
+                } = await supabase.auth.getSession();
 
-                    if ((user as any).riskScore === undefined) (user as any).riskScore = 0;
-                    if ((user as any).shieldLevel === undefined) (user as any).shieldLevel = "normal";
+                if (!mounted) return;
 
-                    setBootStage('NOTIFICATIONS');
-                    setBootStage('READY');
-                    dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
-                    writeUserCache(user);
-                    // ✅ Carregar notificações em background (não bloqueia boot)
-                    try {
-                        const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
-                        if (res?.success && Array.isArray(res.notifications) && res.notifications.length > 0) {
-                            dispatch({ type: 'ADD_NOTIFICATIONS', payload: res.notifications });
-                        }
-                    } catch {}
+                if (session?.user) {
+                    dispatch({ type: 'LOGIN', payload: { user: session.user } });
+                } else {
+                    dispatch({ type: 'LOGOUT' });
                 }
-            } catch (error: any) {
-                const msg = String(error?.message || error || '');
-                if (msg.startsWith('timeout:')) {
-                    console.warn('[AuthGate] Timeout ou falha leve no boot', error);
 
-                    // ✅ Fallback: se existe cache válido, não derruba pro login no F5
-                    const cached = readUserCache();
-                    if (cached) {
-                        dispatch({ type: 'LOGIN', payload: { user: cached, notifications: [], unseenAdminNotifications: [] } });
-                    }
+                // 2. Listener oficial (única fonte depois do boot)
+                const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+                    if (!mounted) return;
 
-                    setIsLoading(false);
-                    return;
-                }
-                console.error("Auth check failed:", error);
-
-                // ✅ Auto-heal: se token do Supabase estiver corrompido, limpa storage do auth e força logout.
-                try {
-                    if (config.useSupabase) {
-                        const supabase = getSupabase();
-                        if (supabase) {
-                            const msg = String(error?.message || error || '');
-
-                            // Heurística: erros comuns quando o token/localStorage quebra
-                            const looksLikeCorruptAuth =
-                                msg.toLowerCase().includes('jwt') ||
-                                msg.toLowerCase().includes('token') ||
-                                msg.toLowerCase().includes('parse') ||
-                                msg.toLowerCase().includes('json') ||
-                                msg.toLowerCase().includes('storage');
-
-                            if (looksLikeCorruptAuth) {
-                                // Remove o token do supabase-js: sb-<projectRef>-auth-token
-                                const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-                                const match = typeof url === 'string' ? url.match(/^https:\/\/([a-z0-9-]+)\.supabase\.co/i) : null;
-                                const projectRef = match?.[1];
-                                if (projectRef) {
-                                    const key = `sb-${projectRef}-auth-token`;
-                                    try { localStorage.removeItem(key); } catch {}
-                                }
-
-                                // força logout local
-                                await supabase.auth.signOut();
-                                dispatch({ type: 'LOGOUT' });
-                            }
-                        }
-                    }
-                } catch {}
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        
-        checkLoginStatus();
-    }, [dispatch]);
-
-    useEffect(() => {
-        if (!isLoading) return;
-
-        const id = setTimeout(() => {
-            console.warn('[AuthGate] Watchdog released loading after 12s');
-            setIsLoading(false);
-        }, 12000);
-
-        return () => clearTimeout(id);
-    }, [isLoading]);
-
-    // Supabase Auth Listener
-    useEffect(() => {
-        if (config.useSupabase) {
-            const supabase = getSupabase();
-            if (supabase) {
-                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-                    if (event === 'SIGNED_IN' && session) {
-                        // User clicked email link or logged in, sync state if not already
-                         if (!activeUser) {
-                             setIsLoading(true);
-                             try {
-                                setBootStage('AUTH');
-                                const { user, notifications, unseenAdminNotifications } =
-                                    await withTimeout(api.checkAuthStatus(), 15000, 'checkAuthStatus');
-                                if (user) {
-                                    setBootStage('PROFILE');
-                                    await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
-                                    setBootStage('READY');
-                                    dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
-                                    writeUserCache(user);
-                                    // ✅ Carregar notificações em background (não bloqueia boot)
-                                    try {
-                                        const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
-                                        if (res?.success && Array.isArray(res.notifications) && res.notifications.length > 0) {
-                                            dispatch({ type: 'ADD_NOTIFICATIONS', payload: res.notifications });
-                                        }
-                                    } catch {}
-                                }
-                             } catch(e) {
-                                 console.error("Sync after sign-in failed", e);
-                             } finally {
-                                 setIsLoading(false);
-                             }
-                         }
-                    } else if (event === 'SIGNED_OUT') {
-                         dispatch({ type: 'LOGOUT' });
+                    if (session?.user) {
+                        dispatch({ type: 'LOGIN', payload: { user: session.user } });
+                    } else {
+                        dispatch({ type: 'LOGOUT' });
                     }
                 });
-                
-                return () => subscription.unsubscribe();
+
+                unsub = data.subscription.unsubscribe;
+            } catch (e) {
+                console.error('[AuthGate] boot error', e);
+                // IMPORTANTE: não desloga em erro
+            } finally {
+                if (mounted) setIsLoading(false);
             }
-        }
-    }, [dispatch, activeUser]);
+        };
+
+        boot();
+
+        return () => {
+            mounted = false;
+            if (unsub) unsub();
+        };
+    }, []);
 
     useEffect(() => {
         if (!activeUser) {
@@ -234,20 +104,7 @@ export const AuthGate = (): React.ReactElement => {
     
     if (isLoading) {
         return (
-            <BootSplash
-                brand="ARTIST"
-                brandAccent="WORLD"
-                subtitle="INICIALIZANDO"
-                stage={bootStage === 'AUTH'
-                    ? 'AUTHENTICATION'
-                    : bootStage === 'PROFILE'
-                    ? 'PROFILE SYNC'
-                    : bootStage === 'NOTIFICATIONS'
-                    ? 'NOTIFICATIONS SYNC'
-                    : bootStage === 'READY'
-                    ? 'FINALIZANDO'
-                    : 'BOOT'}
-            />
+            <BootScreen stage="authentication" />
         );
     }
     
