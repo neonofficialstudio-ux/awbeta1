@@ -15,13 +15,23 @@ const ensureClient = () => {
 const normalizeLedgerEntry = (row: any): LedgerEntry => {
     const createdAt = row?.created_at || row?.timestamp || Date.now();
     // Current DB schema uses delta_coins / delta_xp. Keep broad fallbacks to avoid rendering +0 when a real credit happened.
-    const deltaCoins = row?.delta_coins ?? row?.deltaCoins ?? row?.coins_delta ?? row?.coinsDelta ?? row?.value ?? row?.change ?? row?.points ?? 0;
-    const deltaXp = row?.delta_xp ?? row?.deltaXp ?? row?.xp_delta ?? row?.xpDelta ?? 0;
-    const legacyAmount = row?.amount ?? row?.delta ?? row?.meta?.amount;
-    const amount = Number(legacyAmount ?? (deltaCoins !== 0 ? deltaCoins : deltaXp));
-    const typeRaw = (row?.currency_type || row?.currency || row?.type || '').toString().toUpperCase();
-    const type: LedgerEntry['type'] = typeRaw === 'XP' ? 'XP' : (deltaXp !== 0 || row?.xp_delta !== undefined || row?.delta_xp !== undefined ? 'XP' : 'COIN');
+    const deltaCoinsRaw =
+        row?.delta_coins ?? row?.deltaCoins ?? row?.coins_delta ?? row?.coinsDelta ?? row?.value ?? row?.change ?? row?.points ?? 0;
+
+    const deltaXpRaw =
+        row?.delta_xp ?? row?.deltaXp ?? row?.xp_delta ?? row?.xpDelta ?? 0;
+
+    const deltaCoins = Number(deltaCoinsRaw ?? 0);
+    const deltaXp = Number(deltaXpRaw ?? 0);
+
     const metadata = row?.metadata || row?.meta || {};
+    const legacyAmount = row?.amount ?? row?.delta ?? (metadata as any)?.amount;
+
+    // ✅ regra determinística: COIN se delta_coins != 0; XP se delta_xp != 0
+    const type: LedgerEntry['type'] = deltaCoins !== 0 ? 'COIN' : (deltaXp !== 0 ? 'XP' : 'COIN');
+
+    // ✅ amount coerente com o tipo
+    const amount = Number(legacyAmount ?? (type === 'COIN' ? deltaCoins : deltaXp));
     const refId = row?.ref_id || row?.refId;
 
     return {
