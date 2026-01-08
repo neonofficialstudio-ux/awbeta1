@@ -24,7 +24,44 @@ const buildProfileMeta = (user: Partial<User>) => {
     return meta;
 };
 
+const sanitizeMeta = (meta: any) => {
+    if (!meta || typeof meta !== 'object') return meta;
+    const clone = { ...meta };
+    delete clone.coins;
+    delete clone.xp;
+    delete clone.level;
+    delete clone.plan;
+    return clone;
+};
+
 export const ProfileSupabase = {
+    async fetchMyProfile(userId?: string): Promise<{ success: boolean; user?: User; error?: string }> {
+        if (config.backendProvider !== 'supabase') {
+            return { success: false, error: 'Supabase provider is not enabled' };
+        }
+
+        const supabase = getSupabase();
+        if (!supabase) {
+            return { success: false, error: 'Supabase client not initialized' };
+        }
+
+        let targetUserId = userId;
+        if (!targetUserId) {
+            const { data: authData, error: authError } = await supabase.auth.getUser();
+            if (authError || !authData?.user) {
+                return { success: false, error: 'Usuário não autenticado' };
+            }
+            targetUserId = authData.user.id;
+        }
+
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
+        if (error || !data) {
+            return { success: false, error: error?.message || 'Perfil não encontrado' };
+        }
+
+        const mapped = mapProfileToUser(data);
+        return { success: true, user: SanityGuard.user(mapped) };
+    },
     async updateMyProfile(user: User): Promise<{ success: boolean; updatedUser?: User; error?: string }> {
         if (config.backendProvider !== 'supabase') {
             return { success: false, error: 'Supabase provider is not enabled' };
@@ -40,11 +77,12 @@ export const ProfileSupabase = {
             return { success: false, error: 'Usuário não autenticado' };
         }
 
+        const profileMeta = sanitizeMeta(buildProfileMeta(user));
         const { data, error } = await supabase.rpc('update_my_profile', {
             p_name: user.name,
             p_artistic_name: user.artisticName,
             p_avatar_url: user.avatarUrl,
-            p_meta: buildProfileMeta(user),
+            p_meta: profileMeta,
         });
 
         if (error) {
@@ -66,7 +104,7 @@ export const ProfileSupabase = {
             check_in_streak: user.weeklyCheckInStreak,
             last_check_in: user.lastCheckIn,
             joined_at: user.joinedISO,
-            meta: buildProfileMeta(user),
+            meta: profileMeta,
         };
 
         const mapped = mapProfileToUser(hydratedProfile);

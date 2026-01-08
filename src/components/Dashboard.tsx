@@ -13,9 +13,9 @@ import LoadingSkeleton from './ui/base/LoadingSkeleton';
 import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
-import { mapProfileToUser } from '../api/supabase/mappings';
 import { dailyCheckin, hasCheckedInToday } from '../api/supabase/supabase.repositories';
 import { fetchMyLedger, fetchMyNotifications, markNotificationRead } from '../api/supabase/economy';
+import { ProfileSupabase } from '../api/supabase/profile';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -699,21 +699,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 markCheckInDoneForToday();
             }
 
-            const [{ data: profileData, error: profileError }, ledgerResponse] = await Promise.all([
-                supabase.from('profiles').select('*').eq('id', user.id).single(),
-                fetchMyLedger(10, 0)
-            ]);
-
-            if (profileError) throw profileError;
-
-            if (profileData) {
-                const updatedUser = mapProfileToUser(profileData);
-                dispatch({ type: 'UPDATE_USER', payload: updatedUser });
+            const profileResponse = await ProfileSupabase.fetchMyProfile(user.id);
+            if (profileResponse.success && profileResponse.user) {
+                dispatch({ type: 'SET_USER', payload: profileResponse.user });
+            } else {
+                console.warn('[CheckIn] Failed to refresh profile after check-in.', profileResponse.error);
             }
 
-            if (ledgerResponse?.success) {
-                setLedgerEntries(ledgerResponse.ledger);
-                setData(prev => prev ? { ...prev, ledger: ledgerResponse.ledger } : prev);
+            try {
+                const ledgerResponse = await fetchMyLedger(10, 0);
+                if (ledgerResponse?.success) {
+                    setLedgerEntries(ledgerResponse.ledger);
+                    setData(prev => prev ? { ...prev, ledger: ledgerResponse.ledger } : prev);
+                }
+            } catch (ledgerError) {
+                console.warn('[CheckIn] Ledger refetch failed after check-in.', ledgerError);
+            }
+
+            try {
+                const notificationsResponse = await fetchMyNotifications(20);
+                if (notificationsResponse?.success && notificationsResponse.notifications?.length) {
+                    dispatch({ type: 'ADD_NOTIFICATIONS', payload: notificationsResponse.notifications });
+                }
+            } catch (notificationsError) {
+                console.warn('[CheckIn] Notifications refetch failed after check-in.', notificationsError);
             }
 
             if (!alreadyCheckedIn) {
