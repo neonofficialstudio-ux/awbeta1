@@ -16,6 +16,7 @@ export const AuthGate = (): React.ReactElement => {
     const { activeUser } = state;
     const [termsContent, setTermsContent] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [bootStage, setBootStage] = useState<string>('AUTH');
     const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
         let timeoutId: any;
         const timeoutPromise = new Promise<T>((_, reject) => {
@@ -34,14 +35,18 @@ export const AuthGate = (): React.ReactElement => {
         const checkLoginStatus = async () => {
             setIsLoading(true);
             try {
+                setBootStage('AUTH');
                 const { user, notifications, unseenAdminNotifications } =
                     await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
                 if (user) {
+                    setBootStage('PROFILE');
                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
 
                     if ((user as any).riskScore === undefined) (user as any).riskScore = 0;
                     if ((user as any).shieldLevel === undefined) (user as any).shieldLevel = "normal";
 
+                    setBootStage('NOTIFICATIONS');
+                    setBootStage('READY');
                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
                 }
             } catch (error: any) {
@@ -118,10 +123,13 @@ export const AuthGate = (): React.ReactElement => {
                          if (!activeUser) {
                              setIsLoading(true);
                              try {
+                                setBootStage('AUTH');
                                 const { user, notifications, unseenAdminNotifications } =
                                     await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
                                 if (user) {
+                                    setBootStage('PROFILE');
                                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
+                                    setBootStage('READY');
                                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
                                 }
                              } catch(e) {
@@ -183,7 +191,15 @@ export const AuthGate = (): React.ReactElement => {
                 brand="ARTIST"
                 brandAccent="WORLD"
                 subtitle="INICIALIZANDO"
-                stage="DATABASE INITIALIZATION"
+                stage={bootStage === 'AUTH'
+                    ? 'AUTHENTICATION'
+                    : bootStage === 'PROFILE'
+                    ? 'PROFILE SYNC'
+                    : bootStage === 'NOTIFICATIONS'
+                    ? 'NOTIFICATIONS SYNC'
+                    : bootStage === 'READY'
+                    ? 'FINALIZANDO'
+                    : 'BOOT'}
             />
         );
     }
