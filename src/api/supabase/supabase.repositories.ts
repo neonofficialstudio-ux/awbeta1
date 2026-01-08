@@ -2,6 +2,7 @@
 import { supabaseClient } from './client';
 import { mapProfileToUser, mapStoreItemToApp, mapMissionToApp, mapInventoryToRedeemedItem } from './mappings';
 import type { Repository } from '../database/repository.factory';
+import { config } from '../../core/config';
 import { SanityGuard } from '../../services/sanity.guard';
 import type { User } from '../../types';
 
@@ -67,7 +68,9 @@ export const supabaseRepository: Repository = {
         if (table === 'users') {
             return getProfilesSync();
         }
-        console.warn(`[SupabaseRepo] Sync select called for ${table}. Returning empty array. Refactor to selectAsync.`);
+        if (!config.isProduction) {
+            console.warn(`[SupabaseRepo] Sync select called for ${table}. Returning empty array. Refactor to selectAsync.`);
+        }
         return []; 
     },
     selectPaged: (table: string, page: number, limit: number, filterFn?: (item: any) => boolean) => {
@@ -81,16 +84,22 @@ export const supabaseRepository: Repository = {
     },
     insert: (table: string) => {
         if (table === 'users') return null;
-        console.warn(`[SupabaseRepo] Sync insert ignored for ${table}. Use insertAsync instead.`);
+        if (!config.isProduction) {
+            console.warn(`[SupabaseRepo] Sync insert ignored for ${table}. Use insertAsync instead.`);
+        }
         return null;
     },
     update: (table: string) => {
         if (table === 'users') return;
-        console.warn(`[SupabaseRepo] Sync update ignored for ${table}. Use updateAsync instead.`);
+        if (!config.isProduction) {
+            console.warn(`[SupabaseRepo] Sync update ignored for ${table}. Use updateAsync instead.`);
+        }
     },
     delete: (table: string) => {
         if (table === 'users') return;
-        console.warn(`[SupabaseRepo] Sync delete ignored for ${table}. Use deleteAsync instead.`);
+        if (!config.isProduction) {
+            console.warn(`[SupabaseRepo] Sync delete ignored for ${table}. Use deleteAsync instead.`);
+        }
     },
     filter: (table: string, predicate: (item: any) => boolean) => {
         if (table === 'users') {

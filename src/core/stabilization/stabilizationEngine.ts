@@ -1,4 +1,5 @@
 
+import { config } from "../config";
 import { getRepository } from "../../api/database/repository.factory";
 import { LogEngineV4 } from "../../api/admin/logEngineV4";
 import { XPSyncEngine } from "../../api/economy/xpSyncEngine";
@@ -10,6 +11,12 @@ const repo = getRepository();
 
 export const StabilizationEngine = {
     runStartupChecks: async (userId?: string) => {
+        // Em Supabase, não executar engine legado (mock-local).
+        // A fonte da verdade é o backend.
+        if (config.backendProvider === "supabase") {
+            return;
+        }
+
         console.log("[StabilizationEngine] Running startup checks...");
         let fixedCount = 0;
 
