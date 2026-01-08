@@ -392,6 +392,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     lastLoadRef.current = 0;
   }, [user?.id]);
 
+  const notifications = notificationState;
+  const ledger = ledgerEntries;
+
+  const safeNotifications = Array.isArray((notificationState as any)?.notifications)
+    ? (notificationState as any).notifications
+    : Array.isArray((notifications as any))
+    ? (notifications as any)
+    : [];
+
+  const safeLedger = Array.isArray((ledger as any)) ? (ledger as any) : [];
+
   const fetchData = useCallback(async (force = false) => {
     if (!user) {
         setLedgerEntries([]);
@@ -419,8 +430,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
 
             setLedgerEntries(ledgerList);
-            const newNotifications = notificationList.filter(n => !notificationState.some(existing => existing.id === n.id));
-            const mergedNotifications = [...newNotifications, ...notificationState];
+            const newNotifications = notificationList.filter(n => !safeNotifications.some(existing => existing.id === n.id));
+            const mergedNotifications = [...newNotifications, ...safeNotifications];
             setNotificationsFeed(mergedNotifications.length ? mergedNotifications : notificationList);
             if (newNotifications.length) {
                 dispatch({ type: 'ADD_NOTIFICATIONS', payload: newNotifications });
@@ -439,7 +450,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const dashboardData = await api.fetchDashboardData();
             setData(dashboardData);
             setLedgerEntries(dashboardData?.ledger || []);
-            setNotificationsFeed(notificationState || []);
+            setNotificationsFeed(safeNotifications);
             if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
                 const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
                 if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
@@ -509,7 +520,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         const list = res.notifications || [];
         setNotificationsFeed(list);
         // Evita duplicar no store: só adiciona as que ainda não existem.
-        const existingIds = new Set((notificationState || []).map(n => n.id));
+        const existingIds = new Set(safeNotifications.map(n => n.id));
         const onlyNew = list.filter(n => !existingIds.has(n.id));
         if (onlyNew.length) {
           dispatch({ type: 'ADD_NOTIFICATIONS', payload: onlyNew });
@@ -589,7 +600,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [isSupabase, user?.id, dispatch]);
 
   useEffect(() => {
-    setNotificationsFeed(notificationState || []);
+    setNotificationsFeed(safeNotifications);
   }, [notificationState]);
 
   useEffect(() => {
@@ -991,7 +1002,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                             <h3 className="text-xl font-black text-white font-chakra uppercase tracking-tight">Transações</h3>
                         </div>
                     </div>
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">{ledgerEntries.length} registros</span>
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">{safeLedger.length} registros</span>
                 </div>
                 <div className="space-y-3">
                     {isLedgerLoading ? (
@@ -1000,8 +1011,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                             <LoadingSkeleton height={64} className="rounded-2xl" />
                             <LoadingSkeleton height={64} className="rounded-2xl" />
                         </>
-                    ) : ledgerEntries.length > 0 ? (
-                        ledgerEntries.slice(0, 5).map(entry => (
+                    ) : safeLedger.length > 0 ? (
+                        safeLedger.slice(0, 5).map(entry => (
                             <div key={entry.id} className="p-4 rounded-2xl bg-[#0A0A0A] border border-white/5 flex items-center justify-between gap-4">
                                 <div className="flex-1 min-w-0">
                                     <p className="text-white font-bold truncate">{entry.description}</p>
