@@ -7,7 +7,7 @@ import { simulateNetworkLatency } from './simulation/networkLatency';
 import { maybeFailRequest } from './simulation/networkFailures';
 import { NotificationEngine } from '../services/notifications/notification.engine';
 import { DiagnosticCore, LogType } from '../services/diagnostic.core';
-import { isMockProvider, assertNotMockInSupabase } from './core/backendGuard';
+import { isMockProvider, isSupabaseProvider, assertNotMockInSupabase } from './core/backendGuard';
 
 // A simple deep clone that preserves functions, unlike JSON.parse(JSON.stringify(obj))
 export function deepClone<T>(obj: T): T {
@@ -38,14 +38,20 @@ export function deepClone<T>(obj: T): T {
 }
 
 export const withLatency = async <T,>(data: T | (() => T | Promise<T>)): Promise<T> => {
-    await simulateNetworkLatency();
-    await maybeFailRequest(); // Simulate random network failures if enabled
+    // ✅ LANÇAMENTO / SUPABASE: sem latência simulada e sem falha aleatória.
+    // Isso estava causando timeouts no AuthGate (checkAuthStatus) e “F5 cai pro login”.
+    if (!isSupabaseProvider()) {
+        await simulateNetworkLatency();
+        await maybeFailRequest(); // Simula falhas apenas no MOCK/dev
+    }
+
     try {
         const result = typeof data === 'function' ? (data as () => T | Promise<T>)() : data;
         const resolved = result instanceof Promise ? await result : result;
+
+        // Em supabase, deepClone é ok, mas manter por compatibilidade
         return deepClone(resolved);
     } catch (e) {
-        // V9.0 Error Capture
         DiagnosticCore.errors.capture(e, { context: 'withLatencyWrapper' });
         throw e;
     }
