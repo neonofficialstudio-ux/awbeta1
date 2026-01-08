@@ -130,11 +130,11 @@ export const checkAuthStatus = () => withLatency(async () => {
             });
         }
 
-        const notificationsResponse = await fetchMyNotifications(20);
-
+        // ✅ LANÇAMENTO: não bloquear boot com notificações.
+        // Notificações serão carregadas depois do LOGIN no AuthGate (background).
         return { 
             user: SanityGuard.user(profileUser), 
-            notifications: notificationsResponse.success ? notificationsResponse.notifications : [], 
+            notifications: [], 
             unseenAdminNotifications: [] 
         };
     }

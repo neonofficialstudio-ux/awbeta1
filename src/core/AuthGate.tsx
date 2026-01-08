@@ -10,6 +10,7 @@ import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
 import { isAdmin as checkIsAdmin } from '../api/supabase/admin';
+import { fetchMyNotifications } from '../api/supabase/economy';
 
 export const AuthGate = (): React.ReactElement => {
     const { state, dispatch } = useAppContext();
@@ -48,6 +49,13 @@ export const AuthGate = (): React.ReactElement => {
                     setBootStage('NOTIFICATIONS');
                     setBootStage('READY');
                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                    // ✅ Carregar notificações em background (não bloqueia boot)
+                    try {
+                        const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
+                        if (res?.success && Array.isArray(res.notifications) && res.notifications.length > 0) {
+                            dispatch({ type: 'ADD_NOTIFICATIONS', payload: res.notifications });
+                        }
+                    } catch {}
                 }
             } catch (error: any) {
                 const msg = String(error?.message || error || '');
@@ -128,6 +136,13 @@ export const AuthGate = (): React.ReactElement => {
                                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
                                     setBootStage('READY');
                                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                                    // ✅ Carregar notificações em background (não bloqueia boot)
+                                    try {
+                                        const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
+                                        if (res?.success && Array.isArray(res.notifications) && res.notifications.length > 0) {
+                                            dispatch({ type: 'ADD_NOTIFICATIONS', payload: res.notifications });
+                                        }
+                                    } catch {}
                                 }
                              } catch(e) {
                                  console.error("Sync after sign-in failed", e);
