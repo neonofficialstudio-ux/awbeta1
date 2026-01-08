@@ -74,8 +74,12 @@ export const appReducer = (state: AppState, action: Action): AppState => {
           ...state, 
           activeUser: loginUser, 
           isAdmin: null,
-          notifications: action.payload.notifications, 
-          unseenAdminNotifications: action.payload.unseenAdminNotifications, 
+      notifications: Array.isArray(action.payload.notifications)
+        ? action.payload.notifications
+        : [],
+      unseenAdminNotifications: Array.isArray(action.payload.unseenAdminNotifications)
+        ? action.payload.unseenAdminNotifications
+        : [],
           prevCoins: 0, 
           prevXp: 0, 
           eventSession: loginUser?.eventSession || null,
@@ -123,8 +127,11 @@ export const appReducer = (state: AppState, action: Action): AppState => {
        };
 
     // --- Notifications & Modals ---
-    case 'ADD_NOTIFICATIONS':
-      return { ...state, notifications: [...action.payload, ...state.notifications] };
+    case 'ADD_NOTIFICATIONS': {
+      const incoming = Array.isArray(action.payload) ? action.payload : [];
+      const current = Array.isArray(state.notifications) ? state.notifications : [];
+      return { ...state, notifications: [...incoming, ...current] };
+    }
     case 'MARK_NOTIFICATION_READ':
       return { ...state, notifications: state.notifications.map(n => n.id === action.payload.id ? { ...n, read: true } : n) };
     case 'MARK_ALL_NOTIFICATIONS_READ':
@@ -132,7 +139,10 @@ export const appReducer = (state: AppState, action: Action): AppState => {
     case 'SET_WELCOME_MODAL_VISIBILITY':
       return { ...state, showWelcomeModal: action.payload };
     case 'SET_UNSEEN_ADMIN_NOTIFICATIONS':
-      return { ...state, unseenAdminNotifications: action.payload };
+      return {
+        ...state,
+        unseenAdminNotifications: Array.isArray(action.payload) ? action.payload : [],
+      };
     case 'ANIMATION_COMPLETE':
       if (state.activeUser) {
         return { ...state, prevCoins: state.activeUser.coins, prevXp: state.activeUser.xp };
