@@ -30,6 +30,32 @@ export const AuthGate = (): React.ReactElement => {
             clearTimeout(timeoutId);
         }
     };
+    const USER_CACHE_KEY = 'aw_supabase_user_cache_v1';
+
+    const writeUserCache = (userObj: any) => {
+        try {
+            if (config.backendProvider !== 'supabase') return;
+            if (!userObj?.id) return;
+            localStorage.setItem(USER_CACHE_KEY, JSON.stringify({
+                savedAt: Date.now(),
+                user: userObj,
+            }));
+        } catch {}
+    };
+
+    const readUserCache = (): any | null => {
+        try {
+            if (config.backendProvider !== 'supabase') return null;
+            const raw = localStorage.getItem(USER_CACHE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const u = parsed?.user;
+            if (!u?.id) return null;
+            return u;
+        } catch {
+            return null;
+        }
+    };
 
     // Initial Load Logic
     useEffect(() => {
@@ -49,6 +75,7 @@ export const AuthGate = (): React.ReactElement => {
                     setBootStage('NOTIFICATIONS');
                     setBootStage('READY');
                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                    writeUserCache(user);
                     // ✅ Carregar notificações em background (não bloqueia boot)
                     try {
                         const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
@@ -61,6 +88,13 @@ export const AuthGate = (): React.ReactElement => {
                 const msg = String(error?.message || error || '');
                 if (msg.startsWith('timeout:')) {
                     console.warn('[AuthGate] Timeout ou falha leve no boot', error);
+
+                    // ✅ Fallback: se existe cache válido, não derruba pro login no F5
+                    const cached = readUserCache();
+                    if (cached) {
+                        dispatch({ type: 'LOGIN', payload: { user: cached, notifications: [], unseenAdminNotifications: [] } });
+                    }
+
                     setIsLoading(false);
                     return;
                 }
@@ -136,6 +170,7 @@ export const AuthGate = (): React.ReactElement => {
                                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
                                     setBootStage('READY');
                                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
+                                    writeUserCache(user);
                                     // ✅ Carregar notificações em background (não bloqueia boot)
                                     try {
                                         const res = await withTimeout(fetchMyNotifications(20), 7000, 'fetchMyNotifications');
