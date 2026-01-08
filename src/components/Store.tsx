@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { CoinPack, StoreItem, UsableItem, StoreTab, User, CoinPurchaseRequest, RedeemedItem } from '../types';
 import { CoinIcon, LockIcon, CalculatorIcon } from '../constants';
 import { useAppContext } from '../constants';
@@ -846,7 +846,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const lastLoadRef = useRef<number>(0);
-    const CACHE_TTL = 30_000;
+    const CACHE_TTL_MS = 30_000;
 
     const [activeTab, setActiveTab] = useState<StoreTab>(storeInitialTab);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -857,10 +857,10 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const [itemToConfirm, setItemToConfirm] = useState<StoreItem | UsableItem | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const fetchData = async (force = false) => {
+    const fetchData = useCallback(async (force = false) => {
         if (!currentUser) return;
         const now = Date.now();
-        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL_MS) {
             return;
         }
         lastLoadRef.current = now;
@@ -884,11 +884,11 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             setIsLoading(false);
             Perf.end('store_fetch');
         }
-    };
+    }, [currentUser]);
     
     useEffect(() => {
         fetchData();
-    }, [currentUser]);
+    }, [fetchData]);
 
     useEffect(() => {
         lastLoadRef.current = 0;
@@ -964,7 +964,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             await fetchData(true);
         }
         setIsProcessing(false);
-    }, [currentUser, isProcessing, dispatch, onRedeemSuccess]);
+    }, [currentUser, isProcessing, dispatch, onRedeemSuccess, fetchData]);
     
     // Helper to open modal
     const handleRequestPurchase = useCallback((item: StoreItem | UsableItem) => {

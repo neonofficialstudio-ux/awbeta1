@@ -376,7 +376,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const isCheckInStatusLoading = isSupabase && checkedIn === null;
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number } | null>(null);
   const lastLoadRef = useRef<number>(0);
-  const CACHE_TTL = 30_000;
+  const CACHE_TTL_MS = 30_000; // 30s
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
@@ -399,7 +399,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         return;
     }
     const now = Date.now();
-    if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+    if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL_MS) {
         return;
     }
     lastLoadRef.current = now;
