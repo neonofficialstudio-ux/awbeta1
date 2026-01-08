@@ -9,7 +9,8 @@ const Notifications: React.FC = () => {
   const { notifications } = state;
   const [isOpen, setIsOpen] = useState(false);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = safeNotifications.filter(n => !n.read).length;
 
   const handleToggle = () => setIsOpen(!isOpen);
 
@@ -40,7 +41,7 @@ const Notifications: React.FC = () => {
   // Filters consecutive identical messages to clean up UI clutter
   const uniqueNotifications = useMemo(() => {
       const seen = new Set<string>();
-      return notifications.filter(n => {
+      return safeNotifications.filter(n => {
           // Generate a content hash based on title + desc + day
           const key = `${n.title}-${n.description}-${new Date(parseInt(n.id.split('-')[2] || '0')).getDate()}`;
           // Allow multiple if they are different types, but dedup exact content spam
@@ -49,7 +50,7 @@ const Notifications: React.FC = () => {
           seen.add(key);
           return true;
       });
-  }, [notifications]);
+  }, [safeNotifications]);
 
   return (
     <>
@@ -91,6 +92,11 @@ const Notifications: React.FC = () => {
         </div>
 
         <ul className="overflow-y-auto h-[calc(100vh-120px)]">
+          {safeNotifications.length === 0 && (
+            <li className="text-center text-gray-500 p-8">
+              Nenhuma notificação ainda.
+            </li>
+          )}
           {uniqueNotifications.map(notification => (
             <li
               key={notification.id}
@@ -119,11 +125,6 @@ const Notifications: React.FC = () => {
               </button>
             </li>
           ))}
-           {uniqueNotifications.length === 0 && (
-              <li className="text-center text-gray-500 p-8">
-                Nenhuma notificação por aqui.
-              </li>
-            )}
         </ul>
       </div>
     </>
