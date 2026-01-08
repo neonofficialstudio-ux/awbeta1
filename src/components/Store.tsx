@@ -845,6 +845,8 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const [coinPurchaseRequests, setCoinPurchaseRequests] = useState<CoinPurchaseRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const lastLoadRef = useRef<number>(0);
+    const CACHE_TTL = 30_000;
 
     const [activeTab, setActiveTab] = useState<StoreTab>(storeInitialTab);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -855,8 +857,14 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const [itemToConfirm, setItemToConfirm] = useState<StoreItem | UsableItem | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const fetchData = async () => {
+    const fetchData = async (force = false) => {
         if (!currentUser) return;
+        const now = Date.now();
+        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+            return;
+        }
+        lastLoadRef.current = now;
+        setIsLoading(true);
         setError(null);
         Perf.mark('store_fetch');
         try {
@@ -879,9 +887,12 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     };
     
     useEffect(() => {
-        setIsLoading(true);
         fetchData();
     }, [currentUser]);
+
+    useEffect(() => {
+        lastLoadRef.current = 0;
+    }, [currentUser?.id]);
 
     useEffect(() => {
         setActiveTab(storeInitialTab);
@@ -950,7 +961,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             // Critical: Dispatch User Update immediately
             dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             onRedeemSuccess({ item, updatedUser: response.updatedUser });
-            await fetchData();
+            await fetchData(true);
         }
         setIsProcessing(false);
     }, [currentUser, isProcessing, dispatch, onRedeemSuccess]);
@@ -980,7 +991,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         processApiResponse(response);
         if (response.success) {
             setPurchaseSuccessInfo({ packName: pack.name });
-            await fetchData();
+            await fetchData(true);
         }
         setIsProcessing(false);
     };
@@ -991,7 +1002,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
          setIsProcessing(true);
          const response = await api.initiatePayment(requestId);
          if(response.success) {
-             await fetchData();
+             await fetchData(true);
          }
          setIsProcessing(false);
     };
@@ -1000,14 +1011,14 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         if (!currentUser) return;
         const response = await api.buyCustomCoinPack(currentUser.id, coins, price);
         processApiResponse(response);
-        if (response.success) await fetchData();
+        if (response.success) await fetchData(true);
     };
     
     const handleSubmitCoinPurchaseProof = async (requestId: string, proofDataUrl: string) => {
         if (!currentUser) return;
         const response = await api.submitCoinPurchaseProof(currentUser.id, requestId, proofDataUrl);
         processApiResponse(response);
-        if(response.updatedRequest) await fetchData();
+        if(response.updatedRequest) await fetchData(true);
     };
 
     const handleOpenPaymentLink = async (requestId: string) => {
@@ -1016,23 +1027,23 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             window.open(request.paymentLink, '_blank');
         }
         const response = await api.openPaymentLink(requestId);
-        if(response.updatedRequest) await fetchData();
+        if(response.updatedRequest) await fetchData(true);
     };
     
     const handleCancelCoinPurchase = async (request: CoinPurchaseRequest) => {
         const response = await api.cancelCoinPurchaseRequest(request.id);
         processApiResponse(response);
-        if(response.updatedRequest) await fetchData();
+        if(response.updatedRequest) await fetchData(true);
     };
 
     const handlePurchaseSuccessNavigate = () => {
-        fetchData(); 
+        fetchData(true); 
         setPurchaseSuccessInfo(null);
         setActiveTab('orders');
     };
 
     const handleClosePurchaseSuccessModal = () => {
-        fetchData();
+        fetchData(true);
         setPurchaseSuccessInfo(null);
     };
 

@@ -375,6 +375,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
   const isCheckInStatusLoading = isSupabase && checkedIn === null;
   const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number } | null>(null);
+  const lastLoadRef = useRef<number>(0);
+  const CACHE_TTL = 30_000;
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
@@ -387,74 +389,78 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [getTodayRefId]);
 
   useEffect(() => {
+    lastLoadRef.current = 0;
+  }, [user?.id]);
+
+  const fetchData = useCallback(async (force = false) => {
     if (!user) {
         setLedgerEntries([]);
         setNotificationsFeed([]);
         return;
     }
-    let isActive = true;
-    const fetchData = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            if (isSupabase) {
-                setIsLedgerLoading(true);
-                setIsNotificationsLoading(true);
-                const [ledgerResponse, notificationsResponse] = await Promise.all([
-                    fetchMyLedger(20, 0),
-                    fetchMyNotifications(20),
-                ]);
+    const now = Date.now();
+    if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+        return;
+    }
+    lastLoadRef.current = now;
 
-                if (!isActive) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+        if (isSupabase) {
+            setIsLedgerLoading(true);
+            setIsNotificationsLoading(true);
+            const [ledgerResponse, notificationsResponse] = await Promise.all([
+                fetchMyLedger(20, 0),
+                fetchMyNotifications(20),
+            ]);
 
-                const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
-                const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
+            const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
+            const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
 
-                setLedgerEntries(ledgerList);
-                const newNotifications = notificationList.filter(n => !notificationState.some(existing => existing.id === n.id));
-                const mergedNotifications = [...newNotifications, ...notificationState];
-                setNotificationsFeed(mergedNotifications.length ? mergedNotifications : notificationList);
-                if (newNotifications.length) {
-                    dispatch({ type: 'ADD_NOTIFICATIONS', payload: newNotifications });
-                }
+            setLedgerEntries(ledgerList);
+            const newNotifications = notificationList.filter(n => !notificationState.some(existing => existing.id === n.id));
+            const mergedNotifications = [...newNotifications, ...notificationState];
+            setNotificationsFeed(mergedNotifications.length ? mergedNotifications : notificationList);
+            if (newNotifications.length) {
+                dispatch({ type: 'ADD_NOTIFICATIONS', payload: newNotifications });
+            }
 
-                setData({
-                    advertisements: [],
-                    featuredMission: null,
-                    artistsOfTheDay: [],
-                    processedArtistOfTheDayQueue: [],
-                    artistsOfTheDayIds: [],
-                    ledger: ledgerList
-                });
-            } else {
-                const api = await import('../api/index');
-                const dashboardData = await api.fetchDashboardData();
-                if (!isActive) return;
-                setData(dashboardData);
-                setLedgerEntries(dashboardData?.ledger || []);
-                setNotificationsFeed(notificationState || []);
-                if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
-                    const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
-                    if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
-                        onShowArtistOfTheDay(processedEntry.id);
-                    }
+            setData({
+                advertisements: [],
+                featuredMission: null,
+                artistsOfTheDay: [],
+                processedArtistOfTheDayQueue: [],
+                artistsOfTheDayIds: [],
+                ledger: ledgerList
+            });
+        } else {
+            const api = await import('../api/index');
+            const dashboardData = await api.fetchDashboardData();
+            setData(dashboardData);
+            setLedgerEntries(dashboardData?.ledger || []);
+            setNotificationsFeed(notificationState || []);
+            if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
+                const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
+                if (processedEntry && !user.seenArtistOfTheDayAnnouncements?.includes(processedEntry.id)) {
+                    onShowArtistOfTheDay(processedEntry.id);
                 }
             }
-        } catch (error) {
-            console.error("Failed to fetch dashboard data:", error);
-            setError("Não foi possível carregar os dados do dashboard.");
-        } finally {
-            if (isActive) {
-                setIsLoading(false);
-                setIsLedgerLoading(false);
-                setIsNotificationsLoading(false);
-            }
-            Perf.end('dashboard_mount');
         }
-    };
-    fetchData();
-    return () => { isActive = false; };
-  }, [user, isSupabase, onShowArtistOfTheDay, dispatch]);
+    } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+        setError("Não foi possível carregar os dados do dashboard.");
+    } finally {
+        setIsLoading(false);
+        setIsLedgerLoading(false);
+        setIsNotificationsLoading(false);
+        Perf.end('dashboard_mount');
+    }
+  }, [user, isSupabase, notificationState, dispatch, onShowArtistOfTheDay]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   // =====================================================
   // Realtime (Supabase): notifications + economy_ledger
@@ -729,6 +735,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
                 markCheckInDoneForToday();
             }
+            await fetchData(true);
         } catch (e: any) { 
             console.error(e); 
             const message = typeof e?.message === 'string' ? e.message : '';
@@ -787,11 +794,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         } catch {}
 
         markCheckInDoneForToday();
+        await fetchData(true);
     } catch (e) { console.error(e); } finally { 
         setCheckInLoading(false); 
         Perf.end('check_in_action');
     }
-  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, isSupabase, markCheckInDoneForToday]);
+  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, isSupabase, markCheckInDoneForToday, fetchData]);
 
   const handleCloseCheckInModal = useCallback(() => {
     setCheckInResult(null);

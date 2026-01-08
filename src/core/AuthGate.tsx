@@ -37,7 +37,7 @@ export const AuthGate = (): React.ReactElement => {
             try {
                 setBootStage('AUTH');
                 const { user, notifications, unseenAdminNotifications } =
-                    await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
+                    await withTimeout(api.checkAuthStatus(), 15000, 'checkAuthStatus');
                 if (user) {
                     setBootStage('PROFILE');
                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
@@ -52,10 +52,7 @@ export const AuthGate = (): React.ReactElement => {
             } catch (error: any) {
                 const msg = String(error?.message || error || '');
                 if (msg.startsWith('timeout:')) {
-                    console.warn('[AuthGate] Boot timeout detected:', msg);
-
-                    // Libera o app: cai pro AuthPage (ou mantém estado atual)
-                    dispatch({ type: 'LOGOUT' });
+                    console.warn('[AuthGate] Timeout ou falha leve no boot', error);
                     setIsLoading(false);
                     return;
                 }
@@ -125,7 +122,7 @@ export const AuthGate = (): React.ReactElement => {
                              try {
                                 setBootStage('AUTH');
                                 const { user, notifications, unseenAdminNotifications } =
-                                    await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
+                                    await withTimeout(api.checkAuthStatus(), 15000, 'checkAuthStatus');
                                 if (user) {
                                     setBootStage('PROFILE');
                                     await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
