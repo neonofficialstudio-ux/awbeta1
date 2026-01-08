@@ -1,4 +1,6 @@
 import { supabaseClient } from './client';
+import { ProfileSupabase } from './profile';
+import { createNotification } from '../helpers';
 import type { StoreItem, RedeemedItem } from '../../types/store';
 import { config } from '../../core/config';
 
@@ -129,7 +131,7 @@ export const StoreSupabase = {
     }
   },
 
-  async redeemStoreItem(userId: string, itemId: string): Promise<{ success: boolean; redeemedItem?: RedeemedItem; error?: string }> {
+  async redeemStoreItem(userId: string, itemId: string): Promise<any> {
     if (config.backendProvider !== 'supabase') {
       return { success: false, error: 'Supabase provider is not enabled' };
     }
@@ -151,22 +153,76 @@ export const StoreSupabase = {
       }
 
       const payload = Array.isArray(data) ? data[0] : data;
-      const createdISO = payload?.created_at || new Date().toISOString();
-      const redeemedItem: RedeemedItem = {
-        id: payload?.id || `inv-${Date.now()}`,
-        userId: authData.user.id,
-        userName: authData.user.email || 'Você',
-        itemId: payload?.item_id || itemId,
-        itemName: payload?.item_name || 'Item',
-        itemPrice: payload?.price_coins ?? 0,
-        redeemedAt: createdISO,
-        redeemedAtISO: createdISO,
-        coinsBefore: payload?.coins_before ?? 0,
-        coinsAfter: payload?.coins_after ?? 0,
-        status: 'Redeemed',
-      };
 
-      return { success: true, redeemedItem };
+      // ✅ payload do seu RPC atual:
+      // { success: true/false, error?, item_id, inventory_id, price }
+      if (!payload?.success) {
+        return { success: false, error: payload?.error || 'Falha ao resgatar item' };
+      }
+
+      // Buscar nome/preço do item (para montar feedback bonito)
+      let itemName = 'Item';
+      let itemPrice = payload?.price ?? 0;
+      try {
+        const { data: itemRow } = await supabase
+          .from('store_items')
+          .select('name, price_coins')
+          .eq('id', itemId)
+          .limit(1)
+          .maybeSingle();
+
+        if (itemRow?.name) itemName = itemRow.name;
+        if (typeof itemRow?.price_coins === 'number') itemPrice = itemRow.price_coins;
+      } catch {}
+
+      // ✅ Refetch do profile real (fonte da verdade)
+      const profileRes = await ProfileSupabase.fetchMyProfile(authData.user.id);
+      if (!profileRes.success || !profileRes.user) {
+        // mesmo se falhar, não quebra a compra; só retorna sem updatedUser
+        return {
+          success: true,
+          redeemedItem: {
+            id: payload?.inventory_id || `inv-${Date.now()}`,
+            userId: authData.user.id,
+            userName: authData.user.email || 'Você',
+            itemId,
+            itemName,
+            itemPrice,
+            redeemedAt: new Date().toISOString(),
+            redeemedAtISO: new Date().toISOString(),
+            coinsBefore: 0,
+            coinsAfter: 0,
+            status: 'Redeemed',
+          },
+        };
+      }
+
+      const updatedUser = profileRes.user;
+
+      const notifications = [
+        createNotification(authData.user.id, 'Compra realizada!', `Você adquiriu "${itemName}".`, {
+          view: 'inventory',
+        }),
+      ];
+
+      return {
+        success: true,
+        updatedUser,
+        notifications,
+        redeemedItem: {
+          id: payload?.inventory_id || `inv-${Date.now()}`,
+          userId: authData.user.id,
+          userName: authData.user.email || 'Você',
+          itemId,
+          itemName,
+          itemPrice,
+          redeemedAt: new Date().toISOString(),
+          redeemedAtISO: new Date().toISOString(),
+          coinsBefore: 0,
+          coinsAfter: updatedUser.coins ?? 0,
+          status: 'Redeemed',
+        },
+      };
     } catch (err: any) {
       console.error('[StoreSupabase] redeemStoreItem failed', err);
       return { success: false, error: err?.message || 'Falha ao resgatar item' };
