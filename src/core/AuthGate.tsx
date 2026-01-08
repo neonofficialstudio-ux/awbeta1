@@ -15,21 +15,44 @@ export const AuthGate = (): React.ReactElement => {
     const { activeUser } = state;
     const [termsContent, setTermsContent] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+        let timeoutId: any;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(`timeout:${label}`)), ms);
+        });
+
+        try {
+            return await Promise.race([promise, timeoutPromise]) as T;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    };
 
     // Initial Load Logic
     useEffect(() => {
         const checkLoginStatus = async () => {
             setIsLoading(true);
             try {
-                const { user, notifications, unseenAdminNotifications } = await api.checkAuthStatus();
+                const { user, notifications, unseenAdminNotifications } =
+                    await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
                 if (user) {
-                    await StabilizationEngine.runStartupChecks(user.id);
-                    if (user.riskScore === undefined) user.riskScore = 0;
-                    if (user.shieldLevel === undefined) user.shieldLevel = "normal";
-                    
+                    await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
+
+                    if ((user as any).riskScore === undefined) (user as any).riskScore = 0;
+                    if ((user as any).shieldLevel === undefined) (user as any).shieldLevel = "normal";
+
                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
                 }
             } catch (error: any) {
+                const msg = String(error?.message || error || '');
+                if (msg.startsWith('timeout:')) {
+                    console.warn('[AuthGate] Boot timeout detected:', msg);
+
+                    // Libera o app: cai pro AuthPage (ou mantém estado atual)
+                    dispatch({ type: 'LOGOUT' });
+                    setIsLoading(false);
+                    return;
+                }
                 console.error("Auth check failed:", error);
 
                 // ✅ Auto-heal: se token do Supabase estiver corrompido, limpa storage do auth e força logout.
@@ -72,6 +95,17 @@ export const AuthGate = (): React.ReactElement => {
         checkLoginStatus();
     }, [dispatch]);
 
+    useEffect(() => {
+        if (!isLoading) return;
+
+        const id = setTimeout(() => {
+            console.warn('[AuthGate] Watchdog released loading after 12s');
+            setIsLoading(false);
+        }, 12000);
+
+        return () => clearTimeout(id);
+    }, [isLoading]);
+
     // Supabase Auth Listener
     useEffect(() => {
         if (config.useSupabase) {
@@ -83,9 +117,10 @@ export const AuthGate = (): React.ReactElement => {
                          if (!activeUser) {
                              setIsLoading(true);
                              try {
-                                const { user, notifications, unseenAdminNotifications } = await api.checkAuthStatus();
+                                const { user, notifications, unseenAdminNotifications } =
+                                    await withTimeout(api.checkAuthStatus(), 8000, 'checkAuthStatus');
                                 if (user) {
-                                    await StabilizationEngine.runStartupChecks(user.id);
+                                    await withTimeout(StabilizationEngine.runStartupChecks(user.id), 5000, 'startupChecks');
                                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
                                 }
                              } catch(e) {
