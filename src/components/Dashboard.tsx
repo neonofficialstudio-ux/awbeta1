@@ -1004,7 +1004,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                                     <p className={`text-lg font-black ${entry.transactionType === 'earn' ? 'text-green-400' : 'text-red-400'}`}>
                                         {entry.transactionType === 'earn' ? '+' : '-'}{formatNumber(Math.abs(entry.amount))} {entry.type === 'XP' ? 'XP' : 'LC'}
                                     </p>
-                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Saldo: {formatNumber(entry.balanceAfter || 0)}</p>
+                                    {(() => {
+                                        const afterCoins = (entry.metadata as any)?.after?.coins;
+                                        const afterXp = (entry.metadata as any)?.after?.xp;
+
+                                        const hasAfter =
+                                            typeof afterCoins === 'number' || typeof afterXp === 'number';
+
+                                        const shown =
+                                            entry.type === 'XP'
+                                                ? (typeof afterXp === 'number' ? afterXp : entry.balanceAfter)
+                                                : (typeof afterCoins === 'number' ? afterCoins : entry.balanceAfter);
+
+                                        // Se não temos after e o backend não fornece balance_after, não mentir com 0
+                                        const label = (!hasAfter && (entry.balanceAfter ?? 0) === 0)
+                                            ? '—'
+                                            : formatNumber(shown || 0);
+
+                                        const unit = entry.type === 'XP' ? 'XP' : 'LC';
+
+                                        return (
+                                            <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                                                Saldo: {label} {label === '—' ? '' : unit}
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         ))

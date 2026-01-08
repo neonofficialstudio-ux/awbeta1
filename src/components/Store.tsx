@@ -902,6 +902,45 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         
         // Use updated API that delegates to StoreEngine
         const response = await api.redeemItem(currentUser.id, item.id);
+
+        if (!response?.success) {
+            const err = (response?.error || '').toString();
+
+            if (err === 'item_already_owned') {
+                dispatch({
+                    type: 'ADD_TOAST',
+                    payload: {
+                        id: Date.now().toString(),
+                        type: 'info',
+                        title: 'Você já possui este item',
+                        message: 'Esse item já está no seu inventário.',
+                    }
+                });
+            } else if (err === 'insufficient_balance') {
+                dispatch({
+                    type: 'ADD_TOAST',
+                    payload: {
+                        id: Date.now().toString(),
+                        type: 'error',
+                        title: 'Saldo insuficiente',
+                        message: 'Você não tem LC suficiente para comprar este item.',
+                    }
+                });
+            } else {
+                dispatch({
+                    type: 'ADD_TOAST',
+                    payload: {
+                        id: Date.now().toString(),
+                        type: 'error',
+                        title: 'Compra não concluída',
+                        message: err || 'Não foi possível finalizar a compra.',
+                    }
+                });
+            }
+
+            setIsProcessing(false);
+            return;
+        }
         
         if (response.notifications) {
             dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
