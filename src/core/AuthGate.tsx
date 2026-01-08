@@ -5,6 +5,7 @@ import * as api from '../api/index';
 import { StabilizationEngine } from './stabilization/stabilizationEngine';
 import AuthPage from '../components/AuthPage';
 import BannedUserPage from '../components/BannedUserPage';
+import BootSplash from '../components/BootSplash';
 import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
@@ -178,9 +179,10 @@ export const AuthGate = (): React.ReactElement => {
     
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-[#FFD447]"></div>
-            </div>
+            <BootSplash
+                message="Inicializando…"
+                hint="Verificando sessão e sincronizando dados essenciais."
+            />
         );
     }
     
