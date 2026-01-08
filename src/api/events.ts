@@ -211,12 +211,132 @@ export const markArtistOfTheDayAsSeen = (userId: string, announcementId: string)
     return {};
 });
 
-export const fetchRafflesData = (userId: string) => withLatency(() => {
-    ensureMockBackend('fetchRafflesData');
-    return {
-        raffles: db.rafflesData,
-        myTickets: db.raffleTicketsData.filter(t => t.userId === userId),
-        allTickets: db.raffleTicketsData,
-        allUsers: db.allUsersData,
-    };
-});
+export const fetchRafflesData = async (userId: string) => {
+    // ✅ Supabase path
+    if (isSupabaseProvider()) {
+        assertSupabaseProvider('events.fetchRafflesData');
+
+        const supabase = requireSupabaseClient();
+
+        // 1) highlighted raffle (opcional)
+        let highlightedRaffleId: string | null = null;
+        try {
+            const { data: settingRow } = await supabase
+                .from('event_settings')
+                .select('value')
+                .eq('key', 'highlighted_raffle_id')
+                .limit(1)
+                .maybeSingle();
+
+            highlightedRaffleId = (settingRow as any)?.value?.id ?? null;
+        } catch {
+            // se não existir setting, ok
+        }
+
+        // 2) raffles
+        const { data: rafflesRows, error: rafflesErr } = await supabase
+            .from('raffles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (rafflesErr) throw rafflesErr;
+
+        const raffles = (rafflesRows || []).map((r: any) => ({
+            id: r.id,
+            itemId: r.item_id || '',
+            itemName: r.item_name,
+            itemImageUrl: r.item_image_url || '',
+            ticketPrice: r.ticket_price,
+            ticketLimitPerUser: r.ticket_limit_per_user,
+            startsAt: r.starts_at || undefined,
+            endsAt: r.ends_at,
+            status: r.status,
+            winnerId: r.winner_user_id || undefined,
+            winnerDefinedAt: r.winner_defined_at || undefined,
+            // campos extras que seu tipo aceita (se existirem)
+            prizeType: r.prize_type || undefined,
+            coinReward: r.coin_reward || undefined,
+            customRewardText: r.custom_reward_text || undefined,
+            meta: r.meta || {},
+        }));
+
+        // 3) tickets (meus + total)
+        const { data: myTicketsRows, error: myTicketsErr } = await supabase
+            .from('raffle_tickets')
+            .select('*')
+            .eq('user_id', userId)
+            .order('purchased_at', { ascending: false });
+
+        if (myTicketsErr) throw myTicketsErr;
+
+        // ⚠️ Em produção grande, isso aqui pode virar “count por raffle” via RPC.
+        // Por enquanto, está ok buscar os tickets para exibir total vendido.
+        const { data: allTicketsRows, error: allTicketsErr } = await supabase
+            .from('raffle_tickets')
+            .select('*')
+            .order('purchased_at', { ascending: false })
+            .limit(2000);
+
+        if (allTicketsErr) throw allTicketsErr;
+
+        const myTickets = (myTicketsRows || []).map((t: any) => ({
+            id: t.id,
+            raffleId: t.raffle_id,
+            userId: t.user_id,
+            purchasedAt: t.purchased_at,
+        }));
+
+        const allTickets = (allTicketsRows || []).map((t: any) => ({
+            id: t.id,
+            raffleId: t.raffle_id,
+            userId: t.user_id,
+            purchasedAt: t.purchased_at,
+        }));
+
+        // 4) users (profiles) para exibir nomes/avatares
+        const userIds = Array.from(
+            new Set(
+                [
+                    ...(allTicketsRows || []).map((t: any) => t.user_id),
+                    ...(rafflesRows || [])
+                        .map((r: any) => r.winner_user_id)
+                        .filter(Boolean),
+                ]
+            )
+        );
+
+        let allUsers: any[] = [];
+        if (userIds.length > 0) {
+            const { data: profilesRows, error: profilesErr } = await supabase
+                .from('profiles')
+                .select('id, display_name, name, avatar_url, coins, xp, level')
+                .in('id', userIds);
+
+            if (profilesErr) throw profilesErr;
+
+            allUsers = (profilesRows || []).map((p: any) => ({
+                id: p.id,
+                name: p.display_name || p.name || 'User',
+                displayName: p.display_name || p.name || 'User',
+                avatarUrl: p.avatar_url || '',
+                coins: p.coins ?? 0,
+                xp: p.xp ?? 0,
+                level: p.level ?? 1,
+            }));
+        }
+
+        return { raffles, myTickets, allTickets, allUsers, highlightedRaffleId };
+    }
+
+    // ✅ Mock path (inalterado)
+    return withLatency(() => {
+        ensureMockBackend('fetchRafflesData');
+        return {
+            raffles: db.rafflesData,
+            myTickets: db.raffleTicketsData.filter(t => t.userId === userId),
+            allTickets: db.raffleTicketsData,
+            allUsers: db.allUsersData,
+            highlightedRaffleId: null,
+        };
+    });
+};
