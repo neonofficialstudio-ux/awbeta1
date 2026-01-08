@@ -180,8 +180,10 @@ export const AuthGate = (): React.ReactElement => {
     if (isLoading) {
         return (
             <BootSplash
-                message="Inicializando…"
-                hint="Verificando sessão e sincronizando dados essenciais."
+                title="ARTIST WORLD"
+                message="Inicializando núcleo"
+                hint="Verificando sessão, preparando economia e sincronizando notificações."
+                progressLabel="AW // BOOT"
             />
         );
     }
