@@ -84,7 +84,8 @@ export const appReducer = (state: AppState, action: Action): AppState => {
     case 'LOGOUT':
       localStorage.removeItem('authToken');
       return { ...initialState, activeUser: null };
-    case 'UPDATE_USER': {
+    case 'UPDATE_USER':
+    case 'SET_USER': {
       const updatedUser = normalizeActiveUser(action.payload);
       if (!updatedUser) return state;
 
