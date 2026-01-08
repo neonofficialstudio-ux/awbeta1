@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Mission, User, MissionSubmission } from '../types';
 import { CoinIcon, XPIcon, InstagramIcon, TikTokIcon, StarIcon, VipIcon, HistoryIcon as ClockIcon, TrendingUpIcon, CheckIcon, YoutubeIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
@@ -548,12 +548,12 @@ const Missions: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
     const lastLoadRef = useRef<number>(0);
-    const CACHE_TTL = 30_000;
+    const CACHE_TTL_MS = 30_000; // 30s
 
     const fetchData = useCallback(async (force = false) => {
         if (!user) return;
         const now = Date.now();
-        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL_MS) {
             return;
         }
         lastLoadRef.current = now;
@@ -575,7 +575,7 @@ const Missions: React.FC = () => {
     }, [user]);
 
     useEffect(() => {
-        fetchData();
+        fetchData(false);
     }, [fetchData]); 
 
     useEffect(() => {
