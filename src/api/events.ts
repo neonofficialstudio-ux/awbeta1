@@ -232,6 +232,10 @@ export const fetchRafflesData = async (userId: string) => {
         } catch {
             // se não existir setting, ok
         }
+        const isUuid = (s: string | null | undefined) =>
+            !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+
+        if (!isUuid(highlightedRaffleId)) highlightedRaffleId = null;
 
         // 2) raffles
         const { data: rafflesRows, error: rafflesErr } = await supabase
@@ -259,6 +263,8 @@ export const fetchRafflesData = async (userId: string) => {
             customRewardText: r.custom_reward_text || undefined,
             meta: r.meta || {},
         }));
+        const fallbackHighlighted = raffles?.[0]?.id ?? null;
+        highlightedRaffleId = highlightedRaffleId ?? fallbackHighlighted;
 
         // 3) tickets (meus + total)
         const { data: myTicketsRows, error: myTicketsErr } = await supabase
