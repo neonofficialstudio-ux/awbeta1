@@ -29,8 +29,41 @@ export const AuthGate = (): React.ReactElement => {
                     
                     dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Auth check failed:", error);
+
+                // ✅ Auto-heal: se token do Supabase estiver corrompido, limpa storage do auth e força logout.
+                try {
+                    if (config.useSupabase) {
+                        const supabase = getSupabase();
+                        if (supabase) {
+                            const msg = String(error?.message || error || '');
+
+                            // Heurística: erros comuns quando o token/localStorage quebra
+                            const looksLikeCorruptAuth =
+                                msg.toLowerCase().includes('jwt') ||
+                                msg.toLowerCase().includes('token') ||
+                                msg.toLowerCase().includes('parse') ||
+                                msg.toLowerCase().includes('json') ||
+                                msg.toLowerCase().includes('storage');
+
+                            if (looksLikeCorruptAuth) {
+                                // Remove o token do supabase-js: sb-<projectRef>-auth-token
+                                const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+                                const match = typeof url === 'string' ? url.match(/^https:\/\/([a-z0-9-]+)\.supabase\.co/i) : null;
+                                const projectRef = match?.[1];
+                                if (projectRef) {
+                                    const key = `sb-${projectRef}-auth-token`;
+                                    try { localStorage.removeItem(key); } catch {}
+                                }
+
+                                // força logout local
+                                await supabase.auth.signOut();
+                                dispatch({ type: 'LOGOUT' });
+                            }
+                        }
+                    }
+                } catch {}
             } finally {
                 setIsLoading(false);
             }

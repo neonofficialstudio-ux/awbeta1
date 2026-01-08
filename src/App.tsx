@@ -69,7 +69,11 @@ const AppContent: React.FC = () => {
                 const queueChanged = newState.queue && !fastDeepEqual(newState.queue, state.queue);
 
                 if (userChanged) {
-                     dispatch({ type: 'UPDATE_USER', payload: newState.activeUser! });
+                    // ✅ Em Supabase, não rodar auto-repair legado que tenta “normalizar” user local.
+                    // A fonte da verdade é o backend.
+                    if (config.backendProvider === 'mock') {
+                        dispatch({ type: 'UPDATE_USER', payload: newState.activeUser! });
+                    }
                 }
                 if (rankingChanged) {
                     dispatch({ type: 'SET_RANKING_GLOBAL', payload: newState.rankingGlobal });
