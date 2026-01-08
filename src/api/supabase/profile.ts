@@ -77,12 +77,13 @@ export const ProfileSupabase = {
             return { success: false, error: 'Usuário não autenticado' };
         }
 
-        const profileMeta = sanitizeMeta(buildProfileMeta(user));
+        const profileMeta = buildProfileMeta(user);
+        const sanitizedMeta = sanitizeMeta(profileMeta);
         const { data, error } = await supabase.rpc('update_my_profile', {
             p_name: user.name,
             p_artistic_name: user.artisticName,
             p_avatar_url: user.avatarUrl,
-            p_meta: profileMeta,
+            p_meta: sanitizedMeta,
         });
 
         if (error) {
@@ -104,7 +105,7 @@ export const ProfileSupabase = {
             check_in_streak: user.weeklyCheckInStreak,
             last_check_in: user.lastCheckIn,
             joined_at: user.joinedISO,
-            meta: profileMeta,
+            meta: sanitizedMeta,
         };
 
         const mapped = mapProfileToUser(hydratedProfile);

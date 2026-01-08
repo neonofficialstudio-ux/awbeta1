@@ -374,7 +374,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
   const isCheckInStatusLoading = isSupabase && checkedIn === null;
-  const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number; updatedUser: User } | null>(null);
+  const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number } | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
@@ -757,24 +757,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         const api = await import('../api/index');
         const response = await api.dailyCheckIn(user.id);
         if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
-        if (response.coinsGained > 0 && response.updatedUser) {
-            dispatch({ 
-                type: 'ADD_TOAST', 
-                payload: { 
-                    id: Date.now().toString(), 
-                    type: 'coin', 
-                    title: 'Check-in Realizado!', 
-                    message: `+${response.coinsGained} Lummi Coins adicionadas.` 
-                } 
-            });
+        dispatch({
+            type: 'ADD_TOAST',
+            payload: {
+                id: Date.now().toString(),
+                type: 'coin',
+                title: 'Check-in realizado!',
+                message: 'Recompensas adicionadas com sucesso.',
+            }
+        });
 
+        if (response) {
             setCheckInResult({
                 coinsGained: response.coinsGained,
                 isBonus: response.isBonus,
                 streak: response.streak,
-                updatedUser: response.updatedUser,
             });
         }
+
+        const freshProfile = await api.fetchMyProfile();
+        dispatch({ type: 'SET_USER', payload: freshProfile });
+
+        try {
+            const ledger = await api.getMyLedger(20, 0);
+            if (ledger?.length) {
+                setLedgerEntries(ledger);
+                setData(prev => prev ? { ...prev, ledger } : prev);
+            }
+        } catch {}
+
         markCheckInDoneForToday();
     } catch (e) { console.error(e); } finally { 
         setCheckInLoading(false); 
@@ -783,9 +794,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, isSupabase, markCheckInDoneForToday]);
 
   const handleCloseCheckInModal = useCallback(() => {
-    if (checkInResult?.updatedUser) dispatch({ type: 'UPDATE_USER', payload: checkInResult.updatedUser });
     setCheckInResult(null);
-  }, [checkInResult, dispatch]);
+  }, []);
   
   if (isLoading || !user) {
     return (
