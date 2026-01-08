@@ -138,11 +138,15 @@ export const MainLayout: React.FC = () => {
         }
     }, [activeUser, dispatch, unseenAchievementId]);
 
+    const safeUnseenAdminNotifications = Array.isArray(unseenAdminNotifications)
+        ? unseenAdminNotifications
+        : [];
+
     useEffect(() => {
-        if (unseenAdminNotifications.length > 0 && !currentAdminNotification) {
-            setCurrentAdminNotification(unseenAdminNotifications[0]);
+        if (safeUnseenAdminNotifications.length > 0 && !currentAdminNotification) {
+            setCurrentAdminNotification(safeUnseenAdminNotifications[0]);
         }
-    }, [unseenAdminNotifications, currentAdminNotification]);
+    }, [safeUnseenAdminNotifications, currentAdminNotification]);
 
     const handleViewUserHistory = async (user: User) => {
         setViewingUserHistory(user);
