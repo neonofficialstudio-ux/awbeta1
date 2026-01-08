@@ -547,9 +547,16 @@ const Missions: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
+    const lastLoadRef = useRef<number>(0);
+    const CACHE_TTL = 30_000;
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (force = false) => {
         if (!user) return;
+        const now = Date.now();
+        if (!force && lastLoadRef.current && now - lastLoadRef.current < CACHE_TTL) {
+            return;
+        }
+        lastLoadRef.current = now;
         setIsLoading(true);
         setError(null);
         Perf.mark('missions_data_fetch');
@@ -571,6 +578,10 @@ const Missions: React.FC = () => {
         fetchData();
     }, [fetchData]); 
 
+    useEffect(() => {
+        lastLoadRef.current = 0;
+    }, [user?.id]);
+
     const handleSubmitMission = useCallback(async (missionId: string, proof: string) => {
         if (!user) return;
         try {
@@ -579,7 +590,7 @@ const Missions: React.FC = () => {
                 throw new Error(response.message || 'Falha ao enviar missão.');
             }
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
-            await fetchData();
+            await fetchData(true);
             const submittedMission = missions.find(m => m.id === missionId);
             if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
         } catch(e: any) {
