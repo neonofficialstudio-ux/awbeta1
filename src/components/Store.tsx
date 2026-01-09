@@ -10,6 +10,7 @@ import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import { ModalPortal } from './ui/overlays/ModalPortal';
 import FaqItem from './ui/patterns/FaqItem';
+import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 
 // --- UI COMPONENTS V3 (PREMIUM DOPAMINE GLOW) ---
 
@@ -963,6 +964,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             onRedeemSuccess({ item, updatedUser: response.updatedUser });
             await fetchData(true);
         }
+        await refreshAfterEconomyAction(currentUser.id, dispatch);
         setIsProcessing(false);
     }, [currentUser, isProcessing, dispatch, onRedeemSuccess, fetchData]);
     
