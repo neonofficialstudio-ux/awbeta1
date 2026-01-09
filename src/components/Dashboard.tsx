@@ -361,6 +361,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const { state, dispatch } = useAppContext();
   const { activeUser: user, prevCoins, notifications: notificationState } = state;
+  const isProfileLoading =
+    !!user?.id && (
+      user.coins === undefined || user.coins === null ||
+      user.xp === undefined || user.xp === null
+    );
   const isSupabase = isSupabaseProvider();
   const userDisplayName = getDisplayName(user ? { ...user, artistic_name: user.artisticName } : null);
   const [data, setData] = useState<any>(null);
@@ -859,7 +864,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                     <span className="w-2 h-2 bg-[#FFD36A] rounded-full animate-pulse shadow-[0_0_10px_#FFD36A]"></span>
                     {getGreeting()},
                 </p>
-                <h2 className="text-4xl md:text-6xl font-black text-white font-chakra tracking-tighter leading-none uppercase drop-shadow-lg text-shadow-glow">{user.name}</h2>
+                <div className="text-3xl font-extrabold tracking-tight">
+                  {isProfileLoading ? 'CARREGANDO PERFIL…' : (user?.display_name || user?.displayName || user?.name || 'UNKNOWN USER')}
+                </div>
             </div>
             <div className="hidden md:block text-right">
                 <p className="text-[10px] text-gray-400 uppercase tracking-[0.3em] font-bold mb-1">Carreira Musical</p>
