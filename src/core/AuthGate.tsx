@@ -9,12 +9,22 @@ import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
 import { isAdmin as checkIsAdmin } from '../api/supabase/admin';
+import { ProfileSupabase } from '../api/supabase/profile';
 
 export const AuthGate = (): React.ReactElement => {
     const { state, dispatch } = useAppContext();
     const { activeUser } = state;
     const [termsContent, setTermsContent] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+
+    const syncProfile = async (userId: string) => {
+        try {
+            const res = await ProfileSupabase.fetchMyProfile(userId);
+            if (res?.success && res.user) {
+                dispatch({ type: 'UPDATE_USER', payload: res.user });
+            }
+        } catch {}
+    };
 
     // Initial Load Logic
     useEffect(() => {
@@ -33,6 +43,7 @@ export const AuthGate = (): React.ReactElement => {
 
                 if (session?.user) {
                     dispatch({ type: 'LOGIN', payload: { user: session.user } });
+                    await syncProfile(session.user.id);
                 } else {
                     dispatch({ type: 'LOGOUT' });
                 }
@@ -43,6 +54,7 @@ export const AuthGate = (): React.ReactElement => {
 
                     if (session?.user) {
                         dispatch({ type: 'LOGIN', payload: { user: session.user } });
+                        void syncProfile(session.user.id);
                     } else {
                         dispatch({ type: 'LOGOUT' });
                     }
