@@ -3,7 +3,6 @@ import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry, Notificati
 import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon, BellIcon, HistoryIcon } from '../constants';
 import { useAppContext } from '../constants';
 import { fetchArtistOfTheDayConfig } from '../api/events/index';
-import CheckInSuccessModal from './CheckInSuccessModal';
 import CountUp from './CountUp';
 import { xpForLevelStart } from '../api/economy/economy';
 import { formatNumber } from './ui/utils/format';
@@ -379,7 +378,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
   const isCheckInStatusLoading = isSupabase && checkedIn === null;
-  const [checkInResult, setCheckInResult] = useState<{ coinsGained: number; isBonus: boolean; streak: number } | null>(null);
   const lastLoadRef = useRef<number>(0);
   const CACHE_TTL_MS = 30_000; // 30s
   const lastUserIdRef = useRef<string | null>(null);
@@ -725,24 +723,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 id: Date.now().toString(),
                 type: 'coin',
                 title: 'Check-in realizado!',
-                message: 'Recompensas adicionadas com sucesso.',
+                message: '+1 LC e +10 XP adicionados.',
             }
         });
-
-        if (response) {
-            const beforeCoins = response?.before?.coins;
-            const afterCoins = response?.after?.coins;
-            const coinsGained =
-                typeof beforeCoins === 'number' && typeof afterCoins === 'number'
-                    ? (afterCoins - beforeCoins)
-                    : (typeof response?.coinsGained === 'number' ? response.coinsGained : 1);
-
-            setCheckInResult({
-                coinsGained,
-                isBonus: Boolean(response?.isBonus),
-                streak: typeof response?.streak === 'number' ? response.streak : 0,
-            });
-        }
 
         if (response?.ledger?.length) {
             setLedgerEntries(response.ledger);
@@ -766,10 +749,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     }
   }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday, fetchData]);
 
-  const handleCloseCheckInModal = useCallback(() => {
-    setCheckInResult(null);
-  }, []);
-  
   if (isLoading || !user) {
     return (
         <div className="space-y-6">
@@ -1069,7 +1048,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
         <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} isSupabase={isSupabase} />
         
-        {checkInResult && <CheckInSuccessModal onClose={handleCloseCheckInModal} coinsGained={checkInResult.coinsGained} isBonus={checkInResult.isBonus} streak={checkInResult.streak} />}
       </div>
     </div>
   );
