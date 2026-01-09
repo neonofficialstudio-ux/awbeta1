@@ -132,10 +132,30 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       const current = Array.isArray(state.notifications) ? state.notifications : [];
       return { ...state, notifications: [...incoming, ...current] };
     }
+    case 'REMOVE_NOTIFICATION': {
+      const safeNotifications = Array.isArray(state.notifications)
+        ? state.notifications
+        : [];
+      return {
+        ...state,
+        notifications: safeNotifications.filter(n => n.id !== action.payload),
+      };
+    }
     case 'MARK_NOTIFICATION_READ':
-      return { ...state, notifications: state.notifications.map(n => n.id === action.payload.id ? { ...n, read: true } : n) };
+      return {
+        ...state,
+        notifications: (Array.isArray(state.notifications) ? state.notifications : []).map(n =>
+          n.id === action.payload.id ? { ...n, read: true } : n
+        ),
+      };
     case 'MARK_ALL_NOTIFICATIONS_READ':
-        return { ...state, notifications: state.notifications.map(n => ({...n, read: true})) };
+        return {
+          ...state,
+          notifications: (Array.isArray(state.notifications) ? state.notifications : []).map(n => ({
+            ...n,
+            read: true,
+          })),
+        };
     case 'SET_WELCOME_MODAL_VISIBILITY':
       return { ...state, showWelcomeModal: action.payload };
     case 'SET_UNSEEN_ADMIN_NOTIFICATIONS':
