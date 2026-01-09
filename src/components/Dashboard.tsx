@@ -730,10 +730,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         });
 
         if (response) {
+            const beforeCoins = response?.before?.coins;
+            const afterCoins = response?.after?.coins;
+            const coinsGained =
+                typeof beforeCoins === 'number' && typeof afterCoins === 'number'
+                    ? (afterCoins - beforeCoins)
+                    : (typeof response?.coinsGained === 'number' ? response.coinsGained : 1);
+
             setCheckInResult({
-                coinsGained: response.coinsGained ?? 0,
-                isBonus: Boolean(response.isBonus),
-                streak: response.streak ?? 0,
+                coinsGained,
+                isBonus: Boolean(response?.isBonus),
+                streak: typeof response?.streak === 'number' ? response.streak : 0,
             });
         }
 
