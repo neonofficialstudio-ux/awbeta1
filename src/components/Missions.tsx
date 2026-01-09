@@ -12,6 +12,7 @@ import { Perf } from '../services/perf.engine';
 import { safeDate } from '../api/utils/dateSafe';
 import FaqItem from './ui/patterns/FaqItem';
 import { socialLinkValidator } from '../api/quality/socialLinkValidator';
+import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -591,6 +592,7 @@ const Missions: React.FC = () => {
             }
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             await fetchData(true);
+            await refreshAfterEconomyAction(user.id, dispatch);
             const submittedMission = missions.find(m => m.id === missionId);
             if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
         } catch(e: any) {

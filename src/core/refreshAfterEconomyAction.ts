@@ -1,0 +1,37 @@
+import { ProfileSupabase } from '../api/supabase/profile';
+import { fetchMyNotifications, fetchMyLedger } from '../api/supabase/economy';
+
+type Dispatch = (action: any) => void;
+
+export async function refreshAfterEconomyAction(userId: string, dispatch: Dispatch) {
+  if (!userId) return { user: null, notifications: [], ledger: [] };
+
+  // 1) Profile (coins/xp/level) — determinístico
+  let updatedUser: any = null;
+  try {
+    const profileRes = await ProfileSupabase.fetchMyProfile(userId);
+    if (profileRes?.success && profileRes.user) {
+      updatedUser = profileRes.user;
+      dispatch({ type: 'UPDATE_USER', payload: profileRes.user });
+    }
+  } catch {}
+
+  // 2) Notifications — não pode quebrar
+  let notifications: any[] = [];
+  try {
+    const nRes: any = await fetchMyNotifications(20);
+    notifications = nRes?.success && Array.isArray(nRes.notifications) ? nRes.notifications : [];
+    if (notifications.length) {
+      dispatch({ type: 'ADD_NOTIFICATIONS', payload: notifications });
+    }
+  } catch {}
+
+  // 3) Ledger — retorno para páginas que precisem atualizar UI local
+  let ledger: any[] = [];
+  try {
+    const lRes: any = await fetchMyLedger(20, 0);
+    ledger = lRes?.success && Array.isArray(lRes.ledger) ? lRes.ledger : [];
+  } catch {}
+
+  return { user: updatedUser, notifications, ledger };
+}

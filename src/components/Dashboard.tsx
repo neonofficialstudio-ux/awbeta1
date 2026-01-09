@@ -13,9 +13,9 @@ import LoadingSkeleton from './ui/base/LoadingSkeleton';
 import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
-import { dailyCheckin, hasCheckedInToday } from '../api/supabase/supabase.repositories';
+import { hasCheckedInToday } from '../api/supabase/supabase.repositories';
 import { fetchMyLedger, fetchMyNotifications, markNotificationRead } from '../api/supabase/economy';
-import { ProfileSupabase } from '../api/supabase/profile';
+import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -703,83 +703,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const handleDailyCheckIn = useCallback(async () => {
     if (!user || checkInLoading || checkInDone || isCheckInStatusLoading) return; 
-    const supabase = getSupabase();
-    if (isSupabase) {
-        if (!supabase) {
-            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Supabase indisponível', message: 'Não foi possível iniciar o check-in.' } });
-            return;
-        }
-        setCheckInLoading(true);
-        setIsLedgerLoading(true);
-        Perf.mark('check_in_action');
-        try {
-            const response = await dailyCheckin();
-            const alreadyCheckedIn = (response as any)?.already_checked_in || (response as any)?.alreadyCheckedIn;
-
-            if (alreadyCheckedIn) {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
-                markCheckInDoneForToday();
-            }
-
-            const profileResponse = await ProfileSupabase.fetchMyProfile(user.id);
-            if (profileResponse.success && profileResponse.user) {
-                dispatch({ type: 'SET_USER', payload: profileResponse.user });
-            } else {
-                console.warn('[CheckIn] Failed to refresh profile after check-in.', profileResponse.error);
-            }
-
-            try {
-                const ledgerResponse = await fetchMyLedger(10, 0);
-                if (ledgerResponse?.success) {
-                    setLedgerEntries(ledgerResponse.ledger);
-                    setData(prev => prev ? { ...prev, ledger: ledgerResponse.ledger } : prev);
-                }
-            } catch (ledgerError) {
-                console.warn('[CheckIn] Ledger refetch failed after check-in.', ledgerError);
-            }
-
-            try {
-                const notificationsResponse = await fetchMyNotifications(20);
-                if (notificationsResponse?.success && notificationsResponse.notifications?.length) {
-                    dispatch({ type: 'ADD_NOTIFICATIONS', payload: notificationsResponse.notifications });
-                }
-            } catch (notificationsError) {
-                console.warn('[CheckIn] Notifications refetch failed after check-in.', notificationsError);
-            }
-
-            if (!alreadyCheckedIn) {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Check-in realizado!', message: 'Recompensas creditadas com sucesso.' } });
-                markCheckInDoneForToday();
-            }
-            await fetchData(true);
-        } catch (e: any) { 
-            console.error(e); 
-            const message = typeof e?.message === 'string' ? e.message : '';
-            const normalizedMessage = message.toLowerCase();
-
-            if (normalizedMessage.includes('já realizado hoje')) {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Check-in já realizado hoje', message: 'Volte amanhã para continuar sua sequência.' } });
-                markCheckInDoneForToday();
-            } else if (message.includes('Not authenticated')) {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Sessão expirada', message: 'Faça login novamente para continuar.' } });
-                await supabase.auth.signOut();
-                dispatch({ type: 'LOGOUT' });
-            } else {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
-            }
-        } finally { 
-            setCheckInLoading(false);
-            setIsLedgerLoading(false);
-            Perf.end('check_in_action');
-        }
-        return;
-    }
     setCheckInLoading(true);
     Perf.mark('check_in_action');
     try {
         const api = await import('../api/index');
         const response = await api.dailyCheckIn(user.id);
-        if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
+
+        if (response?.notifications?.length) {
+            dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
+        }
+
+        if (response?.updatedUser) {
+            dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+        } else {
+            await refreshAfterEconomyAction(user.id, dispatch);
+        }
+
         dispatch({
             type: 'ADD_TOAST',
             payload: {
@@ -792,30 +731,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
         if (response) {
             setCheckInResult({
-                coinsGained: response.coinsGained,
-                isBonus: response.isBonus,
-                streak: response.streak,
+                coinsGained: response.coinsGained ?? 0,
+                isBonus: Boolean(response.isBonus),
+                streak: response.streak ?? 0,
             });
         }
 
-        const freshProfile = await api.fetchMyProfile();
-        dispatch({ type: 'SET_USER', payload: freshProfile });
-
-        try {
-            const ledger = await api.getMyLedger(20, 0);
-            if (ledger?.length) {
-                setLedgerEntries(ledger);
-                setData(prev => prev ? { ...prev, ledger } : prev);
+        if (response?.ledger?.length) {
+            setLedgerEntries(response.ledger);
+            setData(prev => prev ? { ...prev, ledger: response.ledger } : prev);
+        } else {
+            const refreshed = await refreshAfterEconomyAction(user.id, dispatch);
+            if (refreshed.ledger?.length) {
+                setLedgerEntries(refreshed.ledger);
+                setData(prev => prev ? { ...prev, ledger: refreshed.ledger } : prev);
             }
-        } catch {}
+        }
 
         markCheckInDoneForToday();
         await fetchData(true);
-    } catch (e) { console.error(e); } finally { 
+    } catch (e) { 
+        console.error(e); 
+        dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
+    } finally { 
         setCheckInLoading(false); 
         Perf.end('check_in_action');
     }
-  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, isSupabase, markCheckInDoneForToday, fetchData]);
+  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday, fetchData]);
 
   const handleCloseCheckInModal = useCallback(() => {
     setCheckInResult(null);
