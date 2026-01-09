@@ -27,6 +27,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
   onItemClick,
   className = '',
 }) => {
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+
   return (
     <div className={`bg-[#1B1E23] border border-[#2A2D33] rounded-xl shadow-xl flex flex-col w-full max-w-sm ${className}`}>
       {/* Header */}
@@ -48,8 +50,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto custom-scrollbar max-h-96">
-        {notifications.length > 0 ? (
-          notifications.map((item) => (
+        {safeNotifications.length > 0 ? (
+          safeNotifications.map((item) => (
             <div
               key={item.id}
               onClick={() => onItemClick && onItemClick(item.id)}

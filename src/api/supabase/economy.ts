@@ -136,18 +136,27 @@ export const fetchMyNotifications = async (limit = 20) => {
     }
 };
 
-export const markNotificationRead = async (notificationId: string) => {
+export const markNotificationRead = async (notificationId?: string) => {
+    if (!notificationId) {
+        return { success: true as const };
+    }
+
     const supabase = ensureClient();
-    if (!supabase) return { success: false as const, error: 'Supabase client not available' };
+    if (!supabase) {
+        return { success: false as const, error: 'Supabase client not available' };
+    }
 
     try {
-        const { data, error } = await supabase.rpc('mark_notification_read', { p_notification_id: notificationId });
+        const { error } = await supabase.rpc('mark_notification_read', {
+            p_notification_id: notificationId,
+        });
+
         if (error) throw error;
-        // função retorna boolean
-        return { success: true as const, updated: data === null ? true : Boolean(data) };
-    } catch (err: any) {
-        console.error('[SupabaseEconomy] markNotificationRead failed', err);
-        return { success: false as const, error: err?.message || 'Falha ao marcar notificação como lida' };
+
+        return { success: true as const };
+    } catch (err) {
+        console.warn('[notifications] mark read skipped', err);
+        return { success: false as const };
     }
 };
 

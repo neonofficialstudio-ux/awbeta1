@@ -603,8 +603,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [isSupabase, user?.id, dispatch]);
 
   useEffect(() => {
-    setNotificationsFeed(safeNotifications);
-  }, [notificationState]);
+    if (!Array.isArray(notifications) || notifications.length === 0) {
+      setNotificationsFeed([]);
+      return;
+    }
+    setNotificationsFeed(notifications);
+  }, [notifications]);
 
   useEffect(() => {
     if (!isSupabase || !user) {
