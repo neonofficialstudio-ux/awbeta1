@@ -166,6 +166,16 @@ const ManageStore: React.FC<ManageStoreProps> = ({
       (req.status as any) === 'proof_submitted'
   ).length;
 
+  type StoreItemWithPriceCoins = StoreItem & { price_coins: number };
+
+  const normalizedStoreItems = useMemo<StoreItemWithPriceCoins[]>(
+      () => localStoreItems.map(item => ({
+          ...item,
+          price_coins: Number((item as any).price ?? (item as any).price_coins ?? (item as any).priceCoins ?? 0),
+      })),
+      [localStoreItems]
+  );
+
   // Helper to prevent duplicates
   const normalizeList = <T extends { id: string }>(arr: T[]): T[] => {
       return arr.filter((v, i, self) => i === self.findIndex(x => x.id === v.id));
@@ -327,10 +337,10 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5 bg-navy-deep">
-                        {localStoreItems.map(item => (
+                        {normalizedStoreItems.map(item => (
                             <tr key={item.id} className="hover:bg-white/5 transition-colors">
                               <td className="px-6 py-4 font-medium text-white">{item.name}</td>
-                              <td className="px-6 py-4 text-gold-cinematic font-bold">{item.price}</td>
+                              <td className="px-6 py-4 text-gold-cinematic font-bold">{item.price_coins.toLocaleString('pt-BR')}</td>
                               <td className="px-6 py-4"><Badge label={item.rarity} tier={item.rarity === 'Lendário' ? 'gold' : item.rarity === 'Épico' ? 'neon' : 'silver'} /></td>
                               <td className="px-6 py-4 text-gray-400">{item.exchanges}</td>
                               <td className="px-6 py-4">
