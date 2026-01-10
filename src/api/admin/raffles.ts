@@ -23,14 +23,27 @@ const requireSupabaseClient = () => {
     return client;
 };
 
-export async function adminCreateRaffle(payload: any) {
+export async function adminCreateRaffle(raffleData: any) {
     assertSupabaseProvider('admin.raffles.create');
 
     const supabase = requireSupabaseClient();
-    const { data, error } = await supabase.rpc(
-        "admin_create_raffle",
-        payload
-    );
+
+    // Map camelCase (UI) -> p_* (RPC)
+    const payload = {
+        p_item_name: raffleData.itemName,
+        p_item_image_url: raffleData.itemImageUrl,
+        p_ticket_price: Number(raffleData.ticketPrice ?? 0),
+        p_ticket_limit_per_user: Number(raffleData.ticketLimitPerUser ?? 0),
+        p_starts_at: raffleData.startsAt ?? null,
+        p_ends_at: raffleData.endsAt,
+        p_status: raffleData.status ?? 'active',
+        p_prize_type: raffleData.prizeType ?? null,
+        p_coin_reward: Number(raffleData.coinReward ?? 0) || null,
+        p_custom_reward_text: raffleData.customRewardText ?? null,
+        p_meta: raffleData.meta ?? {},
+    };
+
+    const { data, error } = await supabase.rpc("admin_create_raffle", payload);
 
     if (error) throw error;
     return data;
@@ -76,30 +89,85 @@ export const adminSetHighlightedRaffle = (raffleId: string) => withLatency(() =>
     return { success: true, highlightedId: raffleId };
 });
 
-export const saveRaffle = (raffleData: any) => withLatency(() => {
+export const saveRaffle = (raffleData: any) => withLatency(async () => {
+    // Supabase path
     if (isSupabaseProvider()) {
-        return adminCreateRaffle(raffleData);
+        const supabase = requireSupabaseClient();
+
+        // EDIT: update direto na tabela (RLS admin já permite)
+        if (raffleData?.id) {
+            const updatePayload: any = {
+                item_name: raffleData.itemName,
+                item_image_url: raffleData.itemImageUrl,
+                ticket_price: Number(raffleData.ticketPrice ?? 0),
+                ticket_limit_per_user: Number(raffleData.ticketLimitPerUser ?? 0),
+                starts_at: raffleData.startsAt ?? null,
+                ends_at: raffleData.endsAt,
+                status: raffleData.status ?? 'active',
+                prize_type: raffleData.prizeType ?? null,
+                coin_reward: (raffleData.coinReward ?? 0) > 0 ? Number(raffleData.coinReward) : null,
+                custom_reward_text: raffleData.customRewardText ?? null,
+                updated_at: new Date().toISOString(),
+            };
+
+            const { data, error } = await supabase
+                .from('raffles')
+                .update(updatePayload)
+                .eq('id', raffleData.id)
+                .select('*')
+                .single();
+
+            if (error) throw error;
+            return { success: true, raffle: data };
+        }
+
+        // CREATE: usa RPC (já audita no admin_audit_log)
+        const created = await adminCreateRaffle(raffleData);
+        return { success: true, created };
     }
+
+    // MOCK path (mantém comportamento antigo)
     ensureMockBackend('saveRaffle');
+
     const safeData = { ...raffleData };
     if (!safeData.id) {
-         safeData.id = `r-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        safeData.id = `r-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     }
-    
-    const existing = repo.select("raffles").find((r:any) => r.id === safeData.id);
+
+    const existing = repo.select("raffles").find((r: any) => r.id === safeData.id);
     if (existing) {
-        repo.update("raffles", (r:any) => r.id === safeData.id, (r:any) => safeData);
+        repo.update("raffles", (r: any) => r.id === safeData.id, () => safeData);
     } else {
         repo.insert("raffles", safeData);
     }
     return { success: true, raffle: safeData };
 });
 
-export const deleteRaffle = (raffleId: string) => withLatency(() => {
+export const deleteRaffle = (raffleId: string) => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        const supabase = requireSupabaseClient();
+
+        // tenta apagar tickets primeiro (caso não tenha ON DELETE CASCADE)
+        const { error: ticketsErr } = await supabase
+            .from('raffle_tickets')
+            .delete()
+            .eq('raffle_id', raffleId);
+
+        if (ticketsErr) throw ticketsErr;
+
+        const { error: raffleErr } = await supabase
+            .from('raffles')
+            .delete()
+            .eq('id', raffleId);
+
+        if (raffleErr) throw raffleErr;
+
+        return { success: true };
+    }
+
     ensureMockBackend('deleteRaffle');
-    repo.delete("raffles", (r:any) => r.id === raffleId);
-    // Also delete tickets?
-    repo.delete("raffleTickets", (t:any) => t.raffleId === raffleId);
+    repo.delete("raffles", (r: any) => r.id === raffleId);
+    repo.delete("raffleTickets", (t: any) => t.raffleId === raffleId);
     return { success: true };
 });
 
