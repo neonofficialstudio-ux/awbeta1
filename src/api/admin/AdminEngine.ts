@@ -443,12 +443,35 @@ export const AdminService = {
     },
 
     // --- RAFFLES ---
-    raffles: {
-        saveRaffle: (...args: any[]) => { ensureMockBackend('raffles.saveRaffle'); return saveRaffleFn(...args as [any]); },
-        deleteRaffle: (...args: any[]) => { ensureMockBackend('raffles.deleteRaffle'); return deleteRaffleFn(...args as [any]); },
-        drawRaffleWinner: (...args: any[]) => { ensureMockBackend('raffles.drawRaffleWinner'); return drawRaffleWinnerFn(...args as [any]); },
-        adminSetHighlightedRaffle: (...args: any[]) => { ensureMockBackend('raffles.adminSetHighlightedRaffle'); return adminSetHighlightedRaffleFn(...args as [any]); }
+  raffles: {
+    saveRaffle: (...args: any[]) => {
+      if (!isSupabaseProvider()) ensureMockBackend('raffles.saveRaffle');
+      const res = saveRaffleFn(...args as [any]);
+      CacheService.invalidate('admin_dashboard_data');
+      return res;
     },
+
+    deleteRaffle: (...args: any[]) => {
+      if (!isSupabaseProvider()) ensureMockBackend('raffles.deleteRaffle');
+      const res = deleteRaffleFn(...args as [any]);
+      CacheService.invalidate('admin_dashboard_data');
+      return res;
+    },
+
+    drawRaffleWinner: (...args: any[]) => {
+      if (!isSupabaseProvider()) ensureMockBackend('raffles.drawRaffleWinner');
+      const res = drawRaffleWinnerFn(...args as [any]);
+      CacheService.invalidate('admin_dashboard_data');
+      return res;
+    },
+
+    adminSetHighlightedRaffle: (...args: any[]) => {
+      if (!isSupabaseProvider()) ensureMockBackend('raffles.adminSetHighlightedRaffle');
+      const res = adminSetHighlightedRaffleFn(...args as [any]);
+      CacheService.invalidate('admin_dashboard_data');
+      return res;
+    }
+  },
 
     // --- JACKPOT ---
     jackpot: {
