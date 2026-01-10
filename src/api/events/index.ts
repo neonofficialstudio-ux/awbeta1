@@ -1,6 +1,7 @@
 
 import { EventEngineUnified, EventEngineV7 } from "./EventEngineUnified";
 import { rankingAPI } from "../ranking/index";
+import { fetchRafflesData as fetchRafflesDataSupabase } from "../events";
 import { withLatency } from "../helpers";
 
 // --- CORE API ---
@@ -10,7 +11,7 @@ export const joinEvent = EventEngineUnified.joinEvent;
 export const submitEventMission = EventEngineUnified.submitEventMission;
 export const artistLinkClick = EventEngineUnified.artistLinkClick;
 export const markArtistOfTheDayAsSeen = EventEngineUnified.markArtistOfTheDayAsSeen;
-export const fetchRafflesData = EventEngineUnified.fetchRafflesData;
+export const fetchRafflesData = fetchRafflesDataSupabase;
 
 // --- ARTIST OF THE DAY ---
 export const fetchArtistsOfTheDayFull = EventEngineUnified.fetchArtistsOfTheDayFull;
