@@ -67,11 +67,17 @@ const AdminStoreItemModal: React.FC<AdminStoreItemModalProps> = ({ item, onClose
             <InputField label="Preço (Coins)" name="price" type="number" value={formData.price} onChange={handleChange} required />
             <div>
               <label htmlFor="rarity" className="block text-sm font-medium text-gray-300 mb-1">Raridade</label>
-              <select name="rarity" id="rarity" value={formData.rarity} onChange={handleChange} className="w-full bg-gray-800 rounded-md border-gray-700 text-white p-2">
+              <select
+                name="rarity"
+                id="rarity"
+                value={formData.rarity ?? 'Regular'}
+                onChange={handleChange}
+                className="w-full bg-gray-800 rounded-md border-gray-700 text-white p-2"
+              >
                 <option value="Regular">Regular</option>
-                <option value="Raro">Raro</option>
-                <option value="Épico">Épico</option>
-                <option value="Lendário">Lendário</option>
+                <option value="Rare">Raro</option>
+                <option value="Epic">Épico</option>
+                <option value="Legendary">Lendário</option>
               </select>
             </div>
           </div>

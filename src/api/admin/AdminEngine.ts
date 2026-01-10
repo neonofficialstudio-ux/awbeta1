@@ -370,12 +370,19 @@ export const AdminService = {
             (item as any).id = stableId;
 
             // ✅ normaliza rarity para passar no check constraint do banco
-            const normalizeRarity = (v: any) => {
-                const s = String(v ?? '').trim().toLowerCase();
-                // ajuste aqui caso seu constraint use outros valores
-                if (s === 'lendario' || s === 'lendário' || s === 'legendary' || s === 'lendario ') return 'Lendário';
-                if (s === 'epico' || s === 'épico' || s === 'epic') return 'Épico';
-                if (s === 'raro' || s === 'rare') return 'Raro';
+            const normalizeRarity = (v: any): 'Regular' | 'Rare' | 'Epic' | 'Legendary' => {
+                const raw = String(v ?? '').trim();
+
+                // já válido?
+                if (raw === 'Regular' || raw === 'Rare' || raw === 'Epic' || raw === 'Legendary') return raw;
+
+                const s = raw.toLowerCase();
+
+                // aceita PT-BR e variações
+                if (s.includes('lend') || s.includes('legend')) return 'Legendary';
+                if (s.includes('ép') || s.includes('epi')) return 'Epic';
+                if (s.includes('rar') || s.includes('rare')) return 'Rare';
+
                 return 'Regular';
             };
 
