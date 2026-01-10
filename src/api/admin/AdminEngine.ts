@@ -45,6 +45,7 @@ import { assertMockProvider, isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
 import { supabaseAdminRepository, emptyAdminDashboard, type AdminMissionFilter } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
+import { getSupabase } from "../supabase/client";
 
 // Missions scope in DB is restricted by constraint missions_scope_check:
 // allowed: 'weekly' | 'event'
@@ -349,37 +350,117 @@ export const AdminService = {
 
     // --- STORE MANAGEMENT ---
     store: {
-        saveStoreItem: (item: StoreItem) => { ensureMockBackend('store.saveStoreItem'); const res = saveStoreItemHelper(item); CacheService.invalidate('admin_dashboard_data'); return res; },
-        deleteStoreItem: (id: string) => { ensureMockBackend('store.deleteStoreItem'); repo.delete("storeItems", (i:any) => i.id === id); CacheService.invalidate('admin_dashboard_data'); return { success: true }; },
-        toggleStoreItemStock: (id: string) => { ensureMockBackend('store.toggleStoreItemStock'); const item = repo.select("storeItems").find((i:any) => i.id === id); if (item) { repo.update("storeItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
+        saveStoreItem: async (item: StoreItem) => {
+            if (!isSupabaseProvider()) {
+                ensureMockBackend('store.saveStoreItem');
+                const res = saveStoreItemHelper(item);
+                CacheService.invalidate('admin_dashboard_data');
+                return res;
+            }
+
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("[AdminStore] Supabase client not initialized");
+
+            // ✅ garante UUID para novos itens
+            const id = item?.id && item.id.length >= 10 ? item.id : crypto.randomUUID();
+
+            const row = {
+                id,
+                name: item.name,
+                description: item.description ?? '',
+                price_coins: Number(item.price ?? 0),
+                rarity: item.rarity ?? 'Regular',
+                image_url: item.imageUrl ?? '',
+                item_type: 'visual',
+                is_active: true,
+                meta: {
+                    ...(item as any).meta,
+                    previewUrl: (item as any).previewUrl ?? undefined,
+                    exchanges: Number((item as any).exchanges ?? 0),
+                    isOutOfStock: Boolean((item as any).isOutOfStock ?? false),
+                }
+            };
+
+            // upsert pelo id (cria/edita)
+            const { data, error } = await supabase
+                .from('store_items')
+                .upsert(row, { onConflict: 'id' })
+                .select('*')
+                .single();
+
+            if (error) throw error;
+
+            CacheService.invalidate('admin_dashboard_data');
+            return { success: true, item: data };
+        },
+
+        deleteStoreItem: async (id: string) => {
+            if (!isSupabaseProvider()) {
+                ensureMockBackend('store.deleteStoreItem');
+                repo.delete("storeItems", (i:any) => i.id === id);
+                CacheService.invalidate('admin_dashboard_data');
+                return { success: true };
+            }
+
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("[AdminStore] Supabase client not initialized");
+
+            const { error } = await supabase
+                .from('store_items')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            CacheService.invalidate('admin_dashboard_data');
+            return { success: true };
+        },
+
+        toggleStoreItemStock: async (id: string) => {
+            if (!isSupabaseProvider()) {
+                ensureMockBackend('store.toggleStoreItemStock');
+                const item = repo.select("storeItems").find((i:any) => i.id === id);
+                if (item) repo.update("storeItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock }));
+                CacheService.invalidate('admin_dashboard_data');
+                return { success: true };
+            }
+
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("[AdminStore] Supabase client not initialized");
+
+            // lê meta atual pra alternar isOutOfStock
+            const { data: current, error: readErr } = await supabase
+                .from('store_items')
+                .select('id, meta')
+                .eq('id', id)
+                .single();
+
+            if (readErr) throw readErr;
+
+            const meta = (current?.meta ?? {}) as any;
+            const next = { ...meta, isOutOfStock: !Boolean(meta.isOutOfStock) };
+
+            const { error: updErr } = await supabase
+                .from('store_items')
+                .update({ meta: next })
+                .eq('id', id);
+
+            if (updErr) throw updErr;
+
+            CacheService.invalidate('admin_dashboard_data');
+            return { success: true };
+        },
+
+        // (mantém os outros como mock por enquanto)
         saveUsableItem: (item: UsableItem) => { ensureMockBackend('store.saveUsableItem'); return saveUsableItemHelper(item); },
         deleteUsableItem: (id: string) => { ensureMockBackend('store.deleteUsableItem'); repo.delete("usableItems", (i:any) => i.id === id); return { success: true }; },
         toggleUsableItemStock: (id: string) => { ensureMockBackend('store.toggleUsableItemStock'); const item = repo.select("usableItems").find((i:any) => i.id === id); if (item) { repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
-        saveCoinPack: (pack: CoinPack) => { ensureMockBackend('store.saveCoinPack');
-             const existing = repo.select("coinPacks").find((p:any) => p.id === pack.id);
-            if (existing) {
-                repo.update("coinPacks", (p:any) => p.id === pack.id, (p:any) => pack);
-            } else {
-                repo.insert("coinPacks", { ...pack, id: pack.id || `cp-${Date.now()}` });
-            }
-            return { success: true, packages: repo.select("coinPacks") };
-        },
-        deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack');
-             repo.delete("coinPacks", (p:any) => p.id === id);
-             return { success: true, packages: repo.select("coinPacks") };
-        },
-        toggleCoinPackStock: (id: string) => { ensureMockBackend('store.toggleCoinPackStock');
-             const pack = repo.select("coinPacks").find((p:any) => p.id === id);
-             if(pack) {
-                 repo.update("coinPacks", (p:any) => p.id === id, (p:any) => ({...pack, isOutOfStock: !p.isOutOfStock}));
-             }
-             return { success: true };
-        },
-        setEstimatedCompletionDate: (itemId: string, date: string) => { ensureMockBackend('store.setEstimatedCompletionDate');
-            if (!date) return { success: false };
-            repo.update("redeemedItems", (r:any) => r.id === itemId, (r:any) => ({ ...r, estimatedCompletionDate: date }));
-            return { success: true };
-        }
+
+        saveCoinPack: (pack: CoinPack) => { ensureMockBackend('store.saveCoinPack'); /* mantém mock */ return { success: false, error: 'mock_only' }; },
+        deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack'); return { success: false, error: 'mock_only' }; },
+        toggleCoinPackStock: (id: string) => { ensureMockBackend('store.toggleCoinPackStock'); return { success: false, error: 'mock_only' }; },
+
+        setEstimatedCompletionDate: (itemId: string, date: string) => { ensureMockBackend('store.setEstimatedCompletionDate'); return { success: false, error: 'mock_only' }; }
     },
 
     // --- QUEUE ---
