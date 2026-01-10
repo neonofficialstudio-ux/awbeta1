@@ -361,15 +361,30 @@ export const AdminService = {
             const supabase = getSupabase();
             if (!supabase) throw new Error("[AdminStore] Supabase client not initialized");
 
-            // ✅ garante UUID para novos itens
-            const id = item?.id && item.id.length >= 10 ? item.id : crypto.randomUUID();
+            // ✅ gera ID uma vez e injeta no próprio objeto para evitar duplo insert
+            const stableId =
+                item?.id && typeof item.id === 'string' && item.id.length >= 10
+                    ? item.id
+                    : crypto.randomUUID();
+
+            (item as any).id = stableId;
+
+            // ✅ normaliza rarity para passar no check constraint do banco
+            const normalizeRarity = (v: any) => {
+                const s = String(v ?? '').trim().toLowerCase();
+                // ajuste aqui caso seu constraint use outros valores
+                if (s === 'lendario' || s === 'lendário' || s === 'legendary' || s === 'lendario ') return 'Lendário';
+                if (s === 'epico' || s === 'épico' || s === 'epic') return 'Épico';
+                if (s === 'raro' || s === 'rare') return 'Raro';
+                return 'Regular';
+            };
 
             const row = {
-                id,
-                name: item.name,
+                id: stableId,
+                name: item.name?.trim() || 'Item sem nome',
                 description: item.description ?? '',
                 price_coins: Number(item.price ?? 0),
-                rarity: item.rarity ?? 'Regular',
+                rarity: normalizeRarity(item.rarity),
                 image_url: item.imageUrl ?? '',
                 item_type: 'visual',
                 is_active: true,

@@ -25,6 +25,7 @@ const AdminStoreItemModal: React.FC<AdminStoreItemModalProps> = ({ item, onClose
     imageUrl: '',
     previewUrl: '',
   });
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (item) {
@@ -37,13 +38,19 @@ const AdminStoreItemModal: React.FC<AdminStoreItemModalProps> = ({ item, onClose
     setFormData(prev => ({ ...prev, [name]: name === 'price' ? parseInt(value) : value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ 
-        ...formData, 
-        id: item?.id || '',
-        exchanges: item?.exchanges || 0,
-    });
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave({
+          ...formData, 
+          id: item?.id || '',
+          exchanges: item?.exchanges || 0,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   return (
@@ -73,7 +80,9 @@ const AdminStoreItemModal: React.FC<AdminStoreItemModalProps> = ({ item, onClose
           
           <div className="mt-6 flex justify-end space-x-4 pt-4 border-t border-gray-800">
             <button type="button" onClick={onClose} className="py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors">Cancelar</button>
-            <button type="submit" className="py-2 px-6 rounded-lg bg-goldenYellow-500 text-black font-bold hover:bg-goldenYellow-400 transition-colors">Salvar</button>
+            <button type="submit" disabled={isSaving} className="py-2 px-6 rounded-lg bg-goldenYellow-500 text-black font-bold hover:bg-goldenYellow-400 transition-colors disabled:cursor-not-allowed disabled:opacity-70">
+              {isSaving ? 'Salvando...' : 'Salvar'}
+            </button>
           </div>
         </form>
       </div>
