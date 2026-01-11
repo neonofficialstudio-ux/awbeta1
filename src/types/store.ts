@@ -63,6 +63,13 @@ export interface RedeemedItem {
   completedAt?: string; // ISO string
   estimatedCompletionDate?: string; // ISO string
   completionUrl?: string; // URL for the finished product/file
+  // --- Production Request context (Supabase truth) ---
+  productionRequestId?: string;
+  productionCategory?: 'visual_reward' | 'usable';
+  submittedLink?: string; // for usable (briefing.link)
+  submittedKind?: string; // for usable (briefing.kind)
+  deliveredAt?: string; // result.delivered_at (both)
+  deliveredNotes?: string | null; // result.notes (usable mainly)
 }
 
 export type RafflePrizeType = 'item' | 'coins' | 'hybrid' | 'custom';
