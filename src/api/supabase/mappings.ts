@@ -108,18 +108,37 @@ export const mapMissionToApp = (mission: any): Mission => {
 };
 
 export const mapInventoryToRedeemedItem = (inv: any, itemDetails: any, userDetails: any): RedeemedItem => {
+    const statusRaw = String(inv.status ?? '').toLowerCase();
+
+    // owned = comprado/disponível; consumed = produção iniciada
+    const uiStatus =
+        statusRaw === 'consumed' ? 'InProgress'
+        : statusRaw === 'owned' || statusRaw === 'equipped' ? 'Redeemed'
+        : 'Redeemed';
+
     return {
-        id: inv.id,
+        id: inv.id, // inventory_id
         userId: inv.user_id,
-        userName: userDetails?.name || "Unknown",
-        itemId: inv.item_id,
+        userName: userDetails?.name || userDetails?.display_name || "Unknown",
+        itemId: inv.item_id, // store_item_id
         itemName: itemDetails?.name || "Unknown Item",
-        itemPrice: inv.purchase_price || 0,
-        redeemedAt: new Date(inv.purchased_at).toLocaleDateString('pt-BR'),
-        redeemedAtISO: inv.purchased_at,
-        coinsBefore: 0, // Historic data hard to reconstruct perfectly without ledger
+        itemPrice: 0, // opcional (reconstrução perfeita exigiria ledger)
+        redeemedAt: inv.created_at ? new Date(inv.created_at).toLocaleDateString('pt-BR') : '',
+        redeemedAtISO: inv.created_at || null,
+
+        // economia histórica (se quiser depois a gente preenche via ledger)
+        coinsBefore: 0,
         coinsAfter: 0,
-        status: inv.status === 'available' ? 'Redeemed' : inv.status === 'used' ? 'Used' : 'InProgress',
-        formData: inv.metadata
+
+        status: uiStatus as any,
+
+        // 👇 aqui a ponte para produção
+        productionStartedAt: inv.meta?.consumed_at || inv.meta?.consumedAt || null,
+        completedAt: inv.meta?.completed_at || inv.meta?.completedAt || null,
+        completionUrl: inv.meta?.completion_url || inv.meta?.completionUrl || null,
+        estimatedCompletionDate: inv.meta?.estimatedCompletionDate || inv.meta?.estimated_completion_date || null,
+
+        // formData legado pode não existir mais (agora está em production_requests)
+        formData: inv.meta?.formData || null,
     };
 };
