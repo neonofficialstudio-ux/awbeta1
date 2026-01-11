@@ -227,6 +227,7 @@ export const supabaseAdminRepository = {
           imageUrl: i.image_url ?? '',
           isOutOfStock: Boolean(i?.meta?.isOutOfStock ?? false) || !i.is_active,
           platform: (i?.meta?.platform ?? 'all'),
+          kind: (i?.meta?.usable_kind ?? 'instagram_post'),
         }));
       const redeemedItems = (inventoryRes.data || []).map((row: any) =>
         mapInventoryToRedeemedItem(

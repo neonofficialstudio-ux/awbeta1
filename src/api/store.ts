@@ -22,15 +22,66 @@ const requireSupabaseClient = () => {
     return client;
 };
 
+const mapRarity = (value: string | null | undefined): StoreItem['rarity'] => {
+    const normalized = (value || '').toLowerCase();
+    switch (normalized) {
+        case 'raro':
+        case 'rare':
+            return 'Raro';
+        case 'épico':
+        case 'epico':
+        case 'epic':
+            return 'Épico';
+        case 'lendário':
+        case 'lendario':
+        case 'legendary':
+            return 'Lendário';
+        default:
+            return 'Regular';
+    }
+};
+
 export const fetchStoreData = (userId: string) => withLatency(async () => {
     if (config.backendProvider === 'supabase') {
-        const itemsRes = await StoreSupabase.listStoreItems();
-        if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar a loja' };
+        const supabase = requireSupabaseClient();
+        const { data, error } = await supabase
+            .from('store_items')
+            .select('id,name,description,price_coins,item_type,rarity,image_url,is_active,meta,created_at')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false });
+        if (error) return { success: false, error: error.message || 'Falha ao carregar a loja' };
+
+        const rawStore = data || [];
+        const storeItems = rawStore
+            .filter((item: any) => (item.item_type ?? 'visual') !== 'usable')
+            .map((row: any) => ({
+                id: row.id,
+                name: row.name ?? 'Item',
+                description: row.description ?? '',
+                price: row.price_coins ?? 0,
+                rarity: mapRarity(row.rarity),
+                imageUrl: row.image_url ?? '',
+                exchanges: row.meta?.exchanges ?? 0,
+                previewUrl: row.meta?.previewUrl,
+                isOutOfStock: row.is_active === false || row.meta?.isOutOfStock === true,
+            }));
+        const usableItems = rawStore
+            .filter((item: any) => (item.item_type ?? '') === 'usable')
+            .map((row: any) => ({
+                id: row.id,
+                name: row.name ?? 'Item utilizável',
+                description: row.description ?? '',
+                price: Number(row.price_coins ?? 0),
+                imageUrl: row.image_url ?? '',
+                isOutOfStock: Boolean(row?.meta?.isOutOfStock ?? false) || !row.is_active,
+                platform: row?.meta?.platform ?? 'all',
+                kind: row?.meta?.usable_kind ?? 'instagram_post',
+            }));
         return {
             success: true,
             data: {
-                storeItems: itemsRes.items || [],
-                usableItems: [],
+                storeItems,
+                usableItems,
                 coinPacks: [],
                 coinPurchaseRequests: [],
             }
@@ -145,7 +196,12 @@ export const redeemItem = (userId: string, itemId: string) => withLatency(async 
     return await StoreEconomyEngine.purchaseItem(userId, itemId);
 });
 
-export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(async () => {
+export const useUsableItem = (
+    userId: string,
+    redeemedItemId: string,
+    postUrl: string,
+    kind?: UsableItem['kind'],
+) => withLatency(async () => {
     if (config.backendProvider === 'supabase') {
         const sanitizedUrl = sanitizeLink(postUrl);
         const safetyCheck = checkLinkSafety(sanitizedUrl);
@@ -166,10 +222,37 @@ export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: s
             if (invErr) throw invErr;
 
             const platformRequired = (invRow?.store_items?.meta?.platform ?? 'all') as any;
+            const kindRequired = (kind ?? invRow?.store_items?.meta?.usable_kind ?? 'instagram_post') as UsableItem['kind'];
+
+            const kindPlatformMap: Record<string, string> = {
+                instagram_post: 'instagram',
+                instagram_reels: 'instagram',
+                instagram_story: 'instagram',
+                tiktok_video: 'tiktok',
+                youtube_video: 'youtube',
+                spotify_track: 'spotify',
+                spotify_presave: 'spotify',
+            };
+            const requiredKindPlatform = kindRequired ? kindPlatformMap[kindRequired] : null;
+
+            const detectedPlatform = socialLinkValidator.getPlatform(sanitizedUrl);
+
             if (platformRequired && platformRequired !== 'all') {
-                const detectedPlatform = socialLinkValidator.getPlatform(sanitizedUrl);
                 if (detectedPlatform !== platformRequired) {
                     return { success: false, error: `Link inválido. Este item requer um link do ${platformRequired}.` };
+                }
+            }
+
+            if (requiredKindPlatform && requiredKindPlatform !== 'spotify') {
+                if (detectedPlatform !== requiredKindPlatform) {
+                    return { success: false, error: `Link inválido. Este item requer um link do ${requiredKindPlatform}.` };
+                }
+            }
+
+            if (requiredKindPlatform === 'spotify') {
+                const spotifyPattern = /^https?:\/\/(?:open\.)?spotify\.com\/.+/i;
+                if (!spotifyPattern.test(sanitizedUrl)) {
+                    return { success: false, error: 'Link inválido. Este item requer um link do Spotify.' };
                 }
             }
 
@@ -179,8 +262,9 @@ export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: s
                     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
             const briefing = {
-                postUrl: sanitizedUrl,
-                platform: platformRequired ?? 'all',
+                link: sanitizedUrl,
+                platform: (platformRequired !== 'all' ? platformRequired : (requiredKindPlatform ?? 'all')),
+                kind: kindRequired,
             };
 
             const assets = {};

@@ -22,7 +22,8 @@ const AdminUsableItemModal: React.FC<AdminUsableItemModalProps> = ({ item, onClo
     description: '',
     price: 0,
     imageUrl: '',
-    platform: 'all' // Default platform
+    platform: 'all', // Default platform
+    kind: 'instagram_post',
   });
 
   useEffect(() => {
@@ -35,7 +36,8 @@ const AdminUsableItemModal: React.FC<AdminUsableItemModalProps> = ({ item, onClo
             description: '',
             price: 0,
             imageUrl: '',
-            platform: 'all'
+            platform: 'all',
+            kind: 'instagram_post',
         });
     }
   }, [item]);
@@ -82,6 +84,28 @@ const AdminUsableItemModal: React.FC<AdminUsableItemModalProps> = ({ item, onClo
                       <option value="youtube">YouTube</option>
                   </select>
               </div>
+          </div>
+
+          <div>
+            <label htmlFor="kind" className="block text-sm font-medium text-gray-300 mb-1">
+              Tipo de conteúdo
+            </label>
+            <select
+              name="kind"
+              id="kind"
+              value={formData.kind || 'instagram_post'}
+              onChange={handleChange}
+              className="w-full bg-gray-800 rounded-md border-gray-700 text-white p-2"
+            >
+              <option value="instagram_post">Instagram — Post</option>
+              <option value="instagram_reels">Instagram — Reels</option>
+              <option value="instagram_story">Instagram — Story</option>
+              <option value="tiktok_video">TikTok — Vídeo</option>
+              <option value="youtube_video">YouTube — Vídeo</option>
+              <option value="spotify_track">Spotify — Música</option>
+              <option value="spotify_presave">Spotify — Pre-save</option>
+              <option value="link">Link genérico</option>
+            </select>
           </div>
 
           <InputField label="URL da Imagem do Ícone" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="https://..." required />
