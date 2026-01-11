@@ -50,6 +50,11 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const [deliverUrl, setDeliverUrl] = useState('');
   const [deliverNotes, setDeliverNotes] = useState('');
   const [deliverSaving, setDeliverSaving] = useState(false);
+  const productionDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
   
   // Defensively initialize queues to prevent undefined map errors
   const usableItemQueue = propUsableItemQueue || [];
@@ -85,14 +90,11 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           category,
           status,
           briefing,
-          assets,
-          result,
-          admin_notes,
           created_at,
-          updated_at,
           profiles:profiles(id,name,display_name,avatar_url),
           store_items:store_items(id,name,rarity,image_url)
         `)
+        .eq('category', 'usable')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -416,15 +418,16 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                       <th className="px-4 py-3">Criado</th>
                       <th className="px-4 py-3">Usuário</th>
                       <th className="px-4 py-3">Item</th>
+                      <th className="px-4 py-3">Tipo</th>
+                      <th className="px-4 py-3">Link</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Ações</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {productionQueue.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-gray-600 italic">
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
                           Nenhum pedido na fila.
                         </td>
                       </tr>
@@ -432,36 +435,32 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                       productionQueue.map((req: any) => {
                         const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                         const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
+                        const briefingKind = req.briefing?.kind || '-';
+                        const briefingLink = req.briefing?.link || '-';
 
                         return (
                           <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
                             <td className="px-4 py-3">
-                              {req.created_at ? new Date(req.created_at).toLocaleString('pt-BR') : '-'}
+                              {req.created_at ? productionDateFormatter.format(new Date(req.created_at)) : '-'}
                             </td>
                             <td className="px-4 py-3">{userLabel}</td>
                             <td className="px-4 py-3">{itemLabel}</td>
-                            <td className="px-4 py-3">{req.status}</td>
+                            <td className="px-4 py-3">{briefingKind}</td>
                             <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleStart(req)}
-                                  disabled={req.status !== 'queued'}
+                              {briefingLink === '-' ? (
+                                <span>-</span>
+                              ) : (
+                                <a
+                                  href={briefingLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#5DADE2] hover:underline truncate block max-w-xs"
                                 >
-                                  Iniciar
-                                </Button>
-
-                                <Button
-                                  variant="success"
-                                  size="sm"
-                                  onClick={() => handleDeliver(req)}
-                                  disabled={req.status !== 'in_progress'}
-                                >
-                                  Entregar
-                                </Button>
-                              </div>
+                                  Abrir link
+                                </a>
+                              )}
                             </td>
+                            <td className="px-4 py-3">{req.status}</td>
                           </tr>
                         );
                       })

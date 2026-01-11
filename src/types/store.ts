@@ -23,6 +23,19 @@ export interface UsableItem {
   imageUrl: string;
   isOutOfStock?: boolean;
   platform?: 'instagram' | 'tiktok' | 'youtube' | 'all'; // Added platform field
+  /**
+   * What kind of link/content the user must submit.
+   * Stored in store_items.meta.usable_kind and echoed into production_requests.briefing.kind.
+   */
+  kind?:
+    | 'instagram_post'
+    | 'instagram_reels'
+    | 'instagram_story'
+    | 'tiktok_video'
+    | 'youtube_video'
+    | 'spotify_track'
+    | 'spotify_presave'
+    | 'link';
 }
 
 export interface VisualRewardFormData {

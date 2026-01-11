@@ -501,6 +501,7 @@ export const AdminService = {
             is_active: true,
             meta: {
               platform: item.platform ?? 'all',
+              usable_kind: item.kind ?? 'instagram_post',
               isOutOfStock: Boolean(item.isOutOfStock ?? false),
             }
           };
