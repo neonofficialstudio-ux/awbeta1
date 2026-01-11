@@ -114,27 +114,50 @@ export const MainLayout: React.FC = () => {
     // Level Up, Notification & Achievement Watchers
     const prevLevelRef = useRef<number | undefined>(undefined);
     useEffect(() => {
-        if (activeUser) {
-            if (prevLevelRef.current !== undefined && activeUser.level > prevLevelRef.current) {
-                setLevelUpInfo({ newLevel: activeUser.level });
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'levelup', title: 'Level Up!', message: `Você alcançou o nível ${activeUser.level}!` } });
-            }
+        if (!activeUser) return;
+
+        const key = `aw_levelup_seen_${activeUser.id}`;
+        const seenLevel = Number(localStorage.getItem(key) || 0);
+
+        // primeira hidratação: trava o ref
+        if (prevLevelRef.current === undefined) {
             prevLevelRef.current = activeUser.level;
+        }
 
-            if (activeUser.unseenPlanUpgrade) {
-                setSubscriptionUpgradeInfo({ newPlan: activeUser.plan });
-                api.markPlanUpgradeAsSeen(activeUser.id).then(response => {
-                    if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
-                });
-            }
+        // só mostra se esse level ainda não foi exibido
+        if (activeUser.level > seenLevel) {
+            // marca como visto imediatamente (evita repetir em reload)
+            localStorage.setItem(key, String(activeUser.level));
 
-            if (activeUser.unseenRaffleWin) {
-                setRaffleWinInfo(activeUser.unseenRaffleWin);
-            }
+            // opcional: só disparar quando realmente subiu durante a sessão
+            // se quiser mostrar mesmo no primeiro load quando level>seen, mantém assim.
+            setLevelUpInfo({ newLevel: activeUser.level });
+            dispatch({
+                type: 'ADD_TOAST',
+                payload: {
+                    id: Date.now().toString(),
+                    type: 'success',
+                    title: 'Level Up!',
+                    message: `Você alcançou o nível ${activeUser.level}!`
+                }
+            });
+        }
 
-            if (activeUser.unseenAchievements && activeUser.unseenAchievements.length > 0 && !unseenAchievementId) {
-                setUnseenAchievementId(activeUser.unseenAchievements[0]);
-            }
+        prevLevelRef.current = activeUser.level;
+
+        if (activeUser.unseenPlanUpgrade) {
+            setSubscriptionUpgradeInfo({ newPlan: activeUser.plan });
+            api.markPlanUpgradeAsSeen(activeUser.id).then(response => {
+                if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+            });
+        }
+
+        if (activeUser.unseenRaffleWin) {
+            setRaffleWinInfo(activeUser.unseenRaffleWin);
+        }
+
+        if (activeUser.unseenAchievements && activeUser.unseenAchievements.length > 0 && !unseenAchievementId) {
+            setUnseenAchievementId(activeUser.unseenAchievements[0]);
         }
     }, [activeUser, dispatch, unseenAchievementId]);
 

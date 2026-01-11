@@ -65,12 +65,13 @@ export const mapStoreItemToApp = (item: any): StoreItem => {
     return {
         id: item.id,
         name: item.name,
-        description: item.description,
-        price: item.price,
+        description: item.description ?? '',
+        // ✅ Supabase usa price_coins
+        price: Number(item.price_coins ?? item.price ?? 0),
         rarity: item.rarity,
-        imageUrl: item.image_url,
-        exchanges: 0, // Analytics field
-        isOutOfStock: !item.is_active || (item.stock !== -1 && item.stock <= 0)
+        imageUrl: item.image_url ?? '',
+        exchanges: Number(item?.meta?.exchanges ?? 0),
+        isOutOfStock: Boolean(item?.meta?.isOutOfStock ?? false) || !item.is_active
     };
 };
 
