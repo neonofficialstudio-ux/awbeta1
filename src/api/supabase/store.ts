@@ -93,6 +93,7 @@ export const StoreSupabase = {
         .select(`
           id,
           item_id,
+          status,
           created_at,
           meta,
           store_items (
@@ -123,9 +124,9 @@ export const StoreSupabase = {
           redeemedAtISO: createdISO,
           coinsBefore: row.meta?.coinsBefore ?? 0,
           coinsAfter: row.meta?.coinsAfter ?? 0,
-          status: row.meta?.status ?? 'Redeemed',
+          status: row.status === 'consumed' ? 'InProgress' : 'Redeemed',
           formData: row.meta?.formData,
-          productionStartedAt: row.meta?.productionStartedAt,
+          productionStartedAt: row.meta?.productionStartedAt ?? row.meta?.consumed_at ?? row.meta?.consumedAt,
           completedAt: row.meta?.completedAt,
           estimatedCompletionDate: row.meta?.estimatedCompletionDate,
           completionUrl: row.meta?.completionUrl,

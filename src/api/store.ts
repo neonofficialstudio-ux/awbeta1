@@ -222,21 +222,76 @@ export const submitCoinPurchaseProof = (userId: string, requestId: string, proof
     return { success: true, updatedRequest, notifications };
 });
 
-export const submitVisualRewardForm = (userId: string, redeemedItemId: string, formData: VisualRewardFormData) => withLatency(() => {
+export const submitVisualRewardForm = (
+    userId: string,
+    redeemedItemId: string,
+    formData: VisualRewardFormData
+) => withLatency(async () => {
+    // ✅ Supabase path
+    if (config.backendProvider === 'supabase') {
+        const supabase = requireSupabaseClient();
+
+        // ref_id para idempotência (retry safe)
+        const refId =
+            (globalThis as any).crypto?.randomUUID
+                ? (globalThis as any).crypto.randomUUID()
+                : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        // briefing/assets (MVP)
+        // OBS: audioFile/referenceImages estão como base64 no frontend hoje.
+        // Mais pra frente migramos isso para Supabase Storage (melhor), mas agora funciona.
+        const briefing = {
+            songName: formData.songName,
+            idea: formData.idea,
+            lyrics: formData.lyrics ?? '',
+        };
+
+        const assets = {
+            referenceImages: formData.referenceImages ?? [],
+            audioFile: formData.audioFile ?? null,
+        };
+
+        const { data, error } = await supabase.rpc("start_production", {
+            p_inventory_id: redeemedItemId,
+            p_ref_id: refId,
+            p_briefing: briefing,
+            p_assets: assets,
+        });
+
+        if (error) throw error;
+
+        // Mantém compatibilidade com a UI atual:
+        // Inventory.tsx só refaz fetch quando response.updatedItem existe.
+        return {
+            success: true,
+            updatedItem: {
+                id: redeemedItemId,
+                status: 'InProgress',
+                productionStartedAt: new Date().toISOString(),
+                formData,
+            },
+            notifications: [],
+            data,
+        };
+    }
+
+    // MOCK path (mantém o comportamento atual)
     const item = repo.select("redeemedItems").find((ri: any) => ri.id === redeemedItemId);
     if (!item) return { success: false, error: "Item not found" };
 
     const updatedItem: RedeemedItem = {
-      ...item,
-      status: 'InProgress' as const,
-      formData: formData,
-      productionStartedAt: new Date().toISOString(),
+        ...item,
+        status: 'InProgress' as const,
+        formData: formData,
+        productionStartedAt: new Date().toISOString(),
     };
-    
+
     repo.update("redeemedItems", (ri: any) => ri.id === redeemedItemId, (ri: any) => updatedItem);
     saveMockDb();
 
-    const notifications: Notification[] = [createNotification(userId, "Formulário Enviado", `Solicitação para "${item.itemName}" enviada.`, { view: 'inventory', tab: 'history' })];
+    const notifications: Notification[] = [
+        createNotification(userId, `Briefing enviado`, `Sua solicitação para "${item.itemName}" enviada.`, { view: 'inventory', tab: 'history' })
+    ];
     repo.insert("notifications", notifications[0]);
 
     return { success: true, updatedItem, notifications };
