@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { isSupabaseProvider } from '../../api/core/backendGuard';
-import { requireSupabaseClient } from '../../api/supabase/supabaseClient';
+import { getSupabase } from '../../api/supabase/client';
 import { config } from '../../core/config';
 import type { RedeemedItem } from '../../types';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
@@ -47,7 +47,8 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
         if (!isSupabaseProvider() || config.backendProvider !== 'supabase') return;
 
         setLoading(true);
-        const supabase = requireSupabaseClient();
+        const supabase = getSupabase();
+        if (!supabase) throw new Error('Supabase client not initialized');
 
         const { data, error } = await supabase
           .from('production_requests')
