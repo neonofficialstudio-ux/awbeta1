@@ -112,7 +112,7 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
             const supabase = requireSupabaseClient();
             const { data: requests, error: reqErr } = await supabase
                 .from('production_requests')
-                .select('inventory_id,status,result,created_at,updated_at')
+                .select('id,inventory_id,category,status,briefing,result,created_at,updated_at')
                 .eq('user_id', userId);
 
             if (!reqErr && requests && requests.length) {
@@ -123,36 +123,87 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
                     if (!req) return it;
 
                     const st = String(req.status || '').toLowerCase();
+                    const category = String(req.category || '').toLowerCase();
 
-                    if (st === 'delivered') {
-                        const deliveryUrl = req.result?.delivery_url || null;
-                        const deliveredAt = req.result?.delivered_at || null;
+                    const deliveredAt = req.result?.delivered_at || null;
+                    const notes = req.result?.notes ?? null;
+
+                    // attach request context
+                    const base = {
+                        ...it,
+                        productionRequestId: req.id,
+                        productionCategory: category,
+                        deliveredAt,
+                        deliveredNotes: notes,
+                    };
+
+                    // ✅ UTILIZÁVEIS: link + kind vem do briefing
+                    if (category === 'usable') {
+                        const link = req.briefing?.link || null;
+                        const kind = req.briefing?.kind || null;
+
+                        if (st === 'delivered') {
+                            return {
+                                ...base,
+                                status: 'Used',
+                                completedAt: deliveredAt,
+                                // completionUrl não se aplica a usable
+                                completionUrl: null,
+                                submittedLink: link,
+                                submittedKind: kind,
+                                productionStartedAt: it.productionStartedAt || req.created_at || null,
+                            };
+                        }
+
+                        if (st === 'queued' || st === 'in_progress') {
+                            return {
+                                ...base,
+                                status: 'InProgress',
+                                submittedLink: link,
+                                submittedKind: kind,
+                                productionStartedAt: it.productionStartedAt || req.created_at || null,
+                            };
+                        }
+
+                        if (st === 'cancelled') {
+                            return { ...base, status: 'Refunded' };
+                        }
 
                         return {
-                            ...it,
-                            status: 'Used',
-                            completionUrl: deliveryUrl,
-                            completedAt: deliveredAt,
-                            productionStartedAt: it.productionStartedAt || req.created_at || null,
+                            ...base,
+                            submittedLink: link,
+                            submittedKind: kind,
                         };
                     }
 
-                    if (st === 'queued' || st === 'in_progress') {
-                        return {
-                            ...it,
-                            status: 'InProgress',
-                            productionStartedAt: it.productionStartedAt || req.created_at || null,
-                        };
+                    // ✅ VISUAIS (visual_reward): usa delivery_url
+                    if (category === 'visual_reward') {
+                        if (st === 'delivered') {
+                            const deliveryUrl = req.result?.delivery_url || null;
+
+                            return {
+                                ...base,
+                                status: 'Used',
+                                completionUrl: deliveryUrl,
+                                completedAt: deliveredAt,
+                                productionStartedAt: it.productionStartedAt || req.created_at || null,
+                            };
+                        }
+
+                        if (st === 'queued' || st === 'in_progress') {
+                            return {
+                                ...base,
+                                status: 'InProgress',
+                                productionStartedAt: it.productionStartedAt || req.created_at || null,
+                            };
+                        }
+
+                        if (st === 'cancelled') {
+                            return { ...base, status: 'Refunded' };
+                        }
                     }
 
-                    if (st === 'cancelled') {
-                        return {
-                            ...it,
-                            status: 'Refunded',
-                        };
-                    }
-
-                    return it;
+                    return base;
                 });
 
                 itemsRes.items = merged;

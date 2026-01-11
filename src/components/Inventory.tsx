@@ -26,6 +26,13 @@ const faqData = [
     { question: "Onde recebo o arquivo final?", answer: "Assim que estiver pronto, o link para download aparecerá no card do item na aba 'Histórico' e você receberá uma notificação." }
 ];
 
+const dateSP = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+});
+const fmtSP = (iso?: string | null) => (iso ? dateSP.format(new Date(iso)) : '');
+
 const InventoryTabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => {
     return (
         <button
@@ -447,6 +454,13 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
         }
     };
 
+    const isUsable = redeemedItem.productionCategory === 'usable' || ('platform' in (itemDetails || {}) && !(itemDetails as any).rarity);
+    const hasSubmittedLink = Boolean(redeemedItem.submittedLink);
+
+    const handleOpenSubmitted = () => {
+        if (redeemedItem.submittedLink) window.open(redeemedItem.submittedLink, '_blank');
+    };
+
     return (
         <div className={`
             bg-[#0D0D0D] rounded-[20px] border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between 
@@ -471,7 +485,9 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
                 </div>
                 <div className="min-w-0">
                     <h4 className={`font-bold text-base uppercase tracking-wide font-chakra truncate transition-colors ${isCompleted ? 'text-white group-hover:text-[#6BFF8A]' : 'text-white'}`}>{redeemedItem.itemName}</h4>
-                    <p className="text-xs text-[#808080] mt-1 font-mono">{redeemedItem.redeemedAt}</p>
+                    <p className="text-xs text-[#808080] mt-1 font-mono">
+                        {fmtSP(redeemedItem.redeemedAtISO)}
+                    </p>
                     
                     {redeemedItem.status === 'InProgress' && redeemedItem.estimatedCompletionDate && (
                         <div className="mt-2 inline-flex items-center text-[10px] text-[#A855F7] font-bold uppercase tracking-wider bg-[#A855F7]/10 px-2 py-0.5 rounded border border-[#A855F7]/20">
@@ -480,7 +496,8 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
                         </div>
                     )}
                     
-                    {(redeemedItem.status === 'Used' || redeemedItem.status === 'Redeemed') && (
+                    {/* VISUAIS: Abrir Entrega */}
+                    {!isUsable && (redeemedItem.status === 'Used' || redeemedItem.status === 'Redeemed') && (
                         <button 
                             onClick={handleOpenLink}
                             disabled={!redeemedItem.completionUrl}
@@ -489,9 +506,41 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
                                 ${isCompleted ? 'bg-[#6BFF8A] hover:bg-[#4ADE80] shadow-[0_0_10px_rgba(107,255,138,0.4)]' : 'bg-[#FFD36B] hover:bg-[#FFB743] shadow-[0_0_10px_rgba(255,211,105,0.3)]'}
                             `}
                         >
-                           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                           {redeemedItem.completionUrl ? 'Acessar Conteúdo' : 'Arquivo Indisponível'}
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {redeemedItem.completionUrl ? 'Abrir Entrega' : 'Entrega Indisponível'}
                         </button>
+                    )}
+
+                    {/* UTILIZÁVEIS: Abrir Link Enviado + detalhes */}
+                    {isUsable && (
+                        <div className="mt-2 space-y-2">
+                            <div className="text-[10px] text-[#808080] font-mono">
+                                {redeemedItem.submittedKind ? <>Tipo: <span className="text-white">{redeemedItem.submittedKind}</span></> : null}
+                                {redeemedItem.deliveredAt ? <> · Concluído: <span className="text-white">{fmtSP(redeemedItem.deliveredAt)}</span></> : null}
+                            </div>
+
+                            <button
+                                onClick={handleOpenSubmitted}
+                                disabled={!hasSubmittedLink}
+                                className={`
+                                    text-[10px] font-bold uppercase tracking-wider text-black px-4 py-1.5 rounded-lg transition-all shadow-lg flex items-center gap-2 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed
+                                    bg-[#FFD36B] hover:bg-[#FFB743] shadow-[0_0_10px_rgba(255,211,105,0.3)]
+                                `}
+                            >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3h7v7m0-7L10 14m-4 7h7" />
+                                </svg>
+                                {hasSubmittedLink ? 'Abrir Link Enviado' : 'Link não encontrado'}
+                            </button>
+
+                            {!!redeemedItem.deliveredNotes && (
+                                <div className="text-[11px] text-[#B3B3B3] bg-[#111]/60 border border-[#222] rounded-lg px-3 py-2">
+                                    <span className="text-[#FFD36B] font-bold">Notas:</span> {redeemedItem.deliveredNotes}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
