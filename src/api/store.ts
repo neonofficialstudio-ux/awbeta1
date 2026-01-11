@@ -145,9 +145,65 @@ export const redeemItem = (userId: string, itemId: string) => withLatency(async 
     return await StoreEconomyEngine.purchaseItem(userId, itemId);
 });
 
-export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(() => {
+export const useUsableItem = (userId: string, redeemedItemId: string, postUrl: string) => withLatency(async () => {
     if (config.backendProvider === 'supabase') {
-        return { success: false, error: "Itens utilizáveis não estão disponíveis neste modo." };
+        const sanitizedUrl = sanitizeLink(postUrl);
+        const safetyCheck = checkLinkSafety(sanitizedUrl);
+        if (!safetyCheck.safe) return { success: false, error: safetyCheck.reason };
+
+        // Validação de plataforma (mesma lógica do mock)
+        // Vamos buscar o item do inventory para descobrir store_item_id e plataforma via store_items.meta
+        try {
+            const supabase = requireSupabaseClient();
+
+            // pega o inventory + store_items(meta.platform)
+            const { data: invRow, error: invErr } = await supabase
+                .from('inventory')
+                .select('id, item_id, store_items:store_items(id, meta, item_type)')
+                .eq('id', redeemedItemId)
+                .single();
+
+            if (invErr) throw invErr;
+
+            const platformRequired = (invRow?.store_items?.meta?.platform ?? 'all') as any;
+            if (platformRequired && platformRequired !== 'all') {
+                const detectedPlatform = socialLinkValidator.getPlatform(sanitizedUrl);
+                if (detectedPlatform !== platformRequired) {
+                    return { success: false, error: `Link inválido. Este item requer um link do ${platformRequired}.` };
+                }
+            }
+
+            const refId =
+                (globalThis as any).crypto?.randomUUID
+                    ? (globalThis as any).crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+            const briefing = {
+                postUrl: sanitizedUrl,
+                platform: platformRequired ?? 'all',
+            };
+
+            const assets = {};
+
+            const { data, error } = await supabase.rpc('start_production', {
+                p_inventory_id: redeemedItemId,
+                p_ref_id: refId,
+                p_briefing: briefing,
+                p_assets: assets,
+            });
+
+            if (error) throw error;
+
+            return {
+                success: true,
+                updatedItem: { id: redeemedItemId, status: 'InProgress' },
+                notifications: [],
+                data,
+            };
+        } catch (e: any) {
+            console.error(e);
+            return { success: false, error: e?.message || 'Falha ao iniciar produção (utilizável)' };
+        }
     }
     const sanitizedUrl = sanitizeLink(postUrl);
     const safetyCheck = checkLinkSafety(sanitizedUrl);
