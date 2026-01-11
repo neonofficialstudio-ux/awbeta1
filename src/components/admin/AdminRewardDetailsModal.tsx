@@ -1,5 +1,8 @@
 
 import React, { useState } from 'react';
+import { isSupabaseProvider } from '../../api/core/backendGuard';
+import { getSupabase } from '../../api/supabase/client';
+import { config } from '../../core/config';
 import type { RedeemedItem } from '../../types';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
 import { CheckIcon } from '../../constants';
@@ -28,8 +31,43 @@ const DetailField: React.FC<{ label: string; value: string | undefined; isBlock?
 const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item, onClose, onSetDeadline }) => {
   const [deadline, setDeadline] = useState(item.estimatedCompletionDate ? new Date(item.estimatedCompletionDate).toISOString().split('T')[0] : '');
   const [isSaving, setIsSaving] = useState(false);
+  const [request, setRequest] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  if (!item.formData) return null;
+  React.useEffect(() => {
+    const run = async () => {
+      try {
+        setLoadError(null);
+
+        // Se ainda existir formData legado, mostra sem buscar
+        if (item.formData) return;
+
+        // Só busca no modo Supabase
+        if (!isSupabaseProvider() || config.backendProvider !== 'supabase') return;
+
+        setLoading(true);
+        const supabase = getSupabase();
+        if (!supabase) throw new Error('Supabase client not initialized');
+
+        const { data, error } = await supabase
+          .from('production_requests')
+          .select('id,status,category,briefing,assets,result,admin_notes,created_at,updated_at')
+          .eq('inventory_id', item.id)
+          .single();
+
+        if (error) throw error;
+        setRequest(data);
+      } catch (e: any) {
+        setLoadError(e?.message || 'Falha ao carregar briefing');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
   
   const handleSaveDeadline = async () => {
     if (deadline && onSetDeadline) {
@@ -47,6 +85,9 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
           w.document.title = "Visual Reference";
       }
   };
+
+  const briefing = item.formData || request?.briefing || {};
+  const assets = item.formData ? { audioFile: item.formData.audioFile, referenceImages: item.formData.referenceImages } : (request?.assets || {});
 
   return (
     <ModalPortal>
@@ -87,18 +128,30 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
                   </div>
               )}
 
+              {loading && (
+                <div className="bg-gray-900/50 border border-gray-800 p-4 rounded-xl text-gray-300 text-sm">
+                  Carregando briefing...
+                </div>
+              )}
+
+              {loadError && (
+                <div className="bg-red-900/20 border border-red-500/30 p-4 rounded-xl text-red-300 text-sm">
+                  {loadError}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="space-y-6">
                     <DetailField label="Cliente" value={item.userName} />
-                    <DetailField label="Nome da Música" value={item.formData.songName} />
+                    <DetailField label="Nome da Música" value={briefing.songName} />
                  </div>
                  
                  {/* Audio Player */}
                  <div>
                     <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Áudio de Referência</h4>
-                    {item.formData.audioFile ? (
+                    {assets.audioFile ? (
                         <div className="bg-gray-900 rounded-lg p-2 border border-gray-800">
-                             <audio controls src={item.formData.audioFile} className="w-full h-8 custom-audio-player">
+                             <audio controls src={assets.audioFile} className="w-full h-8 custom-audio-player">
                                 Seu navegador não suporta o elemento de áudio.
                              </audio>
                         </div>
@@ -109,16 +162,16 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
               </div>
 
               <div className="space-y-6">
-                  <DetailField label="Ideia / Conceito" value={item.formData.idea} isBlock />
-                  <DetailField label="Letra da Música" value={item.formData.lyrics} isBlock />
+                  <DetailField label="Ideia / Conceito" value={briefing.idea} isBlock />
+                  <DetailField label="Letra da Música" value={briefing.lyrics} isBlock />
               </div>
 
               {/* Reference Images Section */}
-              {item.formData.referenceImages && item.formData.referenceImages.length > 0 && (
+              {assets.referenceImages && assets.referenceImages.length > 0 && (
                   <div>
                       <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Referências Visuais</h4>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {item.formData.referenceImages.map((img, idx) => (
+                          {assets.referenceImages.map((img, idx) => (
                               <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-700 bg-black group shadow-sm hover:border-goldenYellow-500/50 transition-colors">
                                   <img 
                                       src={img} 
