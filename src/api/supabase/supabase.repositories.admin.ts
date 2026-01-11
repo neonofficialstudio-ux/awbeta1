@@ -211,7 +211,23 @@ export const supabaseAdminRepository = {
       const missions = (missionsRes.data || []).map((m: any) => mapMissionToApp(m));
       const missionSubmissions = (submissionsRes.data || []).map((s: any) => mapSubmission(s));
       const allTransactions = (ledgerRes.data || []).map((l: any) => mapLedgerToTransaction(l));
-      const storeItems = (storeItemsRes.data || []).map((i: any) => mapStoreItemToApp(i));
+      const rawStore = storeItemsRes.data || [];
+
+      const storeItems = rawStore
+        .filter((i: any) => (i.item_type ?? 'visual') !== 'usable')
+        .map((i: any) => mapStoreItemToApp(i));
+
+      const usableItems = rawStore
+        .filter((i: any) => (i.item_type ?? '') === 'usable')
+        .map((i: any) => ({
+          id: i.id,
+          name: i.name ?? 'Item utilizável',
+          description: i.description ?? '',
+          price: Number(i.price_coins ?? 0),
+          imageUrl: i.image_url ?? '',
+          isOutOfStock: Boolean(i?.meta?.isOutOfStock ?? false) || !i.is_active,
+          platform: (i?.meta?.platform ?? 'all'),
+        }));
       const redeemedItems = (inventoryRes.data || []).map((row: any) =>
         mapInventoryToRedeemedItem(
           row,
@@ -240,6 +256,7 @@ export const supabaseAdminRepository = {
           redeemedItems,
           allTransactions,
           storeItems,
+          usableItems,
           hallOfFame: allTransactions.filter((entry) => ['raffle_win', 'mission_complete'].includes(entry.source)),
           raffles,
           allTickets,

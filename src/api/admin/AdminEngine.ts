@@ -474,9 +474,94 @@ export const AdminService = {
         },
 
         // (mantém os outros como mock por enquanto)
-        saveUsableItem: (item: UsableItem) => { ensureMockBackend('store.saveUsableItem'); return saveUsableItemHelper(item); },
-        deleteUsableItem: (id: string) => { ensureMockBackend('store.deleteUsableItem'); repo.delete("usableItems", (i:any) => i.id === id); return { success: true }; },
-        toggleUsableItemStock: (id: string) => { ensureMockBackend('store.toggleUsableItemStock'); const item = repo.select("usableItems").find((i:any) => i.id === id); if (item) { repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock })); } return { success: true }; },
+        saveUsableItem: async (item: UsableItem) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.saveUsableItem');
+            return saveUsableItemHelper(item);
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error("[AdminUsable] Supabase client not initialized");
+
+          const stableId =
+            item?.id && typeof item.id === 'string' && item.id.length >= 10
+              ? item.id
+              : crypto.randomUUID();
+
+          (item as any).id = stableId;
+
+          const row = {
+            id: stableId,
+            name: item.name?.trim() || 'Item utilizável',
+            description: item.description ?? '',
+            price_coins: Number(item.price ?? 0),
+            rarity: 'Regular',
+            image_url: item.imageUrl ?? '',
+            item_type: 'usable',
+            is_active: true,
+            meta: {
+              platform: item.platform ?? 'all',
+              isOutOfStock: Boolean(item.isOutOfStock ?? false),
+            }
+          };
+
+          const { data, error } = await supabase
+            .from('store_items')
+            .upsert(row, { onConflict: 'id' })
+            .select('*')
+            .single();
+
+          if (error) throw error;
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true, item: data };
+        },
+        deleteUsableItem: async (id: string) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.deleteUsableItem');
+            repo.delete("usableItems", (i:any) => i.id === id);
+            return { success: true };
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error("[AdminUsable] Supabase client not initialized");
+
+          const { error } = await supabase.from('store_items').delete().eq('id', id);
+          if (error) throw error;
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true };
+        },
+        toggleUsableItemStock: async (id: string) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.toggleUsableItemStock');
+            const item = repo.select("usableItems").find((i:any) => i.id === id);
+            if (item) repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock }));
+            return { success: true };
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error("[AdminUsable] Supabase client not initialized");
+
+          const { data: current, error: readErr } = await supabase
+            .from('store_items')
+            .select('id, meta')
+            .eq('id', id)
+            .single();
+          if (readErr) throw readErr;
+
+          const meta = (current?.meta ?? {}) as any;
+          const next = { ...meta, isOutOfStock: !Boolean(meta.isOutOfStock) };
+
+          const { error: updErr } = await supabase
+            .from('store_items')
+            .update({ meta: next })
+            .eq('id', id);
+          if (updErr) throw updErr;
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true };
+        },
 
         saveCoinPack: (pack: CoinPack) => { ensureMockBackend('store.saveCoinPack'); /* mantém mock */ return { success: false, error: 'mock_only' }; },
         deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack'); return { success: false, error: 'mock_only' }; },
