@@ -10,6 +10,7 @@ import { config } from '../../core/config';
 // UI Components
 import Card from '../ui/base/Card';
 import Button from '../ui/base/Button';
+import Modal from '../ui/base/Modal';
 import Tabs from '../ui/navigation/Tabs';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
 
@@ -44,6 +45,11 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const [productionQueue, setProductionQueue] = useState<any[]>([]);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
+  const [deliverOpen, setDeliverOpen] = useState(false);
+  const [deliverReq, setDeliverReq] = useState<any | null>(null);
+  const [deliverUrl, setDeliverUrl] = useState('');
+  const [deliverNotes, setDeliverNotes] = useState('');
+  const [deliverSaving, setDeliverSaving] = useState(false);
   
   // Defensively initialize queues to prevent undefined map errors
   const usableItemQueue = propUsableItemQueue || [];
@@ -154,23 +160,61 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   };
 
   const handleDeliver = async (req: any) => {
+    // abre modal (não muda status aqui)
+    setDeliverReq(req);
+    setDeliverUrl(req?.result?.delivery_url ?? '');
+    setDeliverNotes(req?.result?.notes ?? '');
+    setDeliverOpen(true);
+  };
+
+  const confirmDeliver = async () => {
+    if (!deliverReq) return;
+
+    const url = deliverUrl.trim();
+    if (!url) {
+      alert('Cole o link da entrega para continuar.');
+      return;
+    }
+
     try {
-      const url = window.prompt('Cole o link da entrega (drive/youtube/etc):');
-      if (!url) return;
+      setDeliverSaving(true);
 
       const result = {
-        ...(req.result || {}),
+        ...(deliverReq.result || {}),
         delivery_url: url,
         delivered_at: new Date().toISOString(),
+        notes: deliverNotes?.trim() || null,
       };
 
-      await updateProductionRequest(req.id, { status: 'delivered', result });
-      await notifyUser(req.user_id, 'Entrega disponível', 'Seu pedido foi entregue. Clique para acessar.', { request_id: req.id, delivery_url: url });
+      await updateProductionRequest(deliverReq.id, { status: 'delivered', result });
+
+      await notifyUser(
+        deliverReq.user_id,
+        'Entrega disponível',
+        'Seu pedido foi entregue. Clique para acessar.',
+        { request_id: deliverReq.id, delivery_url: url }
+      );
+
+      setDeliverOpen(false);
+      setDeliverReq(null);
+      setDeliverUrl('');
+      setDeliverNotes('');
+
       await loadProductionQueue();
     } catch (e: any) {
       console.error(e);
       alert(e?.message || 'Falha ao marcar como entregue');
+    } finally {
+      setDeliverSaving(false);
     }
+  };
+
+  const closeDeliverModal = () => {
+    if (deliverSaving) return;
+    setDeliverOpen(false);
+    setDeliverReq(null);
+    setDeliverUrl('');
+    setDeliverNotes('');
   };
 
   const handleConvertClick = (item: UsableItemQueueEntry) => {
@@ -412,7 +456,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                   variant="success"
                                   size="sm"
                                   onClick={() => handleDeliver(req)}
-                                  disabled={req.status === 'delivered' || req.status === 'cancelled'}
+                                  disabled={req.status !== 'in_progress'}
                                 >
                                   Entregar
                                 </Button>
@@ -437,6 +481,47 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
               onSave={handleSaveConvertedMission}
           />
       )}
+
+      <Modal
+        isOpen={deliverOpen}
+        onClose={closeDeliverModal}
+        title="Entregar produção"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-300 mb-2">Link da entrega</label>
+            <input
+              value={deliverUrl}
+              onChange={(e) => setDeliverUrl(e.target.value)}
+              placeholder="https://drive.google.com/... ou https://youtube.com/..."
+              className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Obrigatório. Use Drive/YouTube/Dropbox/WeTransfer ou link equivalente.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-300 mb-2">Observações (opcional)</label>
+            <textarea
+              value={deliverNotes}
+              onChange={(e) => setDeliverNotes(e.target.value)}
+              rows={4}
+              placeholder="Notas para o artista (ex.: instruções, versão, detalhes da entrega)..."
+              className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={closeDeliverModal} disabled={deliverSaving}>
+              Cancelar
+            </Button>
+            <Button variant="success" onClick={confirmDeliver} disabled={deliverSaving}>
+              {deliverSaving ? 'Entregando...' : 'Confirmar entrega'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );
