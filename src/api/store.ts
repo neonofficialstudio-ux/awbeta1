@@ -57,7 +57,7 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
             success: true,
             data: {
                 redeemedItems: itemsRes.items || [],
-                storeItems: (await StoreSupabase.listStoreItems()).items || [],
+                storeItems: (await StoreSupabase.listStoreItems(true)).items || [],
                 usableItems: [],
                 usableItemQueue: [],
                 artistOfTheDayQueue: [],

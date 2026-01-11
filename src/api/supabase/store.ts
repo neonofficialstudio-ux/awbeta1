@@ -31,19 +31,27 @@ const ensureClient = () => {
 };
 
 export const StoreSupabase = {
-  async listStoreItems(): Promise<{ success: boolean; items?: StoreItem[]; error?: string }> {
+  async listStoreItems(
+    includeInactive = false,
+  ): Promise<{ success: boolean; items?: StoreItem[]; error?: string }> {
     if (config.backendProvider !== 'supabase') {
       return { success: false, error: 'Supabase provider is not enabled' };
     }
 
     try {
       const supabase = ensureClient();
-      const { data, error } = await supabase
+
+      let query = supabase
         .from('store_items')
         .select('id,name,description,price_coins,item_type,rarity,image_url,is_active,meta,created_at')
-        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
+      // ✅ Loja pública: só ativos
+      if (!includeInactive) {
+        query = query.eq('is_active', true);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
 
       const items: StoreItem[] = (data || []).map((row: any) => ({
