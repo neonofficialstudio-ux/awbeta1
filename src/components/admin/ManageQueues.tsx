@@ -45,11 +45,24 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const [productionQueue, setProductionQueue] = useState<any[]>([]);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
+  const [usableQueue, setUsableQueue] = useState<any[]>([]);
+  const [usableHistory, setUsableHistory] = useState<any[]>([]);
+  const [usableLoading, setUsableLoading] = useState(false);
+  const [usableError, setUsableError] = useState<string | null>(null);
+  const usableDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [deliverReq, setDeliverReq] = useState<any | null>(null);
   const [deliverUrl, setDeliverUrl] = useState('');
   const [deliverNotes, setDeliverNotes] = useState('');
   const [deliverSaving, setDeliverSaving] = useState(false);
+  const [usableDoneOpen, setUsableDoneOpen] = useState(false);
+  const [usableDoneReq, setUsableDoneReq] = useState<any | null>(null);
+  const [usableDoneNotes, setUsableDoneNotes] = useState('');
+  const [usableDoneSaving, setUsableDoneSaving] = useState(false);
   const productionDateFormatter = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     dateStyle: 'short',
@@ -90,11 +103,12 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           category,
           status,
           briefing,
+          result,
           created_at,
           profiles:profiles(id,name,display_name,avatar_url),
           store_items:store_items(id,name,rarity,image_url)
         `)
-        .eq('category', 'usable')
+        .eq('category', 'visual_reward')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -106,7 +120,52 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     }
   };
 
+  const loadUsableQueue = async () => {
+    if (!isSupabase) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      setUsableError(null);
+      setUsableLoading(true);
+
+      const { data, error } = await supabase
+        .from('production_requests')
+        .select(`
+          id,
+          user_id,
+          inventory_id,
+          store_item_id,
+          category,
+          status,
+          briefing,
+          result,
+          created_at,
+          updated_at,
+          profiles:profiles(id,name,display_name,avatar_url),
+          store_items:store_items(id,name,rarity,image_url)
+        `)
+        .eq('category', 'usable')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const all = data || [];
+      setUsableQueue(all.filter((r: any) => r.status !== 'delivered' && r.status !== 'cancelled'));
+      setUsableHistory(all.filter((r: any) => r.status === 'delivered'));
+    } catch (e: any) {
+      setUsableError(e?.message || 'Falha ao carregar fila de itens utilizáveis');
+    } finally {
+      setUsableLoading(false);
+    }
+  };
+
   useEffect(() => {
+    if (!isSupabase) return;
+
+    if (activeSubTab === 'items') {
+      loadUsableQueue();
+    }
     if (activeSubTab === 'production') {
       loadProductionQueue();
     }
@@ -154,10 +213,58 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     try {
       await updateProductionRequest(req.id, { status: 'in_progress' });
       await notifyUser(req.user_id, 'Produção iniciada', 'Seu pedido entrou em produção.', { request_id: req.id });
-      await loadProductionQueue();
+      if (req.category === 'usable') {
+        await loadUsableQueue();
+      } else {
+        await loadProductionQueue();
+      }
     } catch (e: any) {
       console.error(e);
       alert(e?.message || 'Falha ao iniciar produção');
+    }
+  };
+
+  const handleUsableDoneOpen = (req: any) => {
+    setUsableDoneReq(req);
+    setUsableDoneNotes(req?.result?.notes ?? '');
+    setUsableDoneOpen(true);
+  };
+
+  const closeUsableDoneModal = () => {
+    if (usableDoneSaving) return;
+    setUsableDoneOpen(false);
+    setUsableDoneReq(null);
+    setUsableDoneNotes('');
+  };
+
+  const confirmUsableDone = async () => {
+    if (!usableDoneReq) return;
+
+    try {
+      setUsableDoneSaving(true);
+
+      const result = {
+        ...(usableDoneReq.result || {}),
+        notes: usableDoneNotes?.trim() || null,
+        delivered_at: new Date().toISOString(),
+      };
+
+      await updateProductionRequest(usableDoneReq.id, { status: 'delivered', result });
+
+      await notifyUser(
+        usableDoneReq.user_id,
+        'Item processado',
+        'Seu item utilizável foi processado pela equipe.',
+        { request_id: usableDoneReq.id }
+      );
+
+      closeUsableDoneModal();
+      await loadUsableQueue();
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || 'Falha ao concluir item utilizável');
+    } finally {
+      setUsableDoneSaving(false);
     }
   };
 
@@ -261,7 +368,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     <div>
       <Tabs 
         items={[
-            { id: 'items', label: 'Itens Utilizáveis', count: usableItemQueue.length },
+            { id: 'items', label: 'Itens Utilizáveis', count: isSupabase ? usableQueue.length : usableItemQueue.length },
             ...(isSupabase ? [{ id: 'production', label: 'Produção', count: productionQueue.length }] : []),
         ]}
         activeTab={activeSubTab}
@@ -273,121 +380,293 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
       <div className="animate-fade-in-up space-y-8">
         {activeSubTab === 'items' && (
           <>
-            <Card>
-              <Card.Header><h3 className="text-lg font-bold text-white">Fila Ativa ({usableItemQueue.length})</h3></Card.Header>
-              <Card.Body noPadding>
-                <TableResponsiveWrapper>
-                    <table className="w-full text-sm text-left text-[#B3B3B3]">
-                    <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
-                        <tr>
-                        <th className="px-4 py-3 text-center">#</th>
-                        <th className="px-6 py-3">Usuário</th>
-                        <th className="px-6 py-3">Item</th>
-                        <th className="px-6 py-3">Link</th>
-                        <th className="px-6 py-3">Data</th>
-                        <th className="px-6 py-3 text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#2A2D33]">
-                        {usableItemQueue.length > 0 ? (
-                            usableItemQueue.map((item, index) => {
-                            const user = allUsers.find(u => u.id === item.userId);
-                            const isProcessing = processingId === item.id;
-                            return (
-                                <tr key={item.id} className="hover:bg-[#23262B] transition-colors">
-                                    <td className="px-4 py-3 text-center font-bold">{index + 1}</td>
-                                    <td className="px-6 py-3">
-                                        {user && (
-                                        <div className="flex items-center">
-                                            <AvatarWithFrame user={user} sizeClass="w-10 h-10" className="mr-3" />
-                                            <div>
-                                                <div className="font-medium text-white">{item.userName}</div>
-                                                <div className="text-xs text-[#808080]">{item.userId.slice(0,8)}...</div>
-                                            </div>
-                                        </div>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-3 font-semibold text-[#FFD447]">{item.itemName}</td>
-                                    <td className="px-6 py-3">
-                                        <a href={item.postUrl} target="_blank" rel="noopener noreferrer" className="text-[#5DADE2] hover:underline truncate block max-w-xs">
-                                            Link Externo
-                                        </a>
-                                    </td>
-                                    <td className="px-6 py-3 text-xs">{new Date(item.queuedAt).toLocaleString('pt-BR')}</td>
-                                    <td className="px-6 py-3 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Button 
-                                                variant="secondary" 
-                                                size="sm" 
-                                                onClick={() => handleConvertClick(item)} 
-                                                disabled={isProcessing} 
-                                                className="text-[#F1C40F]"
-                                                title="Gerar Missão"
-                                            >
-                                                {isProcessing ? '...' : <MissionIcon className="w-4 h-4" />}
-                                            </Button>
-                                            <Button 
-                                                variant="success" 
-                                                size="sm" 
-                                                onClick={() => handleProcessItem(item.id)} 
-                                                disabled={isProcessing}
-                                                title="Concluir"
-                                            >
-                                                {isProcessing ? '...' : <CheckIcon className="w-4 h-4" />}
-                                            </Button>
-                                        </div>
-                                    </td>
+            {isSupabase ? (
+              <>
+                <Card>
+                  <Card.Header>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-white">Fila Ativa ({usableQueue.length})</h3>
+                      <Button variant="secondary" size="sm" onClick={loadUsableQueue}>
+                        Atualizar
+                      </Button>
+                    </div>
+                  </Card.Header>
+
+                  <Card.Body noPadding>
+                    {usableLoading && <div className="p-4 text-sm text-gray-300">Carregando...</div>}
+                    {usableError && <div className="p-4 text-sm text-red-300">{usableError}</div>}
+
+                    <TableResponsiveWrapper>
+                      <table className="w-full text-sm text-left text-[#B3B3B3]">
+                        <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
+                          <tr>
+                            <th className="px-4 py-3">Criado</th>
+                            <th className="px-4 py-3">Usuário</th>
+                            <th className="px-4 py-3">Item</th>
+                            <th className="px-4 py-3">Tipo</th>
+                            <th className="px-4 py-3">Link</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3 text-right">Ações</th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {usableQueue.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
+                                Fila vazia.
+                              </td>
+                            </tr>
+                          ) : (
+                            usableQueue.map((req: any) => {
+                              const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                              const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
+                              const kind = req.briefing?.kind || '-';
+                              const link = req.briefing?.link || '-';
+
+                              return (
+                                <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
+                                  <td className="px-4 py-3">
+                                    {req.created_at ? usableDateFormatter.format(new Date(req.created_at)) : '-'}
+                                  </td>
+                                  <td className="px-4 py-3">{userLabel}</td>
+                                  <td className="px-4 py-3">{itemLabel}</td>
+                                  <td className="px-4 py-3">{kind}</td>
+                                  <td className="px-4 py-3">
+                                    {link === '-' ? (
+                                      <span>-</span>
+                                    ) : (
+                                      <a
+                                        href={link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[#5DADE2] hover:underline truncate block max-w-xs"
+                                      >
+                                        Abrir link
+                                      </a>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">{req.status}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => handleStart(req)}
+                                        disabled={req.status !== 'queued'}
+                                      >
+                                        Iniciar
+                                      </Button>
+
+                                      <Button
+                                        variant="success"
+                                        size="sm"
+                                        onClick={() => handleUsableDoneOpen(req)}
+                                        disabled={req.status === 'delivered' || req.status === 'cancelled'}
+                                      >
+                                        Concluir
+                                      </Button>
+                                    </div>
+                                  </td>
                                 </tr>
-                            )})
-                        ) : (
-                            <tr><td colSpan={6} className="text-center py-8 text-[#808080]">Fila vazia.</td></tr>
-                        )}
-                    </tbody>
-                    </table>
-                </TableResponsiveWrapper>
-              </Card.Body>
-            </Card>
-            
-            <Card>
-              <Card.Header><h3 className="text-lg font-bold text-white">Histórico de Conclusão</h3></Card.Header>
-              <Card.Body noPadding>
-                <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </TableResponsiveWrapper>
+                  </Card.Body>
+                </Card>
+
+                <Card>
+                  <Card.Header>
+                    <h3 className="text-lg font-bold text-white">Histórico de Conclusão ({usableHistory.length})</h3>
+                  </Card.Header>
+
+                  <Card.Body noPadding>
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                      <TableResponsiveWrapper>
+                        <table className="w-full text-sm text-left text-[#B3B3B3]">
+                          <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33] sticky top-0">
+                            <tr>
+                              <th className="px-4 py-3">Concluído</th>
+                              <th className="px-4 py-3">Usuário</th>
+                              <th className="px-4 py-3">Item</th>
+                              <th className="px-4 py-3">Tipo</th>
+                              <th className="px-4 py-3">Link</th>
+                              <th className="px-4 py-3">Notas</th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {usableHistory.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
+                                  Nenhum histórico.
+                                </td>
+                              </tr>
+                            ) : (
+                              usableHistory.map((req: any) => {
+                                const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                                const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
+                                const kind = req.briefing?.kind || '-';
+                                const link = req.briefing?.link || '-';
+                                const notes = req.result?.notes || '-';
+                                const deliveredAt = req.result?.delivered_at || req.updated_at || req.created_at;
+
+                                return (
+                                  <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
+                                    <td className="px-4 py-3">
+                                      {deliveredAt ? usableDateFormatter.format(new Date(deliveredAt)) : '-'}
+                                    </td>
+                                    <td className="px-4 py-3">{userLabel}</td>
+                                    <td className="px-4 py-3">{itemLabel}</td>
+                                    <td className="px-4 py-3">{kind}</td>
+                                    <td className="px-4 py-3">
+                                      {link === '-' ? (
+                                        <span>-</span>
+                                      ) : (
+                                        <a
+                                          href={link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-[#5DADE2] hover:underline truncate block max-w-xs"
+                                        >
+                                          Abrir link
+                                        </a>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 truncate max-w-xs">{notes}</td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </TableResponsiveWrapper>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </>
+            ) : (
+              <>
+                <Card>
+                  <Card.Header><h3 className="text-lg font-bold text-white">Fila Ativa ({usableItemQueue.length})</h3></Card.Header>
+                  <Card.Body noPadding>
                     <TableResponsiveWrapper>
                         <table className="w-full text-sm text-left text-[#B3B3B3]">
-                        <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33] sticky top-0">
+                        <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
                             <tr>
+                            <th className="px-4 py-3 text-center">#</th>
                             <th className="px-6 py-3">Usuário</th>
                             <th className="px-6 py-3">Item</th>
-                            <th className="px-6 py-3">Concluído em</th>
+                            <th className="px-6 py-3">Link</th>
+                            <th className="px-6 py-3">Data</th>
+                            <th className="px-6 py-3 text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#2A2D33]">
-                            {processedItemQueueHistory.length > 0 ? (
-                                processedItemQueueHistory.map(item => {
+                            {usableItemQueue.length > 0 ? (
+                                usableItemQueue.map((item, index) => {
                                 const user = allUsers.find(u => u.id === item.userId);
+                                const isProcessing = processingId === item.id;
                                 return (
-                                    <tr key={item.id} className="hover:bg-[#23262B]">
+                                    <tr key={item.id} className="hover:bg-[#23262B] transition-colors">
+                                        <td className="px-4 py-3 text-center font-bold">{index + 1}</td>
                                         <td className="px-6 py-3">
-                                        {user && (
+                                            {user && (
                                             <div className="flex items-center">
-                                                <AvatarWithFrame user={user} sizeClass="w-8 h-8" className="mr-3" />
-                                                <span className="font-medium text-white">{item.userName}</span>
+                                                <AvatarWithFrame user={user} sizeClass="w-10 h-10" className="mr-3" />
+                                                <div>
+                                                    <div className="font-medium text-white">{item.userName}</div>
+                                                    <div className="text-xs text-[#808080]">{item.userId.slice(0,8)}...</div>
+                                                </div>
                                             </div>
-                                        )}
+                                            )}
                                         </td>
-                                        <td className="px-6 py-3 font-semibold">{item.itemName}</td>
-                                        <td className="px-6 py-3 text-xs">{new Date(item.processedAt).toLocaleString('pt-BR')}</td>
+                                        <td className="px-6 py-3 font-semibold text-[#FFD447]">{item.itemName}</td>
+                                        <td className="px-6 py-3">
+                                            <a href={item.postUrl} target="_blank" rel="noopener noreferrer" className="text-[#5DADE2] hover:underline truncate block max-w-xs">
+                                                Link Externo
+                                            </a>
+                                        </td>
+                                        <td className="px-6 py-3 text-xs">{new Date(item.queuedAt).toLocaleString('pt-BR')}</td>
+                                        <td className="px-6 py-3 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <Button 
+                                                    variant="secondary" 
+                                                    size="sm" 
+                                                    onClick={() => handleConvertClick(item)} 
+                                                    disabled={isProcessing} 
+                                                    className="text-[#F1C40F]"
+                                                    title="Gerar Missão"
+                                                >
+                                                    {isProcessing ? '...' : <MissionIcon className="w-4 h-4" />}
+                                                </Button>
+                                                <Button 
+                                                    variant="success" 
+                                                    size="sm" 
+                                                    onClick={() => handleProcessItem(item.id)} 
+                                                    disabled={isProcessing}
+                                                    title="Concluir"
+                                                >
+                                                    {isProcessing ? '...' : <CheckIcon className="w-4 h-4" />}
+                                                </Button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 )})
                             ) : (
-                                <tr><td colSpan={3} className="text-center py-8 text-[#808080]">Nenhum histórico.</td></tr>
+                                <tr><td colSpan={6} className="text-center py-8 text-[#808080]">Fila vazia.</td></tr>
                             )}
                         </tbody>
                         </table>
                     </TableResponsiveWrapper>
-                </div>
-              </Card.Body>
-            </Card>
+                  </Card.Body>
+                </Card>
+                
+                <Card>
+                  <Card.Header><h3 className="text-lg font-bold text-white">Histórico de Conclusão</h3></Card.Header>
+                  <Card.Body noPadding>
+                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
+                        <TableResponsiveWrapper>
+                            <table className="w-full text-sm text-left text-[#B3B3B3]">
+                            <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33] sticky top-0">
+                                <tr>
+                                <th className="px-6 py-3">Usuário</th>
+                                <th className="px-6 py-3">Item</th>
+                                <th className="px-6 py-3">Concluído em</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#2A2D33]">
+                                {processedItemQueueHistory.length > 0 ? (
+                                    processedItemQueueHistory.map(item => {
+                                    const user = allUsers.find(u => u.id === item.userId);
+                                    return (
+                                        <tr key={item.id} className="hover:bg-[#23262B]">
+                                            <td className="px-6 py-3">
+                                            {user && (
+                                                <div className="flex items-center">
+                                                    <AvatarWithFrame user={user} sizeClass="w-8 h-8" className="mr-3" />
+                                                    <span className="font-medium text-white">{item.userName}</span>
+                                                </div>
+                                            )}
+                                            </td>
+                                            <td className="px-6 py-3 font-semibold">{item.itemName}</td>
+                                            <td className="px-6 py-3 text-xs">{new Date(item.processedAt).toLocaleString('pt-BR')}</td>
+                                        </tr>
+                                    )})
+                                ) : (
+                                    <tr><td colSpan={3} className="text-center py-8 text-[#808080]">Nenhum histórico.</td></tr>
+                                )}
+                            </tbody>
+                            </table>
+                        </TableResponsiveWrapper>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </>
+            )}
           </>
         )}
 
@@ -480,6 +759,34 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
               onSave={handleSaveConvertedMission}
           />
       )}
+
+      <Modal
+        isOpen={usableDoneOpen}
+        onClose={closeUsableDoneModal}
+        title="Concluir item utilizável"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-300 mb-2">Observações (opcional)</label>
+            <textarea
+              value={usableDoneNotes}
+              onChange={(e) => setUsableDoneNotes(e.target.value)}
+              rows={4}
+              placeholder="Notas internas ou mensagem curta para o artista..."
+              className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={closeUsableDoneModal} disabled={usableDoneSaving}>
+              Cancelar
+            </Button>
+            <Button variant="success" onClick={confirmUsableDone} disabled={usableDoneSaving}>
+              {usableDoneSaving ? 'Concluindo...' : 'Confirmar conclusão'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={deliverOpen}
