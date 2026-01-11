@@ -153,18 +153,6 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     }
   };
 
-  const handleNeedsInfo = async (req: any) => {
-    try {
-      const note = window.prompt('O que está faltando no briefing? (admin_notes)');
-      await updateProductionRequest(req.id, { status: 'needs_info', admin_notes: note ?? null });
-      await notifyUser(req.user_id, 'Precisamos de informações', 'Seu pedido precisa de mais informações. Abra e atualize o briefing.', { request_id: req.id });
-      await loadProductionQueue();
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || 'Falha ao solicitar informações');
-    }
-  };
-
   const handleDeliver = async (req: any) => {
     try {
       const url = window.prompt('Cole o link da entrega (drive/youtube/etc):');
@@ -418,15 +406,6 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                   disabled={req.status !== 'queued'}
                                 >
                                   Iniciar
-                                </Button>
-
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleNeedsInfo(req)}
-                                  disabled={req.status === 'delivered' || req.status === 'cancelled'}
-                                >
-                                  Pedir info
                                 </Button>
 
                                 <Button
