@@ -225,12 +225,33 @@ const VisualRewardCard: React.FC<{ redeemedItem: RedeemedItem; storeItem: StoreI
                     </span>
                 </div>
                 
-                <button 
-                    onClick={() => onUse(redeemedItem)}
-                    className={`mt-auto w-full py-3.5 px-4 rounded-xl text-xs tracking-[0.15em] uppercase font-black transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] ${style.button}`}
-                >
-                    Iniciar Produção
-                </button>
+                {redeemedItem.status === 'Redeemed' && (
+                    <button 
+                        onClick={() => onUse(redeemedItem)}
+                        className={`mt-auto w-full py-3.5 px-4 rounded-xl text-xs tracking-[0.15em] uppercase font-black transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] ${style.button}`}
+                    >
+                        Iniciar Produção
+                    </button>
+                )}
+
+                {redeemedItem.status === 'InProgress' && (
+                    <button
+                        disabled
+                        className="mt-auto w-full py-3.5 px-4 rounded-xl text-xs tracking-[0.15em] uppercase font-black border border-[#A855F7]/30 bg-[#A855F7]/10 text-[#A855F7] cursor-not-allowed"
+                    >
+                        Em Produção
+                    </button>
+                )}
+
+                {redeemedItem.status === 'Used' && (
+                    <button
+                        onClick={() => { if (redeemedItem.completionUrl) window.open(redeemedItem.completionUrl, '_blank'); }}
+                        disabled={!redeemedItem.completionUrl}
+                        className={`mt-auto w-full py-3.5 px-4 rounded-xl text-xs tracking-[0.15em] uppercase font-black transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] ${redeemedItem.completionUrl ? 'bg-[#6BFF8A] hover:bg-[#4ADE80] text-black shadow-[0_0_12px_rgba(107,255,138,0.35)]' : 'bg-[#1A1A1A] text-[#666] border border-[#333] cursor-not-allowed'}`}
+                    >
+                        {redeemedItem.completionUrl ? 'Abrir Entrega' : 'Entrega Indisponível'}
+                    </button>
+                )}
             </div>
         </div>
     );

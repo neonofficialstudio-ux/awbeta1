@@ -53,6 +53,64 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
         const itemsRes = await StoreSupabase.getMyInventory(userId);
         if (!itemsRes.success) return { success: false, error: itemsRes.error || 'Falha ao carregar inventário' };
 
+        // ✅ Merge production_requests (fonte da verdade do status/entrega)
+        // - inventory.id === production_requests.inventory_id
+        // - delivered => status Used + completionUrl
+        // - queued/in_progress => status InProgress
+        try {
+            const supabase = requireSupabaseClient();
+            const { data: requests, error: reqErr } = await supabase
+                .from('production_requests')
+                .select('inventory_id,status,result,created_at,updated_at')
+                .eq('user_id', userId);
+
+            if (!reqErr && requests && requests.length) {
+                const byInventoryId = new Map(requests.map((r: any) => [r.inventory_id, r]));
+
+                const merged = (itemsRes.items || []).map((it: any) => {
+                    const req = byInventoryId.get(it.id);
+                    if (!req) return it;
+
+                    const st = String(req.status || '').toLowerCase();
+
+                    if (st === 'delivered') {
+                        const deliveryUrl = req.result?.delivery_url || null;
+                        const deliveredAt = req.result?.delivered_at || null;
+
+                        return {
+                            ...it,
+                            status: 'Used',
+                            completionUrl: deliveryUrl,
+                            completedAt: deliveredAt,
+                            productionStartedAt: it.productionStartedAt || req.created_at || null,
+                        };
+                    }
+
+                    if (st === 'queued' || st === 'in_progress') {
+                        return {
+                            ...it,
+                            status: 'InProgress',
+                            productionStartedAt: it.productionStartedAt || req.created_at || null,
+                        };
+                    }
+
+                    if (st === 'cancelled') {
+                        return {
+                            ...it,
+                            status: 'Refunded',
+                        };
+                    }
+
+                    return it;
+                });
+
+                itemsRes.items = merged;
+            }
+        } catch (e) {
+            // Não quebra inventário se algo ainda não estiver acessível por algum motivo
+            console.warn('[Inventory] Could not merge production_requests', e);
+        }
+
         return {
             success: true,
             data: {
@@ -72,7 +130,7 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
             storeItems: db.storeItemsData.map(SanityGuard.storeItem),
             usableItems: db.usableItemsData,
             usableItemQueue: (QueueEngineV5.getQueue('item') as UsableItemQueueEntry[]).map(SanityGuard.queueItem),
-            artistOfTheDayQueue: [], // DEPRECATED: QueueEngineV5.getQueue('spotlight') removed
+            artistOfTheDayQueue: [],
         }
     };
 });
