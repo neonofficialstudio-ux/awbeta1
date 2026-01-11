@@ -162,16 +162,69 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
             console.warn('[Inventory] Could not merge production_requests', e);
         }
 
-        return {
-            success: true,
-            data: {
-                redeemedItems: itemsRes.items || [],
-                storeItems: (await StoreSupabase.listStoreItems(true)).items || [],
-                usableItems: [],
-                usableItemQueue: [],
-                artistOfTheDayQueue: [],
-            }
-        };
+    // ✅ Catálogo correto para o Inventário (com item_type)
+    const supabase = requireSupabaseClient();
+    const { data: rawStore, error: storeErr } = await supabase
+      .from('store_items')
+      .select('id,name,description,price_coins,item_type,rarity,image_url,is_active,meta,created_at')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (storeErr) {
+      return {
+        success: true,
+        data: {
+          redeemedItems: itemsRes.items || [],
+          storeItems: [],
+          usableItems: [],
+          usableItemQueue: [],
+          artistOfTheDayQueue: [],
+        }
+      };
+    }
+
+    const all = rawStore || [];
+
+    // storeItems (visuais / recompensas)
+    const storeItems = all
+      .filter((i: any) => (i.item_type ?? 'visual') !== 'usable')
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name ?? 'Item',
+        description: row.description ?? '',
+        price: Number(row.price_coins ?? 0),
+        rarity: (row.rarity ?? 'Regular'),
+        imageUrl: row.image_url ?? '',
+        isOutOfStock: Boolean(row?.meta?.isOutOfStock ?? false) || !row.is_active,
+        previewUrl: row?.meta?.previewUrl ?? '',
+        itemType: row.item_type ?? 'visual',
+        meta: row.meta ?? {},
+      }));
+
+    // usableItems (itens utilizáveis)
+    const usableItems = all
+      .filter((i: any) => (i.item_type ?? '') === 'usable')
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name ?? 'Item utilizável',
+        description: row.description ?? '',
+        price: Number(row.price_coins ?? 0),
+        imageUrl: row.image_url ?? '',
+        isOutOfStock: Boolean(row?.meta?.isOutOfStock ?? false) || !row.is_active,
+        platform: row?.meta?.platform ?? 'all',
+        kind: row?.meta?.usable_kind ?? 'instagram_post',
+      }));
+
+    return {
+      success: true,
+      data: {
+        redeemedItems: itemsRes.items || [],
+        storeItems,
+        usableItems,
+        usableItemQueue: [],
+        artistOfTheDayQueue: [],
+      }
+    };
     }
 
     return {
