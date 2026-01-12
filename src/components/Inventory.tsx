@@ -10,6 +10,7 @@ import { ModalPortal } from './ui/overlays/ModalPortal';
 import FaqItem from './ui/patterns/FaqItem';
 import { socialLinkValidator } from '../api/quality/socialLinkValidator';
 import { useProductionQueue } from '../hooks/useProductionQueue';
+import { config } from '../core/config';
 
 // --- Visual Styles & FX ---
 // Injected styles for specific animations requested
@@ -26,12 +27,12 @@ const faqData = [
     { question: "Onde recebo o arquivo final?", answer: "Assim que estiver pronto, o link para download aparecerá no card do item na aba 'Histórico' e você receberá uma notificação." }
 ];
 
-const dateSP = new Intl.DateTimeFormat('pt-BR', {
+const spFmt = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     dateStyle: 'short',
     timeStyle: 'short',
 });
-const fmtSP = (iso?: string | null) => (iso ? dateSP.format(new Date(iso)) : '');
+const fmtSP = (iso?: string | null) => (iso ? spFmt.format(new Date(iso)) : '');
 
 const InventoryTabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => {
     return (
@@ -269,7 +270,9 @@ const UsableItemCard: React.FC<{
     usableItem: UsableItem; 
     onUse: (redeemedItemId: string, item: UsableItem) => void; 
     onQueueForArtistOfTheDay: (redeemedItemId: string) => Promise<void>;
-}> = ({ redeemedItem, usableItem, onUse, onQueueForArtistOfTheDay }) => {
+    queueInfoByRequestId: Record<string, any>;
+    fmtDate: (iso?: string | null) => string;
+}> = ({ redeemedItem, usableItem, onUse, onQueueForArtistOfTheDay, queueInfoByRequestId, fmtDate }) => {
     
     const [isQueuing, setIsQueuing] = useState(false);
     
@@ -306,6 +309,8 @@ const UsableItemCard: React.FC<{
     
     // V13.7: Legacy Check
     const isLegacyDiscontinued = usableItem.id === 'ui-spotlight';
+    const reqId = (redeemedItem as any).productionRequestId as string | undefined;
+    const queueInfo = reqId ? queueInfoByRequestId[reqId] : null;
 
     return (
         <div className={`bg-[#0D0D0D] rounded-[20px] border border-[#333] overflow-hidden flex flex-col group transition-all hover:border-[#FFD369]/50 hover:shadow-[0_0_20px_rgba(255,211,105,0.1)] h-full relative`}>
@@ -325,9 +330,36 @@ const UsableItemCard: React.FC<{
             <div className="p-6 flex-grow flex flex-col -mt-10 relative z-10">
                 <h3 className="text-lg font-bold text-white font-chakra uppercase tracking-wide leading-tight group-hover:text-[#FFD369] transition-colors">{usableItem.name}</h3>
                 <p className="text-xs text-[#808080] mt-2 mb-6 line-clamp-2">{usableItem.description}</p>
+                {queueInfo && (
+                    <div className="mb-3 text-[11px] text-[#B3B3B3] bg-black/30 border border-[#333] rounded-xl px-3 py-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-white font-bold">Status:</span>
+                            <span className="font-mono">{queueInfo.status}</span>
+                        </div>
+
+                        {queueInfo.status === 'queued' && (
+                            <div className="flex items-center justify-between mt-1">
+                                <span className="text-white font-bold">Posição na fila:</span>
+                                <span className="font-mono">
+                                    #{queueInfo.position_in_queue} • Ativos: {queueInfo.total_active}
+                                </span>
+                            </div>
+                        )}
+
+                        {queueInfo.status === 'in_progress' && (
+                            <div className="mt-1 text-[#FFD369] font-bold">
+                                Em andamento (sua posição pode não ser exibida)
+                            </div>
+                        )}
+
+                        <div className="mt-1 text-[#808080] font-mono">
+                            Criado: {fmtDate(queueInfo.created_at)}
+                        </div>
+                    </div>
+                )}
                 <button 
                     onClick={handleUseClick}
-                    disabled={isQueuing || isLegacyDiscontinued}
+                    disabled={isQueuing || isLegacyDiscontinued || Boolean(queueInfo && (queueInfo.status === 'queued' || queueInfo.status === 'in_progress'))}
                     className={`mt-auto w-full font-bold py-3.5 px-4 rounded-xl border text-xs uppercase tracking-widest flex items-center justify-center shadow-lg transition-all
                         ${isLegacyDiscontinued 
                             ? 'bg-[#111] text-gray-600 border-[#222] cursor-not-allowed' 
@@ -335,7 +367,7 @@ const UsableItemCard: React.FC<{
                         }
                     `}
                 >
-                    {isQueuing ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : isLegacyDiscontinued ? 'Item Legado' : 'Ativar Item'}
+                    {isQueuing ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : isLegacyDiscontinued ? 'Item Legado' : (queueInfo ? 'Em Fila / Andamento' : 'Ativar Item')}
                 </button>
             </div>
         </div>
@@ -577,10 +609,14 @@ const EmptyVaultState: React.FC<{ message: string, onGoToStore: () => void }> = 
 const Inventory: React.FC = () => {
     const { state, dispatch } = useAppContext();
     const { activeUser: currentUser, inventoryInitialTab } = state;
+    const isSupabase = config.backendProvider === 'supabase';
 
     const [redeemedItems, setRedeemedItems] = useState<RedeemedItem[]>([]);
     const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
     const [usableItems, setUsableItems] = useState<UsableItem[]>([]);
+    const [usableRequests, setUsableRequests] = useState<any[]>([]);
+    const [usablePositions, setUsablePositions] = useState<Record<string, any>>({});
+    const [queueLoading, setQueueLoading] = useState(false);
     const lastLoadRef = useRef<number>(0);
     const CACHE_TTL_MS = 30_000; // 30s
     
@@ -595,6 +631,35 @@ const Inventory: React.FC = () => {
     const [usableItemToActivate, setUsableItemToActivate] = useState<{ id: string; platform?: 'instagram' | 'tiktok' | 'youtube' | 'all'; name: string } | null>(null);
     const [visualItemToUse, setVisualItemToUse] = useState<RedeemedItem | null>(null);
     const [queueSuccessInfo, setQueueSuccessInfo] = useState<{ itemName: string; isSpotlight: boolean; isVisualReward: boolean; } | null>(null);
+
+    const loadUsableQueueInfo = useCallback(async () => {
+        if (!isSupabase || !currentUser?.id) return;
+
+        try {
+            setQueueLoading(true);
+            const reqRes = await api.getMyRequests('usable');
+            if (!reqRes.success) return;
+
+            const reqs = reqRes.data || [];
+            setUsableRequests(reqs);
+
+            const active = reqs.filter((r: any) => r.status === 'queued' || r.status === 'in_progress');
+            const entries = await Promise.all(
+                active.map(async (r: any) => {
+                    const posRes = await api.getQueuePosition(r.id);
+                    return [r.id, posRes.success ? posRes.data : null] as const;
+                })
+            );
+
+            const map: Record<string, any> = {};
+            for (const [id, val] of entries) {
+                if (val) map[id] = val;
+            }
+            setUsablePositions(map);
+        } finally {
+            setQueueLoading(false);
+        }
+    }, [isSupabase, currentUser?.id]);
 
     const fetchData = useCallback(async (force = false) => {
         const now = Date.now();
@@ -637,6 +702,12 @@ const Inventory: React.FC = () => {
     useEffect(() => {
         setActiveTab(inventoryInitialTab);
     }, [inventoryInitialTab]);
+
+    useEffect(() => {
+        if (activeTab === 'usable') {
+            loadUsableQueueInfo();
+        }
+    }, [activeTab, loadUsableQueueInfo]);
 
     const processApiResponse = (response: any) => {
         if (response.updatedUser) {
@@ -801,16 +872,39 @@ const Inventory: React.FC = () => {
 
                 {activeTab === 'usable' && (
                      <div>
+                        {isSupabase && (
+                            <div className="mb-8 max-w-3xl mx-auto flex items-center justify-between gap-3 bg-[#0E0E0E]/70 border border-[#333] rounded-2xl px-5 py-4">
+                                <div className="text-sm text-[#B3B3B3]">
+                                    <span className="text-white font-bold">Fila real</span> (ordem de chegada) • Atualiza quando o admin conclui
+                                </div>
+                                <button
+                                    onClick={loadUsableQueueInfo}
+                                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#1A1A1A] border border-[#333] text-white hover:bg-[#FFD369] hover:text-black hover:border-[#FFD369] transition"
+                                    disabled={queueLoading}
+                                >
+                                    {queueLoading ? 'Atualizando...' : 'Atualizar'}
+                                </button>
+                            </div>
+                        )}
                         {userUsableItems.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
-                                {userUsableItems.map(item => item && <UsableItemCard key={item.redeemedItem.id} {...item} onUse={handleActivateUsableItem} onQueueForArtistOfTheDay={handleQueueForArtistOfTheDay} />)}
+                                {userUsableItems.map(item => item && (
+                                    <UsableItemCard
+                                        key={item.redeemedItem.id}
+                                        {...item}
+                                        onUse={handleActivateUsableItem}
+                                        onQueueForArtistOfTheDay={handleQueueForArtistOfTheDay}
+                                        queueInfoByRequestId={usablePositions}
+                                        fmtDate={fmtSP}
+                                    />
+                                ))}
                             </div>
                         ) : (
                             <EmptyVaultState message="Você não possui itens ativáveis no momento." onGoToStore={handleGoToStore} />
                         )}
                         
                         {/* Updated Item Queue to use live hook */}
-                        {(liveUsableItemQueue.length > 0) && (
+                        {!isSupabase && (liveUsableItemQueue.length > 0) && (
                             <div className="grid grid-cols-1 gap-8 mt-16">
                                 <ItemQueue queue={liveUsableItemQueue} currentUser={currentUser} />
                             </div>

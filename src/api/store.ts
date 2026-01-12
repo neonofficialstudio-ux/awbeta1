@@ -599,6 +599,36 @@ export const submitVisualRewardForm = (
     return { success: true, updatedItem, notifications };
 });
 
+export const getMyRequests = (category?: string) => withLatency(async () => {
+    if (config.backendProvider !== 'supabase') {
+        return { success: false, error: 'not_supabase' };
+    }
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc('get_my_requests', {
+        p_category: category ?? null,
+        p_limit: 50,
+        p_offset: 0,
+    });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, data: data || [] };
+});
+
+export const getQueuePosition = (requestId: string) => withLatency(async () => {
+    if (config.backendProvider !== 'supabase') {
+        return { success: false, error: 'not_supabase' };
+    }
+
+    const supabase = requireSupabaseClient();
+    const { data, error } = await supabase.rpc('get_queue_position', {
+        p_request_id: requestId,
+    });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
+});
+
 const buyRaffleTicketsSupabase = async (raffleId: string, quantity: number) => {
     assertSupabaseProvider('raffles.buyTickets');
 

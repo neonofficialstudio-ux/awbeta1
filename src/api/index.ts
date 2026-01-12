@@ -83,7 +83,9 @@ export {
     cancelCoinPurchaseRequest,
     submitCoinPurchaseProof,
     submitVisualRewardForm,
-    initiatePayment // Added export
+    initiatePayment, // Added export
+    getMyRequests,
+    getQueuePosition
 } from "./store";
 
 // Events V7.0 (Restored & Normalized)
