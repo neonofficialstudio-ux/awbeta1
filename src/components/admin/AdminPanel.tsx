@@ -230,6 +230,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     onRefund={(id: string) => handleAdminAction(api.manualRefund(id))} 
                     onComplete={(id: string, url?: string) => handleAdminAction(api.completeVisualReward(id, url))}
                     onSetDeadline={(id: string, date: string) => handleAdminAction(api.setEstimatedCompletionDate(id, date))}
+                    // ✅ Reuso dos handlers do módulo Filas dentro da Central de Operações (Loja)
+                    onProcessItemQueue={(id: string) => handleAdminAction(api.processQueueItem(id))}
+                    onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))}
+                    onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
+                    onCreateMissionFromQueue={(id: string, mission: any) => handleAdminAction(api.createMissionFromQueue(id, mission))}
                 /></AntiCrashBoundary>;
             case 'events':
                 return <AntiCrashBoundary><ManageEvents 
