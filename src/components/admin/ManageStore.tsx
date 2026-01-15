@@ -306,11 +306,13 @@ const ManageStore: React.FC<ManageStoreProps> = ({
         .from('production_requests')
         .select(`
           id,
+          inventory_id,
           user_id,
           store_item_id,
           category,
           status,
           briefing,
+          assets,
           result,
           created_at,
           updated_at,
@@ -903,7 +905,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
 
                     // RedeemedItem mínimo pra abrir o AdminRewardDetailsModal
                     return {
-                      id: r.inventory_id, // ⚠️ modal busca production_requests por inventory_id
+                      id: r.inventory_id || r.id, // ✅ preferencialmente inventory_id (modal), fallback evita crash
                       userId: r.user_id,
                       userName: userLabel,
                       itemId: r.store_item_id,

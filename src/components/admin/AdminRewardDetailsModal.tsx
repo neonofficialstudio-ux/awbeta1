@@ -40,6 +40,11 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
       try {
         setLoadError(null);
 
+        if (!item?.id) {
+          setLoadError('ID inválido para carregar o pedido.');
+          return;
+        }
+
         // Se ainda existir formData legado, mostra sem buscar
         if (item.formData) return;
 
@@ -101,7 +106,9 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
               <div>
                 <div className="flex items-center gap-2 mb-1">
                     <h2 className="text-xl font-bold text-white">Detalhes do Pedido</h2>
-                    <span className="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded border border-gray-700">{item.id.slice(0, 8)}...</span>
+                    <span className="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded border border-gray-700">
+                      {item?.id ? `${item.id.slice(0, 8)}...` : '—'}
+                    </span>
                 </div>
                 <p className="text-goldenYellow-400 text-sm font-medium">{item.itemName}</p>
               </div>
