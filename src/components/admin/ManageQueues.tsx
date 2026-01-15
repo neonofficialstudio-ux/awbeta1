@@ -29,7 +29,7 @@ interface ManageQueuesProps {
 }
 
 type QueueSubTab = 'items' | 'production';
-type StatusQuickFilter = 'all' | 'queued' | 'in_progress';
+type StatusQuickFilter = 'all' | 'queued' | 'in_progress' | 'overdue';
 
 const ManageQueues: React.FC<ManageQueuesProps> = ({
   usableItemQueue: propUsableItemQueue,
@@ -87,6 +87,91 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
       default:
         return 'bg-[#101216] text-gray-200 border-[#2B3342]';
     }
+  };
+
+  // SLA / Atrasos (client-only)
+  const tryParseDate = (v: any): Date | null => {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    if (typeof v === 'number') {
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof v === 'string') {
+      // Aceita ISO e também YYYY-MM-DD
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  };
+
+  const getDeadline = (req: any): Date | null => {
+    // tenta chaves comuns em briefing/result (jsonb)
+    const candidates = [
+      req?.briefing?.deadline,
+      req?.briefing?.deadline_date,
+      req?.briefing?.due_date,
+      req?.briefing?.estimated_completion_date,
+      req?.briefing?.estimatedCompletionDate,
+      req?.result?.deadline,
+      req?.result?.deadline_date,
+      req?.result?.due_date,
+      req?.result?.estimated_completion_date,
+      req?.result?.estimatedCompletionDate,
+    ];
+    for (const c of candidates) {
+      const d = tryParseDate(c);
+      if (d) return d;
+    }
+    return null;
+  };
+
+  const isOverdue = (req: any): boolean => {
+    const status = req?.status;
+    if (status !== 'queued' && status !== 'in_progress') return false;
+
+    const now = Date.now();
+    const deadline = getDeadline(req);
+    if (deadline) return deadline.getTime() < now;
+
+    // Fallback determinístico por idade (SLA interno)
+    const createdAt = tryParseDate(req?.created_at)?.getTime() ?? null;
+    if (!createdAt) return false;
+
+    const ageMs = now - createdAt;
+    const QUEUED_OVERDUE_MS = 24 * 60 * 60 * 1000; // 24h
+    const INPROGRESS_OVERDUE_MS = 72 * 60 * 60 * 1000; // 72h
+
+    if (status === 'queued') return ageMs > QUEUED_OVERDUE_MS;
+    return ageMs > INPROGRESS_OVERDUE_MS;
+  };
+
+  const hasExplicitSla = (req: any): boolean => Boolean(getDeadline(req));
+
+  const slaBadge = (req: any) => {
+    const overdue = isOverdue(req);
+    const hasSla = hasExplicitSla(req);
+    if (overdue) {
+      return (
+        <span
+          className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-[#201018] text-[#FF8B8B] border-[#3A1F2C]"
+          title={hasSla ? 'Prazo expirado (deadline)' : 'Atraso (SLA interno por idade)'}
+        >
+          Atrasado
+        </span>
+      );
+    }
+    if (!hasSla && (req?.status === 'queued' || req?.status === 'in_progress')) {
+      return (
+        <span
+          className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-[#101216] text-white/55 border-[#2A2D33]"
+          title="Sem prazo definido (SLA)"
+        >
+          Sem SLA
+        </span>
+      );
+    }
+    return null;
   };
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [deliverReq, setDeliverReq] = useState<any | null>(null);
@@ -252,24 +337,28 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const usableCounts = useMemo(() => {
     const queued = usableQueue.filter((r: any) => r.status === 'queued').length;
     const inProgress = usableQueue.filter((r: any) => r.status === 'in_progress').length;
-    return { total: usableQueue.length, queued, inProgress };
-  }, [usableQueue]);
+    const overdue = usableQueue.filter((r: any) => isOverdue(r)).length;
+    return { total: usableQueue.length, queued, inProgress, overdue };
+  }, [usableQueue, isOverdue]);
 
   const filteredUsableQueue = useMemo(() => {
     if (usableStatusFilter === 'all') return usableQueue;
+    if (usableStatusFilter === 'overdue') return usableQueue.filter((r: any) => isOverdue(r));
     return usableQueue.filter((r: any) => r.status === usableStatusFilter);
-  }, [usableQueue, usableStatusFilter]);
+  }, [usableQueue, usableStatusFilter, isOverdue]);
 
   const productionCounts = useMemo(() => {
     const queued = productionQueue.filter((r: any) => r.status === 'queued').length;
     const inProgress = productionQueue.filter((r: any) => r.status === 'in_progress').length;
-    return { total: productionQueue.length, queued, inProgress };
-  }, [productionQueue]);
+    const overdue = productionQueue.filter((r: any) => isOverdue(r)).length;
+    return { total: productionQueue.length, queued, inProgress, overdue };
+  }, [productionQueue, isOverdue]);
 
   const filteredProductionQueue = useMemo(() => {
     if (productionStatusFilter === 'all') return productionQueue;
+    if (productionStatusFilter === 'overdue') return productionQueue.filter((r: any) => isOverdue(r));
     return productionQueue.filter((r: any) => r.status === productionStatusFilter);
-  }, [productionQueue, productionStatusFilter]);
+  }, [productionQueue, productionStatusFilter, isOverdue]);
 
   const handleProcessItem = async (queueId: string) => {
     setProcessingId(queueId);
@@ -491,7 +580,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           <>
             {isSupabase ? (
               <>
-                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <SummaryCard
                     label="Total"
                     value={usableCounts.total}
@@ -510,13 +599,21 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                     active={usableStatusFilter === 'in_progress'}
                     onClick={() => setUsableStatusFilter('in_progress')}
                   />
+                  <SummaryCard
+                    label="Atrasados"
+                    value={usableCounts.overdue}
+                    active={usableStatusFilter === 'overdue'}
+                    onClick={() => setUsableStatusFilter('overdue')}
+                  />
                 </div>
                 <Card>
                   <Card.Header>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <h3 className="text-lg font-bold text-white">Fila Ativa</h3>
-                        <p className="text-xs text-white/50">FIFO por data de criação • filtros por status</p>
+                        <p className="text-xs text-white/50">
+                          FIFO por data de criação • filtros por status • SLA client-only (deadline quando existir, senão idade)
+                        </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -543,6 +640,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                           title="Somente em produção"
                         >
                           Em produção <span className="opacity-70">({usableCounts.inProgress})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={pillClass(usableStatusFilter === 'overdue')}
+                          onClick={() => setUsableStatusFilter('overdue')}
+                          title="Somente atrasados"
+                        >
+                          Atrasados <span className="opacity-70">({usableCounts.overdue})</span>
                         </button>
 
                         <Button variant="secondary" size="sm" onClick={loadUsableQueue}>
@@ -617,6 +722,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                     <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
                                       {statusLabelPt(req.status)}
                                     </span>
+                                    {slaBadge(req)}
                                   </td>
                                   <td className="px-4 py-3">
                                     <button
@@ -852,7 +958,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
 
         {activeSubTab === 'production' && (
           <div className="space-y-8">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <SummaryCard
                 label="Total"
                 value={productionCounts.total}
@@ -871,13 +977,21 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                 active={productionStatusFilter === 'in_progress'}
                 onClick={() => setProductionStatusFilter('in_progress')}
               />
+              <SummaryCard
+                label="Atrasados"
+                value={productionCounts.overdue}
+                active={productionStatusFilter === 'overdue'}
+                onClick={() => setProductionStatusFilter('overdue')}
+              />
             </div>
             <Card>
               <Card.Header>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Fila de Produção</h3>
-                    <p className="text-xs text-white/50">Visual rewards • FIFO • filtros por status</p>
+                    <p className="text-xs text-white/50">
+                      Visual rewards • FIFO • filtros por status • SLA client-only (deadline quando existir, senão idade)
+                    </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -904,6 +1018,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                       title="Somente em produção"
                     >
                       Em produção <span className="opacity-70">({productionCounts.inProgress})</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={pillClass(productionStatusFilter === 'overdue')}
+                      onClick={() => setProductionStatusFilter('overdue')}
+                      title="Somente atrasados"
+                    >
+                      Atrasados <span className="opacity-70">({productionCounts.overdue})</span>
                     </button>
 
                     <Button variant="secondary" size="sm" onClick={loadProductionQueue}>
@@ -980,6 +1102,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                 <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
                                   {statusLabelPt(req.status)}
                                 </span>
+                                {slaBadge(req)}
                               </td>
                               <td className="px-4 py-3">
                                 <button
