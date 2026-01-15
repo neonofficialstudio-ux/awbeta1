@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { UsableItemQueueEntry, ProcessedUsableItemQueueEntry, ArtistOfTheDayQueueEntry, ProcessedArtistOfTheDayQueueEntry, User, Mission } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { CheckIcon, PromoteIcon, MissionIcon } from '../../constants';
+import { toast } from 'react-hot-toast';
 import AdminMissionModal from './AdminMissionModal';
 import { getSupabase } from '../../api/supabase/client';
 import { config } from '../../core/config';
@@ -222,6 +223,32 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
         : 'bg-[#101216] border-[#2A2D33] text-[#B3B3B3] hover:text-white hover:border-white/20'
     }`;
 
+  const SummaryCard = ({
+    label,
+    value,
+    active,
+    onClick,
+  }: {
+    label: string;
+    value: number;
+    active: boolean;
+    onClick: () => void;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col gap-1 rounded-xl border px-4 py-3 text-left transition-all
+        ${
+          active
+            ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
+            : 'bg-[#0E1014] border-[#22252B] text-white/70 hover:border-white/20'
+        }`}
+    >
+      <span className="text-xs uppercase tracking-wide opacity-70">{label}</span>
+      <span className="text-2xl font-bold">{value}</span>
+    </button>
+  );
+
   const usableCounts = useMemo(() => {
     const queued = usableQueue.filter((r: any) => r.status === 'queued').length;
     const inProgress = usableQueue.filter((r: any) => r.status === 'in_progress').length;
@@ -248,6 +275,16 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     setProcessingId(queueId);
     await onProcessItemQueue(queueId);
     setProcessingId(null);
+  };
+
+  const handleCopyBriefing = (briefing: any) => {
+    try {
+      const text = JSON.stringify(briefing, null, 2);
+      navigator.clipboard.writeText(text);
+      toast.success('Briefing copiado');
+    } catch {
+      toast.error('Erro ao copiar briefing');
+    }
   };
 
   const updateProductionRequest = async (id: string, patch: any) => {
@@ -454,6 +491,26 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           <>
             {isSupabase ? (
               <>
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <SummaryCard
+                    label="Total"
+                    value={usableCounts.total}
+                    active={usableStatusFilter === 'all'}
+                    onClick={() => setUsableStatusFilter('all')}
+                  />
+                  <SummaryCard
+                    label="Na fila"
+                    value={usableCounts.queued}
+                    active={usableStatusFilter === 'queued'}
+                    onClick={() => setUsableStatusFilter('queued')}
+                  />
+                  <SummaryCard
+                    label="Em produção"
+                    value={usableCounts.inProgress}
+                    active={usableStatusFilter === 'in_progress'}
+                    onClick={() => setUsableStatusFilter('in_progress')}
+                  />
+                </div>
                 <Card>
                   <Card.Header>
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -510,6 +567,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                             <th className="px-4 py-3">Tipo</th>
                             <th className="px-4 py-3">Link</th>
                             <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Briefing</th>
                             <th className="px-4 py-3 text-right">Ações</th>
                           </tr>
                         </thead>
@@ -517,7 +575,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <tbody>
                           {filteredUsableQueue.length === 0 ? (
                             <tr>
-                              <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
+                              <td colSpan={9} className="px-4 py-8 text-center text-gray-600 italic">
                                 {usableQueue.length === 0
                                   ? 'Fila vazia.'
                                   : 'Nenhum item para este filtro.'}
@@ -559,6 +617,15 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                     <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
                                       {statusLabelPt(req.status)}
                                     </span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyBriefing(req.briefing)}
+                                      className="text-xs text-neon-cyan hover:underline"
+                                    >
+                                      Copiar briefing
+                                    </button>
                                   </td>
                                   <td className="px-4 py-3">
                                     <div className="flex justify-end gap-2">
@@ -785,6 +852,26 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
 
         {activeSubTab === 'production' && (
           <div className="space-y-8">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <SummaryCard
+                label="Total"
+                value={productionCounts.total}
+                active={productionStatusFilter === 'all'}
+                onClick={() => setProductionStatusFilter('all')}
+              />
+              <SummaryCard
+                label="Na fila"
+                value={productionCounts.queued}
+                active={productionStatusFilter === 'queued'}
+                onClick={() => setProductionStatusFilter('queued')}
+              />
+              <SummaryCard
+                label="Em produção"
+                value={productionCounts.inProgress}
+                active={productionStatusFilter === 'in_progress'}
+                onClick={() => setProductionStatusFilter('in_progress')}
+              />
+            </div>
             <Card>
               <Card.Header>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -846,13 +933,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <th className="px-4 py-3">Tipo</th>
                         <th className="px-4 py-3">Link</th>
                         <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Briefing</th>
                       </tr>
                     </thead>
 
                     <tbody>
                       {filteredProductionQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
+                          <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
                             {productionQueue.length === 0
                               ? 'Nenhum pedido na fila.'
                               : 'Nenhum pedido para este filtro.'}
@@ -892,6 +980,15 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                 <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
                                   {statusLabelPt(req.status)}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyBriefing(req.briefing)}
+                                  className="text-xs text-neon-cyan hover:underline"
+                                >
+                                  Copiar briefing
+                                </button>
                               </td>
                             </tr>
                           );
