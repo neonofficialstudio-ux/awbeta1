@@ -7,7 +7,6 @@ import AdminCoinPackModal from './AdminCoinPackModal';
 import ConfirmationModal from './ConfirmationModal';
 import ReviewCoinPurchases from './ReviewCoinPurchases';
 import RedeemedItemsLog from './RedeemedItemsLog';
-import StoreAuditCenter from './StoreAuditCenter';
 import AdminRewardDetailsModal from './AdminRewardDetailsModal';
 import { EditIcon, DeleteIcon, CoinIcon, DetailsIcon, InstagramIcon, TikTokIcon, YoutubeIcon, GlobeIcon } from '../../constants'; // Added icons
 import * as storeAPI from '../../api/admin/store';
@@ -173,7 +172,6 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     redemptions: 'operations',
     metrics: 'operations',
     review_purchases: 'audit',
-    audit_logs: 'audit',
   };
 
   const DEFAULT_TAB_BY_SECTION: Record<StoreOpsSection, AdminStoreTab> = {
@@ -579,7 +577,6 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 ]
               : [
                   { id: 'review_purchases', label: 'Vendas', count: pendingCoinPurchases },
-                  { id: 'audit_logs', label: 'Auditoria (Loja)' },
                 ]
           }
           className="mb-0"
@@ -854,7 +851,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-white">Métricas Operacionais (Supabase)</h3>
-                    <p className="text-xs text-white/50">Fonte: production_requests • cálculo client-only</p>
+                    <p className="text-xs text-white/50">Fonte: production_requests • visão operacional + detalhes ricos</p>
                   </div>
                   <Button variant="secondary" size="sm" onClick={loadOpsRequests}>
                     Atualizar
@@ -886,121 +883,140 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                   </div>
                 )}
 
-                {/* Fila ativa (operacional) */}
-                <div className="mt-6 rounded-xl border border-white/10 bg-white/5">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">Fila Ativa (com briefing)</h4>
-                      <p className="text-xs text-white/50">
-                        Fonte: production_requests • mostrando queued + in_progress (FIFO por created_at)
-                      </p>
+                {(() => {
+                  const visual = opsRequests.filter((r: any) => r.category === 'visual_reward');
+                  const inProgress = visual
+                    .filter((r: any) => r.status === 'in_progress')
+                    .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                  const queued = visual
+                    .filter((r: any) => r.status === 'queued')
+                    .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+                  const toRedeemedLike = (r: any) => {
+                    const userLabel =
+                      r?.profiles?.artistic_name ||
+                      r?.profiles?.display_name ||
+                      r?.profiles?.name ||
+                      r?.user_id?.slice(0, 8);
+                    const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8);
+                    const est = r?.result?.estimated_completion_date || null;
+
+                    // RedeemedItem mínimo pra abrir o AdminRewardDetailsModal
+                    return {
+                      id: r.inventory_id, // ⚠️ modal busca production_requests por inventory_id
+                      userId: r.user_id,
+                      userName: userLabel,
+                      itemId: r.store_item_id,
+                      itemName: itemLabel,
+                      itemPrice: 0,
+                      redeemedAt: r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '-',
+                      redeemedAtISO: r.created_at || new Date().toISOString(),
+                      coinsBefore: 0,
+                      coinsAfter: 0,
+                      status: r.status === 'in_progress' ? 'InProgress' : 'Redeemed',
+                      productionStartedAt: r.status === 'in_progress' ? (r.updated_at || r.created_at) : undefined,
+                      estimatedCompletionDate: est || undefined,
+                      productionRequestId: r.id,
+                      productionCategory: 'visual_reward',
+                    };
+                  };
+
+                  return (
+                    <div className="mt-6 space-y-4">
+                      <Card className="bg-slate-dark border-white/5">
+                        <Card.Header className="border-white/5">
+                          <h4 className="text-lg font-bold text-white">Fila de Produção Ativa</h4>
+                        </Card.Header>
+                        <Card.Body noPadding>
+                          {inProgress.length > 0 ? (
+                            <div className="divide-y divide-white/5">
+                              {inProgress.map((r: any) => {
+                                const item = toRedeemedLike(r);
+                                return (
+                                  <div
+                                    key={r.id}
+                                    className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-white/5 transition-colors"
+                                  >
+                                    <div className="mb-2 sm:mb-0">
+                                      <p className="font-semibold text-white text-sm">{item.itemName}</p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1 font-mono">
+                                        <span>Cliente: {item.userName}</span>
+                                        <span>•</span>
+                                        <span>
+                                          Início:{' '}
+                                          {item.productionStartedAt
+                                            ? new Date(item.productionStartedAt).toLocaleDateString('pt-BR')
+                                            : '—'}
+                                        </span>
+                                      </div>
+                                      {item.estimatedCompletionDate && (
+                                        <p className="text-xs text-red-400 font-bold mt-1">
+                                          Prazo: {new Date(item.estimatedCompletionDate).toLocaleDateString('pt-BR')}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => setViewingDetails(item as any)}
+                                      className="border-white/10 hover:border-neon-cyan/50 hover:text-neon-cyan"
+                                    >
+                                      Ver Detalhes
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center text-gray-500">A fila de produção está vazia.</div>
+                          )}
+                        </Card.Body>
+                      </Card>
+
+                      <Card className="bg-slate-dark border-white/5">
+                        <Card.Header className="border-white/5">
+                          <h4 className="text-lg font-bold text-white">Na fila</h4>
+                        </Card.Header>
+                        <Card.Body noPadding>
+                          {queued.length > 0 ? (
+                            <div className="divide-y divide-white/5">
+                              {queued.map((r: any) => {
+                                const item = toRedeemedLike(r);
+                                return (
+                                  <div
+                                    key={r.id}
+                                    className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-white/5 transition-colors"
+                                  >
+                                    <div className="mb-2 sm:mb-0">
+                                      <p className="font-semibold text-white text-sm">{item.itemName}</p>
+                                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1 font-mono">
+                                        <span>Cliente: {item.userName}</span>
+                                        <span>•</span>
+                                        <span>
+                                          Criado: {r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      onClick={() => setViewingDetails(item as any)}
+                                      className="border-white/10 hover:border-neon-cyan/50 hover:text-neon-cyan"
+                                    >
+                                      Ver Detalhes
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center text-gray-500">Nada aguardando na fila.</div>
+                          )}
+                        </Card.Body>
+                      </Card>
                     </div>
-                  </div>
-
-                  <div className="px-0 py-0">
-                    <TableResponsiveWrapper>
-                      <table className="w-full text-sm text-left text-[#B3B3B3]">
-                        <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
-                          <tr>
-                            <th className="px-4 py-3">Criado</th>
-                            <th className="px-4 py-3">Categoria</th>
-                            <th className="px-4 py-3">Artista</th>
-                            <th className="px-4 py-3">Item</th>
-                            <th className="px-4 py-3">Tipo</th>
-                            <th className="px-4 py-3">Link</th>
-                            <th className="px-4 py-3">Status</th>
-                            <th className="px-4 py-3">Briefing</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {(() => {
-                            const active = opsRequests
-                              .filter((r: any) => r.status === 'queued' || r.status === 'in_progress')
-                              .sort((a: any, b: any) => {
-                                const ta = new Date(a.created_at).getTime();
-                                const tb = new Date(b.created_at).getTime();
-                                return ta - tb; // FIFO
-                              });
-
-                            const labelCategory = (c: string) =>
-                              c === 'visual_reward' ? 'Produção' : c === 'usable' ? 'Utilizável' : c;
-
-                            const statusPtLocal = (s: string) =>
-                              s === 'queued' ? 'Na fila' : s === 'in_progress' ? 'Em produção' : s === 'delivered' ? 'Entregue' : s;
-
-                            const briefKind = (r: any) => r?.briefing?.kind || r?.briefing?.usable_kind || '-';
-                            const briefLink = (r: any) => r?.briefing?.link || '-';
-
-                            const briefPreview = (r: any) => {
-                              try {
-                                const txt = JSON.stringify(r?.briefing ?? {}, null, 0);
-                                return txt.length > 140 ? txt.slice(0, 140) + '…' : txt;
-                              } catch {
-                                return '-';
-                              }
-                            };
-
-                            if (active.length === 0) {
-                              return (
-                                <tr>
-                                  <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
-                                    Nada na fila agora.
-                                  </td>
-                                </tr>
-                              );
-                            }
-
-                            return active.map((r: any) => {
-                              const userLabel =
-                                r?.profiles?.artistic_name ||
-                                r?.profiles?.display_name ||
-                                r?.profiles?.name ||
-                                r?.user_id?.slice(0, 8);
-
-                              const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8);
-                              const link = briefLink(r);
-
-                              return (
-                                <tr key={r.id} className="border-b border-[#20242B] hover:bg-[#101216]">
-                                  <td className="px-4 py-3">
-                                    {r.created_at ? new Date(r.created_at).toLocaleString('pt-BR') : '-'}
-                                  </td>
-                                  <td className="px-4 py-3">{labelCategory(r.category)}</td>
-                                  <td className="px-4 py-3">{userLabel}</td>
-                                  <td className="px-4 py-3">{itemLabel}</td>
-                                  <td className="px-4 py-3">{briefKind(r)}</td>
-                                  <td className="px-4 py-3">
-                                    {link === '-' ? (
-                                      <span>-</span>
-                                    ) : (
-                                      <a
-                                        href={link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[#5DADE2] hover:underline truncate block max-w-xs"
-                                      >
-                                        Abrir link
-                                      </a>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <span className="px-2 py-1 rounded-full text-xs border border-white/10 bg-white/5">
-                                      {statusPtLocal(r.status)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 font-mono text-xs text-white/60">
-                                    {briefPreview(r)}
-                                  </td>
-                                </tr>
-                              );
-                            });
-                          })()}
-                        </tbody>
-                      </table>
-                    </TableResponsiveWrapper>
-                  </div>
-                </div>
+                  );
+                })()}
               </Card.Body>
             </Card>
           ) : (
@@ -1008,7 +1024,6 @@ const ManageStore: React.FC<ManageStoreProps> = ({
           )
         )}
 
-        {activeTab === 'audit_logs' && <StoreAuditCenter />}
       </div>
 
        {viewingDetails && (

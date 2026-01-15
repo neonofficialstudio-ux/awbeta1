@@ -578,11 +578,11 @@ export const AdminService = {
             if (!supabase) throw new Error("[Supabase] Client not initialized");
 
             // merge seguro no JSONB result
-            const { data: current, error: readErr } = await supabase
-                .from('production_requests')
-                .select('id, result')
-                .eq('id', itemId)
-                .single();
+          const { data: current, error: readErr } = await supabase
+            .from('production_requests')
+            .select('id, result')
+            .eq('inventory_id', itemId)
+            .single();
             if (readErr) throw readErr;
 
             const prev = (current?.result ?? {}) as any;
@@ -592,10 +592,10 @@ export const AdminService = {
                 estimated_completion_date_set_at: new Date().toISOString(),
             };
 
-            const { error: updErr } = await supabase
-                .from('production_requests')
-                .update({ result: next })
-                .eq('id', itemId);
+          const { error: updErr } = await supabase
+            .from('production_requests')
+            .update({ result: next })
+            .eq('inventory_id', itemId);
             if (updErr) throw updErr;
 
             return { success: true };
