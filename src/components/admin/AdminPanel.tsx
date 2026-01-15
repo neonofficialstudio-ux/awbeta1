@@ -12,7 +12,6 @@ import ManageMissions from './ManageMissions';
 import ManageStore from './ManageStore';
 import ManageUsers from './ManageUsers';
 import ManageEvents from './ManageEvents';
-import ManageQueues from './ManageQueues';
 import EconomicsDashboard from './EconomicsDashboard';
 import ManageAdvertisements from './ManageAdvertisements';
 import ManageSubscriptions from './ManageSubscriptions';
@@ -56,7 +55,7 @@ interface AdminPanelProps {
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = (props) => {
-    const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, onViewUserHistory } = props;
+    const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
     const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
@@ -256,14 +255,32 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     unifiedAwards={adminData.unifiedAwards}
                 /></AntiCrashBoundary>;
             case 'queues':
-                return <AntiCrashBoundary><ManageQueues 
-                    {...adminData} 
-                    onProcessItemQueue={(id: string) => handleAdminAction(api.processQueueItem(id))} 
-                    onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))} 
-                    initialSubTab={adminQueuesInitialSubTab} 
-                    onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
-                    onCreateMissionFromQueue={(id: string, mission: Mission) => handleAdminAction(api.createMissionFromQueue(id, mission))}
-                /></AntiCrashBoundary>;
+                // ✅ Atalho enterprise: Filas = Loja → Operação → Filas (fonte única)
+                return (
+                  <AntiCrashBoundary>
+                    <ManageStore
+                      {...adminData}
+                      initialSubTab={'queues' as any}
+                      onSaveStoreItem={(i: StoreItem) => handleAdminAction(api.saveStoreItem(i))}
+                      onDeleteStoreItem={(id: string) => handleAdminAction(api.deleteStoreItem(id))}
+                      onToggleStoreItemStock={(id: string) => handleAdminAction(api.toggleStoreItemStock(id))}
+                      onSaveUsableItem={(i: UsableItem) => handleAdminAction(api.saveUsableItem(i))}
+                      onDeleteUsableItem={(id: string) => handleAdminAction(api.deleteUsableItem(id))}
+                      onToggleUsableItemStock={(id: string) => handleAdminAction(api.toggleUsableItemStock(id))}
+                      onSaveCoinPack={(p: CoinPack) => handleAdminAction(api.saveCoinPack(p))}
+                      onToggleCoinPackStock={(id: string) => handleAdminAction(api.toggleCoinPackStock(id))}
+                      onReviewCoinPurchase={(id: string, s: 'approved' | 'rejected') => handleAdminAction(api.reviewCoinPurchase(id, s))}
+                      onAdminSubmitPaymentLink={(id: string, link: string) => handleAdminAction(api.adminSubmitPaymentLink(id, link))}
+                      onRefund={(id: string) => handleAdminAction(api.manualRefund(id))}
+                      onComplete={(id: string, url?: string) => handleAdminAction(api.completeVisualReward(id, url))}
+                      onSetDeadline={(id: string, date: string) => handleAdminAction(api.setEstimatedCompletionDate(id, date))}
+                      onProcessItemQueue={(id: string) => handleAdminAction(api.processQueueItem(id))}
+                      onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))}
+                      onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
+                      onCreateMissionFromQueue={(id: string, mission: Mission) => handleAdminAction(api.createMissionFromQueue(id, mission))}
+                    />
+                  </AntiCrashBoundary>
+                );
             case 'economics': // Route safety
                 return <AntiCrashBoundary><EconomicsDashboard {...adminData} /></AntiCrashBoundary>;
             case 'raffles':

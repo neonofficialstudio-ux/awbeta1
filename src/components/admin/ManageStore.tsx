@@ -7,9 +7,12 @@ import AdminCoinPackModal from './AdminCoinPackModal';
 import ConfirmationModal from './ConfirmationModal';
 import ReviewCoinPurchases from './ReviewCoinPurchases';
 import RedeemedItemsLog from './RedeemedItemsLog';
+import StoreAuditCenter from './StoreAuditCenter';
 import AdminRewardDetailsModal from './AdminRewardDetailsModal';
 import { EditIcon, DeleteIcon, CoinIcon, DetailsIcon, InstagramIcon, TikTokIcon, YoutubeIcon, GlobeIcon } from '../../constants'; // Added icons
 import * as storeAPI from '../../api/admin/store';
+import { getSupabase } from '../../api/supabase/client';
+import { config } from '../../core/config';
 
 // UI Components
 import Tabs from '../ui/navigation/Tabs';
@@ -158,6 +161,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     onCreateMissionFromQueue,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminStoreTab>(initialSubTab || 'visual');
+  const isSupabase = config.backendProvider === 'supabase';
 
   type StoreOpsSection = 'catalog' | 'operations' | 'audit';
 
@@ -169,6 +173,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     redemptions: 'operations',
     metrics: 'operations',
     review_purchases: 'audit',
+    audit_logs: 'audit',
   };
 
   const DEFAULT_TAB_BY_SECTION: Record<StoreOpsSection, AdminStoreTab> = {
@@ -216,6 +221,124 @@ const ManageStore: React.FC<ManageStoreProps> = ({
       (req.status as any) === 'proof_submitted'
   ).length;
 
+  const [opsRequests, setOpsRequests] = useState<any[]>([]);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [opsError, setOpsError] = useState<string | null>(null);
+
+  const tryParseDate = (value: any): Date | null => {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+    if (typeof value === 'number') {
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    return null;
+  };
+
+  const getDeadline = (req: any): Date | null => {
+    const candidates = [
+      req?.briefing?.deadline,
+      req?.briefing?.deadline_date,
+      req?.briefing?.due_date,
+      req?.briefing?.estimated_completion_date,
+      req?.briefing?.estimatedCompletionDate,
+      req?.result?.deadline,
+      req?.result?.deadline_date,
+      req?.result?.due_date,
+      req?.result?.estimated_completion_date,
+      req?.result?.estimatedCompletionDate,
+    ];
+    for (const c of candidates) {
+      const parsed = tryParseDate(c);
+      if (parsed) return parsed;
+    }
+    return null;
+  };
+
+  const isOverdue = (req: any): boolean => {
+    const status = req?.status;
+    if (status !== 'queued' && status !== 'in_progress') return false;
+
+    const deadline = getDeadline(req);
+    if (deadline) return deadline.getTime() < Date.now();
+
+    const createdAt = tryParseDate(req?.created_at)?.getTime() ?? null;
+    if (!createdAt) return false;
+
+    const ageMs = Date.now() - createdAt;
+    const queuedOverdueMs = 24 * 60 * 60 * 1000;
+    const inProgressOverdueMs = 72 * 60 * 60 * 1000;
+
+    if (status === 'queued') return ageMs > queuedOverdueMs;
+    return ageMs > inProgressOverdueMs;
+  };
+
+  const statusPt = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return 'Na fila';
+      case 'in_progress':
+        return 'Em produção';
+      case 'delivered':
+        return 'Entregue';
+      case 'cancelled':
+        return 'Cancelado';
+      default:
+        return status;
+    }
+  };
+
+  const loadOpsRequests = async () => {
+    if (!isSupabase) return;
+    const supabase = getSupabase();
+    if (!supabase) {
+      setOpsError('Supabase client not initialized');
+      return;
+    }
+
+    try {
+      setOpsError(null);
+      setOpsLoading(true);
+
+      const { data, error } = await supabase
+        .from('production_requests')
+        .select(`
+          id,
+          user_id,
+          store_item_id,
+          category,
+          status,
+          briefing,
+          result,
+          created_at,
+          updated_at,
+          profiles:profiles(id,name,display_name,artistic_name,avatar_url),
+          store_items:store_items(id,name,rarity,image_url)
+        `)
+        .in('category', ['visual_reward', 'usable'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOpsRequests(data || []);
+    } catch (e: any) {
+      setOpsError(e?.message || 'Falha ao carregar histórico operacional');
+    } finally {
+      setOpsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSupabase) return;
+    if (activeTab === 'redemptions' || activeTab === 'metrics') {
+      void loadOpsRequests();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isSupabase]);
+
   type StoreItemWithPriceCoins = StoreItem & { price_coins: number };
 
   const normalizedStoreItems = useMemo<StoreItemWithPriceCoins[]>(
@@ -225,6 +348,36 @@ const ManageStore: React.FC<ManageStoreProps> = ({
       })),
       [localStoreItems]
   );
+
+  const opsMetrics = useMemo(() => {
+    if (!isSupabase) return null;
+
+    const completed = opsRequests.filter((r: any) => r.status === 'delivered');
+    const inProgress = opsRequests.filter((r: any) => r.status === 'in_progress');
+
+    const durations: number[] = completed
+      .map((r: any) => {
+        const startedAt = tryParseDate(r?.created_at);
+        const deliveredAt = tryParseDate(r?.result?.delivered_at || r?.updated_at);
+        if (!startedAt || !deliveredAt) return null;
+        return deliveredAt.getTime() - startedAt.getTime();
+      })
+      .filter((v: number | null): v is number => v !== null && v >= 0);
+
+    const avgDays =
+      durations.length === 0
+        ? 0
+        : durations.reduce((sum, v) => sum + v, 0) / durations.length / (1000 * 60 * 60 * 24);
+
+    const overdueItems = opsRequests.filter((r: any) => isOverdue(r)).length;
+
+    return {
+      totalCompleted: completed.length,
+      currentlyInProgress: inProgress.length,
+      averageProductionTimeDays: avgDays.toFixed(1),
+      overdueItems,
+    };
+  }, [isSupabase, opsRequests]);
 
   // Helper to prevent duplicates
   const normalizeList = <T extends { id: string }>(arr: T[]): T[] => {
@@ -426,6 +579,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 ]
               : [
                   { id: 'review_purchases', label: 'Vendas', count: pendingCoinPurchases },
+                  { id: 'audit_logs', label: 'Log & Telemetria' },
                 ]
           }
           className="mb-0"
@@ -614,8 +768,131 @@ const ManageStore: React.FC<ManageStoreProps> = ({
             initialSubTab={'items' as any}
           />
         )}
-        {activeTab === 'redemptions' && <RedeemedItemsLog redeemedItems={redeemedItems} allUsers={allUsers} onRefund={onRefund} onComplete={onComplete} />}
-        {activeTab === 'metrics' && <ProductionMetrics redeemedItems={redeemedItems} storeItems={initialStoreItems} onViewDetails={setViewingDetails} />}
+        {activeTab === 'redemptions' && (
+          isSupabase ? (
+            <Card className="bg-slate-dark border-white/5 shadow-lg">
+              <Card.Header className="border-white/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Histórico Operacional (Supabase)</h3>
+                    <p className="text-xs text-white/50">Fonte: production_requests (visual_reward + usable)</p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={loadOpsRequests}>
+                    Atualizar
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body noPadding>
+                {opsLoading && <div className="p-4 text-sm text-gray-300">Carregando...</div>}
+                {opsError && <div className="p-4 text-sm text-red-300">{opsError}</div>}
+
+                <TableResponsiveWrapper>
+                  <table className="w-full text-sm text-left text-[#B3B3B3]">
+                    <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
+                      <tr>
+                        <th className="px-4 py-3">Data</th>
+                        <th className="px-4 py-3">Usuário</th>
+                        <th className="px-4 py-3">Item</th>
+                        <th className="px-4 py-3">Categoria</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">SLA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {opsRequests.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
+                            Sem registros.
+                          </td>
+                        </tr>
+                      ) : (
+                        opsRequests.map((r: any) => {
+                          const userLabel =
+                            r?.profiles?.artistic_name ||
+                            r?.profiles?.display_name ||
+                            r?.profiles?.name ||
+                            r?.user_id?.slice(0, 8);
+                          const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8);
+                          const deadline = getDeadline(r);
+                          return (
+                            <tr key={r.id} className="border-b border-[#20242B] hover:bg-[#101216]">
+                              <td className="px-4 py-3">{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '-'}</td>
+                              <td className="px-4 py-3">{userLabel}</td>
+                              <td className="px-4 py-3">{itemLabel}</td>
+                              <td className="px-4 py-3">{r.category}</td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-1 rounded-full text-xs border border-white/10 bg-white/5">
+                                  {statusPt(r.status)}
+                                </span>
+                                {isOverdue(r) && (
+                                  <span className="ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-[#201018] text-[#FF8B8B] border-[#3A1F2C]">
+                                    Atrasado
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {deadline ? deadline.toLocaleDateString('pt-BR') : <span className="text-white/50">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </TableResponsiveWrapper>
+              </Card.Body>
+            </Card>
+          ) : (
+            <RedeemedItemsLog redeemedItems={redeemedItems} allUsers={allUsers} onRefund={onRefund} onComplete={onComplete} />
+          )
+        )}
+
+        {activeTab === 'metrics' && (
+          isSupabase ? (
+            <Card className="bg-slate-dark border-white/5 shadow-lg">
+              <Card.Header className="border-white/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Métricas Operacionais (Supabase)</h3>
+                    <p className="text-xs text-white/50">Fonte: production_requests • cálculo client-only</p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={loadOpsRequests}>
+                    Atualizar
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Body>
+                {opsLoading && <div className="text-sm text-gray-300">Carregando...</div>}
+                {opsError && <div className="text-sm text-red-300">{opsError}</div>}
+
+                {opsMetrics && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs text-white/50 uppercase">Total concluído</div>
+                      <div className="text-2xl font-bold text-white">{opsMetrics.totalCompleted}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs text-white/50 uppercase">Em produção</div>
+                      <div className="text-2xl font-bold text-white">{opsMetrics.currentlyInProgress}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs text-white/50 uppercase">Tempo médio (dias)</div>
+                      <div className="text-2xl font-bold text-white">{opsMetrics.averageProductionTimeDays}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs text-white/50 uppercase">Atrasados</div>
+                      <div className="text-2xl font-bold text-white">{opsMetrics.overdueItems}</div>
+                    </div>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          ) : (
+            <ProductionMetrics redeemedItems={redeemedItems} storeItems={initialStoreItems} onViewDetails={setViewingDetails} />
+          )
+        )}
+
+        {activeTab === 'audit_logs' && <StoreAuditCenter />}
       </div>
 
        {viewingDetails && (

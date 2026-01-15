@@ -6,6 +6,7 @@ export type AdminStoreTab =
   | 'usable'
   | 'coins'
   | 'review_purchases'
+  | 'audit_logs'
   | 'redemptions'
   | 'metrics'
   | 'queues';
