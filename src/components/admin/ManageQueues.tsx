@@ -722,7 +722,6 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                     <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
                                       {statusLabelPt(req.status)}
                                     </span>
-                                    {slaBadge(req)}
                                   </td>
                                   <td className="px-4 py-3">
                                     <button
@@ -1056,13 +1055,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <th className="px-4 py-3">Link</th>
                         <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3">Briefing</th>
+                        <th className="px-4 py-3 text-right">Ações</th>
                       </tr>
                     </thead>
 
                     <tbody>
                       {filteredProductionQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
+                          <td colSpan={9} className="px-4 py-8 text-center text-gray-600 italic">
                             {productionQueue.length === 0
                               ? 'Nenhum pedido na fila.'
                               : 'Nenhum pedido para este filtro.'}
@@ -1112,6 +1112,26 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                 >
                                   Copiar briefing
                                 </button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleStart(req)}
+                                    disabled={req.status !== 'queued'}
+                                  >
+                                    Iniciar
+                                  </Button>
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    onClick={() => handleDeliver(req)}
+                                    disabled={req.status !== 'in_progress'}
+                                  >
+                                    Entregar
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           );

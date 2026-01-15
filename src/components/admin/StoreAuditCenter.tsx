@@ -7,6 +7,7 @@ import { adminListTelemetry } from '../../api/admin/telemetryEngineV5';
 
 export default function StoreAuditCenter() {
   const [mode, setMode] = useState<'audit' | 'telemetry'>('audit');
+  const [onlyStore, setOnlyStore] = useState(true);
   const [items, setItems] = useState<any[]>([]);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -45,6 +46,24 @@ export default function StoreAuditCenter() {
         : 'bg-[#101216] border-[#2A2D33] text-white/70 hover:border-white/20'
     }`;
 
+  const isStoreRelated = (row: any) => {
+    const a = String(row?.action || '').toLowerCase();
+    const e = String(row?.event || '').toLowerCase();
+    const t = String(row?.target || '').toLowerCase();
+    const hay = `${a} ${e} ${t}`;
+
+    return (
+      hay.includes('store') ||
+      hay.includes('redeem') ||
+      hay.includes('inventory') ||
+      hay.includes('production') ||
+      hay.includes('usable') ||
+      hay.includes('visual_reward')
+    );
+  };
+
+  const visible = onlyStore ? items.filter(isStoreRelated) : items;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -53,6 +72,13 @@ export default function StoreAuditCenter() {
         </button>
         <button type="button" className={pill(mode === 'telemetry')} onClick={() => setMode('telemetry')}>
           Telemetria
+        </button>
+        <button
+          type="button"
+          className={pill(onlyStore)}
+          onClick={() => setOnlyStore(v => !v)}
+        >
+          {onlyStore ? 'Somente Loja: ON' : 'Somente Loja: OFF'}
         </button>
 
         <div className="ml-auto flex gap-2">
@@ -96,7 +122,7 @@ export default function StoreAuditCenter() {
               </thead>
 
               <tbody>
-                {items.map((row: any) => (
+                {visible.map((row: any) => (
                   <tr key={row.id} className="border-b border-[#20242B] hover:bg-[#101216]">
                     <td className="px-4 py-3">{row.created_at ? new Date(row.created_at).toLocaleString('pt-BR') : '-'}</td>
                     {mode === 'audit' ? (
@@ -116,7 +142,7 @@ export default function StoreAuditCenter() {
                   </tr>
                 ))}
 
-                {items.length === 0 && !loading && (
+                {visible.length === 0 && !loading && (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-gray-600 italic">
                       Sem dados.
