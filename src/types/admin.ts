@@ -1,7 +1,14 @@
 import { IconComponent } from './shared';
 
 export type AdminTab = 'dashboard' | 'missions' | 'users' | 'store' | 'events' | 'queues' | 'economics' | 'subscriptions' | 'raffles' | 'settings' | 'telemetry' | 'behavior' | 'health' | 'insights' | 'economy_console' | 'stress_performance' | 'economy_pro';
-export type AdminStoreTab = 'visual' | 'usable' | 'coins' | 'review_purchases' | 'redemptions' | 'metrics';
+export type AdminStoreTab =
+  | 'visual'
+  | 'usable'
+  | 'coins'
+  | 'review_purchases'
+  | 'redemptions'
+  | 'metrics'
+  | 'queues';
 
 export interface AdminNotification {
   id: string;

@@ -13,6 +13,7 @@ import * as storeAPI from '../../api/admin/store';
 
 // UI Components
 import Tabs from '../ui/navigation/Tabs';
+import ManageQueues from './ManageQueues';
 import Card from '../ui/base/Card';
 import Button from '../ui/base/Button';
 import Badge from '../ui/base/Badge';
@@ -42,6 +43,16 @@ interface ManageStoreProps {
   onRefund: (redeemedItemId: string) => Promise<void>;
   onComplete: (redeemedItemId: string, completionUrl?: string) => Promise<void>; // Updated signature
   onSetDeadline: (redeemedItemId: string, date: string) => Promise<void>;
+
+  // ✅ Para embutir "Filas" dentro da Central de Operações (Loja) sem duplicar lógica
+  usableItemQueue: any[];
+  processedItemQueueHistory: any[];
+  artistOfTheDayQueue: any[];
+  processedArtistOfTheDayQueue: any[];
+  onProcessItemQueue: (queueId: string) => Promise<void>;
+  onProcessSpotlightQueue: (queueId: string) => Promise<void>;
+  onConvertItemToMission: (queueId: string) => Promise<void>;
+  onCreateMissionFromQueue: (queueId: string, mission: any) => Promise<void>;
 }
 
 // ... [ProductionMetrics component omitted for brevity, assume unchanged] ...
@@ -137,8 +148,47 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     coinPacks: initialCoinPacks, onSaveCoinPack, onToggleCoinPackStock, coinPurchaseRequests, onReviewCoinPurchase,
     allUsers, initialSubTab, onAdminSubmitPaymentLink, redeemedItems,
     onRefund, onComplete, onSetDeadline,
+    usableItemQueue,
+    processedItemQueueHistory,
+    artistOfTheDayQueue,
+    processedArtistOfTheDayQueue,
+    onProcessItemQueue,
+    onProcessSpotlightQueue,
+    onConvertItemToMission,
+    onCreateMissionFromQueue,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminStoreTab>(initialSubTab || 'visual');
+
+  type StoreOpsSection = 'catalog' | 'operations' | 'audit';
+
+  const SECTION_BY_TAB: Record<AdminStoreTab, StoreOpsSection> = {
+    visual: 'catalog',
+    usable: 'catalog',
+    coins: 'catalog',
+    queues: 'operations',
+    redemptions: 'operations',
+    metrics: 'operations',
+    review_purchases: 'audit',
+  };
+
+  const DEFAULT_TAB_BY_SECTION: Record<StoreOpsSection, AdminStoreTab> = {
+    catalog: 'visual',
+    operations: 'queues',
+    audit: 'review_purchases',
+  };
+
+  const [lastTabBySection, setLastTabBySection] = useState<Record<StoreOpsSection, AdminStoreTab>>({
+    catalog: initialSubTab && SECTION_BY_TAB[initialSubTab] === 'catalog' ? initialSubTab : 'visual',
+    operations: initialSubTab && SECTION_BY_TAB[initialSubTab] === 'operations' ? initialSubTab : 'queues',
+    audit: initialSubTab && SECTION_BY_TAB[initialSubTab] === 'audit' ? initialSubTab : 'review_purchases',
+  });
+
+  const activeSection = SECTION_BY_TAB[activeTab];
+
+  const setSection = (section: StoreOpsSection) => {
+    const next = lastTabBySection[section] || DEFAULT_TAB_BY_SECTION[section];
+    setActiveTab(next);
+  };
   
   // Local state for immediate UI updates
   const [localStoreItems, setStoreItems] = useState<StoreItem[]>(initialStoreItems);
@@ -297,20 +347,90 @@ const ManageStore: React.FC<ManageStoreProps> = ({
   
   return (
     <>
-      <Tabs 
-        variant="solid"
-        activeTab={activeTab}
-        onChange={(id) => setActiveTab(id as any)}
-        items={[
-            { id: 'visual', label: 'Visuais' },
-            { id: 'usable', label: 'Utilizáveis' },
-            { id: 'coins', label: 'Pacotes' },
-            { id: 'review_purchases', label: 'Vendas', count: pendingCoinPurchases },
-            { id: 'redemptions', label: 'Log' },
-            { id: 'metrics', label: 'Métricas' },
-        ]}
-        className="mb-6"
-      />
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white font-chakra">Central de Operações — Loja</h2>
+            <p className="text-sm text-white/60">
+              Catálogo, operação e auditoria — dados 100% do Supabase (sem mock).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSection('catalog')}
+              className={
+                'px-4 py-2 rounded-[14px] border text-sm font-semibold transition-all ' +
+                (activeSection === 'catalog'
+                  ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
+                  : 'bg-navy-deep/60 border-white/10 text-white/70 hover:text-white hover:border-white/20')
+              }
+            >
+              Catálogo
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSection('operations')}
+              className={
+                'px-4 py-2 rounded-[14px] border text-sm font-semibold transition-all flex items-center gap-2 ' +
+                (activeSection === 'operations'
+                  ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
+                  : 'bg-navy-deep/60 border-white/10 text-white/70 hover:text-white hover:border-white/20')
+              }
+            >
+              Operação
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSection('audit')}
+              className={
+                'px-4 py-2 rounded-[14px] border text-sm font-semibold transition-all flex items-center gap-2 ' +
+                (activeSection === 'audit'
+                  ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
+                  : 'bg-navy-deep/60 border-white/10 text-white/70 hover:text-white hover:border-white/20')
+              }
+            >
+              Auditoria
+              {pendingCoinPurchases > 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-xs bg-gold/15 text-gold border border-gold/25">
+                  {pendingCoinPurchases}
+                </span>
+              ) : null}
+            </button>
+          </div>
+        </div>
+
+        <Tabs
+          variant="solid"
+          activeTab={activeTab}
+          onChange={(id) => {
+            const nextTab = id as AdminStoreTab;
+            setActiveTab(nextTab);
+            setLastTabBySection(prev => ({ ...prev, [SECTION_BY_TAB[nextTab]]: nextTab }));
+          }}
+          items={
+            activeSection === 'catalog'
+              ? [
+                  { id: 'visual', label: 'Visuais' },
+                  { id: 'usable', label: 'Utilizáveis' },
+                  { id: 'coins', label: 'Pacotes' },
+                ]
+              : activeSection === 'operations'
+              ? [
+                  { id: 'queues', label: 'Filas' },
+                  { id: 'redemptions', label: 'Resgates & Entregas' },
+                  { id: 'metrics', label: 'Métricas' },
+                ]
+              : [
+                  { id: 'review_purchases', label: 'Vendas', count: pendingCoinPurchases },
+                ]
+          }
+          className="mb-0"
+        />
+      </div>
 
       <div className="animate-fade-in-up">
         {activeTab === 'visual' && (
@@ -481,6 +601,19 @@ const ManageStore: React.FC<ManageStoreProps> = ({
         )}
 
         {activeTab === 'review_purchases' && <ReviewCoinPurchases requests={coinPurchaseRequests} onReview={onReviewCoinPurchase} allUsers={allUsers} onAdminSubmitPaymentLink={onAdminSubmitPaymentLink} />}
+        {activeTab === 'queues' && (
+          <ManageQueues
+            usableItemQueue={usableItemQueue as any}
+            processedItemQueueHistory={processedItemQueueHistory as any}
+            artistOfTheDayQueue={artistOfTheDayQueue as any}
+            processedArtistOfTheDayQueue={processedArtistOfTheDayQueue as any}
+            onProcessItemQueue={onProcessItemQueue}
+            onProcessSpotlightQueue={onProcessSpotlightQueue}
+            onConvertItemToMission={onConvertItemToMission}
+            onCreateMissionFromQueue={onCreateMissionFromQueue}
+            initialSubTab={'items' as any}
+          />
+        )}
         {activeTab === 'redemptions' && <RedeemedItemsLog redeemedItems={redeemedItems} allUsers={allUsers} onRefund={onRefund} onComplete={onComplete} />}
         {activeTab === 'metrics' && <ProductionMetrics redeemedItems={redeemedItems} storeItems={initialStoreItems} onViewDetails={setViewingDetails} />}
       </div>
