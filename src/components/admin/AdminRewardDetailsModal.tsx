@@ -77,8 +77,11 @@ const AdminRewardDetailsModal: React.FC<AdminRewardDetailsModalProps> = ({ item,
   const handleSaveDeadline = async () => {
     if (deadline && onSetDeadline) {
       setIsSaving(true);
-      await onSetDeadline(item.id, new Date(deadline).toISOString());
+      // ✅ Envia date-only (YYYY-MM-DD) para evitar shift de timezone (1 dia antes)
+      await onSetDeadline(item.id, deadline);
       setIsSaving(false);
+      // ✅ Atualiza telas sem precisar de F5
+      window.dispatchEvent(new CustomEvent('aw:ops_deadline_updated', { detail: { inventoryId: item.id, deadline } }));
       onClose();
     }
   };

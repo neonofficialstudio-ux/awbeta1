@@ -577,7 +577,12 @@ export const AdminService = {
             const supabase = getSupabase();
             if (!supabase) throw new Error("[Supabase] Client not initialized");
 
-            // merge seguro no JSONB result
+            // ✅ date esperado: YYYY-MM-DD (date-only)
+            const dateOnly = (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date))
+              ? date
+              : new Date(date).toISOString().slice(0, 10);
+
+            // merge seguro no JSONB result (production_requests)
           const { data: current, error: readErr } = await supabase
             .from('production_requests')
             .select('id, result')
@@ -588,7 +593,7 @@ export const AdminService = {
             const prev = (current?.result ?? {}) as any;
             const next = {
                 ...prev,
-                estimated_completion_date: date,
+                estimated_completion_date: dateOnly,
                 estimated_completion_date_set_at: new Date().toISOString(),
             };
 
@@ -597,6 +602,28 @@ export const AdminService = {
             .update({ result: next })
             .eq('inventory_id', itemId);
             if (updErr) throw updErr;
+
+            // ✅ Também grava em inventory.meta para o usuário enxergar (UI usa meta)
+            const { data: invRow, error: invReadErr } = await supabase
+              .from('inventory')
+              .select('id, meta')
+              .eq('id', itemId)
+              .single();
+            if (invReadErr) throw invReadErr;
+
+            const invPrev = (invRow?.meta ?? {}) as any;
+            const invNext = {
+              ...invPrev,
+              estimatedCompletionDate: dateOnly,
+              estimated_completion_date: dateOnly,
+              estimated_completion_date_set_at: new Date().toISOString(),
+            };
+
+            const { error: invUpdErr } = await supabase
+              .from('inventory')
+              .update({ meta: invNext })
+              .eq('id', itemId);
+            if (invUpdErr) throw invUpdErr;
 
             return { success: true };
         }
