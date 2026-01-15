@@ -339,6 +339,16 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isSupabase]);
 
+  // ✅ Reflete "Salvar Data" imediatamente sem F5
+  useEffect(() => {
+    const onUpd = () => {
+      if (isSupabase) loadOpsRequests();
+    };
+    window.addEventListener('aw:ops_deadline_updated', onUpd as any);
+    return () => window.removeEventListener('aw:ops_deadline_updated', onUpd as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupabase]);
+
   type StoreItemWithPriceCoins = StoreItem & { price_coins: number };
 
   const normalizedStoreItems = useMemo<StoreItemWithPriceCoins[]>(
@@ -953,7 +963,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                                       </div>
                                       {item.estimatedCompletionDate && (
                                         <p className="text-xs text-red-400 font-bold mt-1">
-                                          Prazo: {new Date(item.estimatedCompletionDate).toLocaleDateString('pt-BR')}
+                                          Prazo: {new Date(item.estimatedCompletionDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                                         </p>
                                       )}
                                     </div>
