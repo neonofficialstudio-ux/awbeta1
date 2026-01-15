@@ -568,7 +568,38 @@ export const AdminService = {
         deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack'); return { success: false, error: 'mock_only' }; },
         toggleCoinPackStock: (id: string) => { ensureMockBackend('store.toggleCoinPackStock'); return { success: false, error: 'mock_only' }; },
 
-        setEstimatedCompletionDate: (itemId: string, date: string) => { ensureMockBackend('store.setEstimatedCompletionDate'); return { success: false, error: 'mock_only' }; }
+        setEstimatedCompletionDate: async (itemId: string, date: string) => {
+            if (!isSupabaseProvider()) {
+                ensureMockBackend('store.setEstimatedCompletionDate');
+                return { success: false, error: 'mock_only' };
+            }
+
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("[Supabase] Client not initialized");
+
+            // merge seguro no JSONB result
+            const { data: current, error: readErr } = await supabase
+                .from('production_requests')
+                .select('id, result')
+                .eq('id', itemId)
+                .single();
+            if (readErr) throw readErr;
+
+            const prev = (current?.result ?? {}) as any;
+            const next = {
+                ...prev,
+                estimated_completion_date: date,
+                estimated_completion_date_set_at: new Date().toISOString(),
+            };
+
+            const { error: updErr } = await supabase
+                .from('production_requests')
+                .update({ result: next })
+                .eq('id', itemId);
+            if (updErr) throw updErr;
+
+            return { success: true };
+        }
     },
 
     // --- QUEUE ---
