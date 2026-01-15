@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { UsableItemQueueEntry, ProcessedUsableItemQueueEntry, ArtistOfTheDayQueueEntry, ProcessedArtistOfTheDayQueueEntry, User, Mission } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { CheckIcon, PromoteIcon, MissionIcon } from '../../constants';
@@ -28,6 +28,7 @@ interface ManageQueuesProps {
 }
 
 type QueueSubTab = 'items' | 'production';
+type StatusQuickFilter = 'all' | 'queued' | 'in_progress';
 
 const ManageQueues: React.FC<ManageQueuesProps> = ({
   usableItemQueue: propUsableItemQueue,
@@ -46,10 +47,12 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const [productionHistory, setProductionHistory] = useState<any[]>([]);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
+  const [productionStatusFilter, setProductionStatusFilter] = useState<StatusQuickFilter>('all');
   const [usableQueue, setUsableQueue] = useState<any[]>([]);
   const [usableHistory, setUsableHistory] = useState<any[]>([]);
   const [usableLoading, setUsableLoading] = useState(false);
   const [usableError, setUsableError] = useState<string | null>(null);
+  const [usableStatusFilter, setUsableStatusFilter] = useState<StatusQuickFilter>('all');
   const usableDateFormatter = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     dateStyle: 'short',
@@ -205,6 +208,41 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubTab, isSupabase]);
+
+  // Reset filtros ao trocar de sub-aba (melhora UX e evita “filtro preso”)
+  useEffect(() => {
+    if (activeSubTab === 'items') setUsableStatusFilter('all');
+    if (activeSubTab === 'production') setProductionStatusFilter('all');
+  }, [activeSubTab]);
+
+  const pillClass = (active: boolean) =>
+    `px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+      active
+        ? 'bg-neon-cyan/15 border-neon-cyan/40 text-neon-cyan'
+        : 'bg-[#101216] border-[#2A2D33] text-[#B3B3B3] hover:text-white hover:border-white/20'
+    }`;
+
+  const usableCounts = useMemo(() => {
+    const queued = usableQueue.filter((r: any) => r.status === 'queued').length;
+    const inProgress = usableQueue.filter((r: any) => r.status === 'in_progress').length;
+    return { total: usableQueue.length, queued, inProgress };
+  }, [usableQueue]);
+
+  const filteredUsableQueue = useMemo(() => {
+    if (usableStatusFilter === 'all') return usableQueue;
+    return usableQueue.filter((r: any) => r.status === usableStatusFilter);
+  }, [usableQueue, usableStatusFilter]);
+
+  const productionCounts = useMemo(() => {
+    const queued = productionQueue.filter((r: any) => r.status === 'queued').length;
+    const inProgress = productionQueue.filter((r: any) => r.status === 'in_progress').length;
+    return { total: productionQueue.length, queued, inProgress };
+  }, [productionQueue]);
+
+  const filteredProductionQueue = useMemo(() => {
+    if (productionStatusFilter === 'all') return productionQueue;
+    return productionQueue.filter((r: any) => r.status === productionStatusFilter);
+  }, [productionQueue, productionStatusFilter]);
 
   const handleProcessItem = async (queueId: string) => {
     setProcessingId(queueId);
@@ -418,11 +456,42 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
               <>
                 <Card>
                   <Card.Header>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-bold text-white">Fila Ativa ({usableQueue.length})</h3>
-                      <Button variant="secondary" size="sm" onClick={loadUsableQueue}>
-                        Atualizar
-                      </Button>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">Fila Ativa</h3>
+                        <p className="text-xs text-white/50">FIFO por data de criação • filtros por status</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className={pillClass(usableStatusFilter === 'all')}
+                          onClick={() => setUsableStatusFilter('all')}
+                          title="Mostrar todos"
+                        >
+                          Todos <span className="opacity-70">({usableCounts.total})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={pillClass(usableStatusFilter === 'queued')}
+                          onClick={() => setUsableStatusFilter('queued')}
+                          title="Somente na fila"
+                        >
+                          Na fila <span className="opacity-70">({usableCounts.queued})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={pillClass(usableStatusFilter === 'in_progress')}
+                          onClick={() => setUsableStatusFilter('in_progress')}
+                          title="Somente em produção"
+                        >
+                          Em produção <span className="opacity-70">({usableCounts.inProgress})</span>
+                        </button>
+
+                        <Button variant="secondary" size="sm" onClick={loadUsableQueue}>
+                          Atualizar
+                        </Button>
+                      </div>
                     </div>
                   </Card.Header>
 
@@ -446,14 +515,16 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         </thead>
 
                         <tbody>
-                          {usableQueue.length === 0 ? (
+                          {filteredUsableQueue.length === 0 ? (
                             <tr>
                               <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
-                                Fila vazia.
+                                {usableQueue.length === 0
+                                  ? 'Fila vazia.'
+                                  : 'Nenhum item para este filtro.'}
                               </td>
                             </tr>
                           ) : (
-                            usableQueue.map((req: any, idx: number) => {
+                            filteredUsableQueue.map((req: any, idx: number) => {
                               const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                               const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
                               const kind = req.briefing?.kind || req.briefing?.usable_kind || '-';
@@ -464,7 +535,9 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                   <td className="px-4 py-3">
                                     {req.created_at ? usableDateFormatter.format(new Date(req.created_at)) : '-'}
                                   </td>
-                                  <td className="px-4 py-3 font-mono text-gray-300">#{idx + 1}</td>
+                                  <td className="px-4 py-3 font-mono text-gray-300">
+                                    #{idx + 1}
+                                  </td>
                                   <td className="px-4 py-3">{userLabel}</td>
                                   <td className="px-4 py-3">{itemLabel}</td>
                                   <td className="px-4 py-3">{kind}</td>
@@ -714,11 +787,42 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           <div className="space-y-8">
             <Card>
               <Card.Header>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-white">Fila de Produção</h3>
-                  <Button variant="secondary" size="sm" onClick={loadProductionQueue}>
-                    Atualizar
-                  </Button>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Fila de Produção</h3>
+                    <p className="text-xs text-white/50">Visual rewards • FIFO • filtros por status</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={pillClass(productionStatusFilter === 'all')}
+                      onClick={() => setProductionStatusFilter('all')}
+                      title="Mostrar todos"
+                    >
+                      Todos <span className="opacity-70">({productionCounts.total})</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={pillClass(productionStatusFilter === 'queued')}
+                      onClick={() => setProductionStatusFilter('queued')}
+                      title="Somente na fila"
+                    >
+                      Na fila <span className="opacity-70">({productionCounts.queued})</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={pillClass(productionStatusFilter === 'in_progress')}
+                      onClick={() => setProductionStatusFilter('in_progress')}
+                      title="Somente em produção"
+                    >
+                      Em produção <span className="opacity-70">({productionCounts.inProgress})</span>
+                    </button>
+
+                    <Button variant="secondary" size="sm" onClick={loadProductionQueue}>
+                      Atualizar
+                    </Button>
+                  </div>
                 </div>
               </Card.Header>
 
@@ -746,14 +850,16 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                     </thead>
 
                     <tbody>
-                      {productionQueue.length === 0 ? (
+                      {filteredProductionQueue.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
-                            Nenhum pedido na fila.
+                            {productionQueue.length === 0
+                              ? 'Nenhum pedido na fila.'
+                              : 'Nenhum pedido para este filtro.'}
                           </td>
                         </tr>
                       ) : (
-                        productionQueue.map((req: any, idx: number) => {
+                        filteredProductionQueue.map((req: any, idx: number) => {
                           const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                           const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
                           const briefingKind = req.briefing?.kind || '-';
