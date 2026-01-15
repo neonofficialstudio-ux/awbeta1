@@ -43,6 +43,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const isSupabase = config.backendProvider === 'supabase';
 
   const [productionQueue, setProductionQueue] = useState<any[]>([]);
+  const [productionHistory, setProductionHistory] = useState<any[]>([]);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
   const [usableQueue, setUsableQueue] = useState<any[]>([]);
@@ -54,6 +55,35 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
     dateStyle: 'short',
     timeStyle: 'short',
   });
+  const statusLabelPt = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return 'Na fila';
+      case 'in_progress':
+        return 'Em produção';
+      case 'delivered':
+        return 'Entregue';
+      case 'cancelled':
+        return 'Cancelado';
+      default:
+        return status;
+    }
+  };
+
+  const statusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return 'bg-[#1A1F2A] text-[#FFD369] border-[#2B3342]';
+      case 'in_progress':
+        return 'bg-[#1A1F2A] text-[#8BD3FF] border-[#2B3342]';
+      case 'delivered':
+        return 'bg-[#102018] text-[#6CFFB3] border-[#1F3A2C]';
+      case 'cancelled':
+        return 'bg-[#201018] text-[#FF8B8B] border-[#3A1F2C]';
+      default:
+        return 'bg-[#101216] text-gray-200 border-[#2B3342]';
+    }
+  };
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [deliverReq, setDeliverReq] = useState<any | null>(null);
   const [deliverUrl, setDeliverUrl] = useState('');
@@ -105,14 +135,17 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           briefing,
           result,
           created_at,
-          profiles:profiles(id,name,display_name,avatar_url),
+          profiles:profiles(id,name,display_name,artistic_name,avatar_url),
           store_items:store_items(id,name,rarity,image_url)
         `)
         .eq('category', 'visual_reward')
+        .in('status', ['queued', 'in_progress', 'delivered'])
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setProductionQueue(data || []);
+      const all = data || [];
+      setProductionQueue(all.filter((r: any) => r.status !== 'delivered' && r.status !== 'cancelled'));
+      setProductionHistory(all.filter((r: any) => r.status === 'delivered'));
     } catch (e: any) {
       setProdError(e?.message || 'Falha ao carregar fila de produção');
     } finally {
@@ -142,10 +175,11 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           result,
           created_at,
           updated_at,
-          profiles:profiles(id,name,display_name,avatar_url),
+          profiles:profiles(id,name,display_name,artistic_name,avatar_url),
           store_items:store_items(id,name,rarity,image_url)
         `)
         .eq('category', 'usable')
+        .in('status', ['queued', 'in_progress', 'delivered'])
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -401,7 +435,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
                           <tr>
                             <th className="px-4 py-3">Criado</th>
-                            <th className="px-4 py-3">Usuário</th>
+                            <th className="px-4 py-3">#</th>
+                            <th className="px-4 py-3">Artista</th>
                             <th className="px-4 py-3">Item</th>
                             <th className="px-4 py-3">Tipo</th>
                             <th className="px-4 py-3">Link</th>
@@ -413,15 +448,15 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <tbody>
                           {usableQueue.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
+                              <td colSpan={8} className="px-4 py-8 text-center text-gray-600 italic">
                                 Fila vazia.
                               </td>
                             </tr>
                           ) : (
-                            usableQueue.map((req: any) => {
-                              const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                            usableQueue.map((req: any, idx: number) => {
+                              const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                               const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
-                              const kind = req.briefing?.kind || '-';
+                              const kind = req.briefing?.kind || req.briefing?.usable_kind || '-';
                               const link = req.briefing?.link || '-';
 
                               return (
@@ -429,6 +464,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                   <td className="px-4 py-3">
                                     {req.created_at ? usableDateFormatter.format(new Date(req.created_at)) : '-'}
                                   </td>
+                                  <td className="px-4 py-3 font-mono text-gray-300">#{idx + 1}</td>
                                   <td className="px-4 py-3">{userLabel}</td>
                                   <td className="px-4 py-3">{itemLabel}</td>
                                   <td className="px-4 py-3">{kind}</td>
@@ -446,7 +482,11 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                       </a>
                                     )}
                                   </td>
-                                  <td className="px-4 py-3">{req.status}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
+                                      {statusLabelPt(req.status)}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3">
                                     <div className="flex justify-end gap-2">
                                       <Button
@@ -507,7 +547,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                               </tr>
                             ) : (
                               usableHistory.map((req: any) => {
-                                const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                                const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                                 const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
                                 const kind = req.briefing?.kind || '-';
                                 const link = req.briefing?.link || '-';
@@ -671,84 +711,144 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
         )}
 
         {activeSubTab === 'production' && (
-          <Card>
-            <Card.Header>
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white">Fila de Produção</h3>
-                <Button variant="secondary" size="sm" onClick={loadProductionQueue}>
-                  Atualizar
-                </Button>
-              </div>
-            </Card.Header>
+          <div className="space-y-8">
+            <Card>
+              <Card.Header>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-white">Fila de Produção</h3>
+                  <Button variant="secondary" size="sm" onClick={loadProductionQueue}>
+                    Atualizar
+                  </Button>
+                </div>
+              </Card.Header>
 
-            <Card.Body noPadding>
-              {prodLoading && (
-                <div className="p-4 text-sm text-gray-300">Carregando...</div>
-              )}
+              <Card.Body noPadding>
+                {prodLoading && (
+                  <div className="p-4 text-sm text-gray-300">Carregando...</div>
+                )}
 
-              {prodError && (
-                <div className="p-4 text-sm text-red-300">{prodError}</div>
-              )}
+                {prodError && (
+                  <div className="p-4 text-sm text-red-300">{prodError}</div>
+                )}
 
-              <TableResponsiveWrapper>
-                <table className="w-full text-sm text-left text-[#B3B3B3]">
-                  <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
-                    <tr>
-                      <th className="px-4 py-3">Criado</th>
-                      <th className="px-4 py-3">Usuário</th>
-                      <th className="px-4 py-3">Item</th>
-                      <th className="px-4 py-3">Tipo</th>
-                      <th className="px-4 py-3">Link</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {productionQueue.length === 0 ? (
+                <TableResponsiveWrapper>
+                  <table className="w-full text-sm text-left text-[#B3B3B3]">
+                    <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
-                          Nenhum pedido na fila.
-                        </td>
+                        <th className="px-4 py-3">Criado</th>
+                        <th className="px-4 py-3">#</th>
+                        <th className="px-4 py-3">Artista</th>
+                        <th className="px-4 py-3">Item</th>
+                        <th className="px-4 py-3">Tipo</th>
+                        <th className="px-4 py-3">Link</th>
+                        <th className="px-4 py-3">Status</th>
                       </tr>
-                    ) : (
-                      productionQueue.map((req: any) => {
-                        const userLabel = req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
-                        const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
-                        const briefingKind = req.briefing?.kind || '-';
-                        const briefingLink = req.briefing?.link || '-';
+                    </thead>
 
-                        return (
-                          <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
-                            <td className="px-4 py-3">
-                              {req.created_at ? productionDateFormatter.format(new Date(req.created_at)) : '-'}
-                            </td>
-                            <td className="px-4 py-3">{userLabel}</td>
-                            <td className="px-4 py-3">{itemLabel}</td>
-                            <td className="px-4 py-3">{briefingKind}</td>
-                            <td className="px-4 py-3">
-                              {briefingLink === '-' ? (
-                                <span>-</span>
-                              ) : (
-                                <a
-                                  href={briefingLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[#5DADE2] hover:underline truncate block max-w-xs"
-                                >
-                                  Abrir link
-                                </a>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">{req.status}</td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </TableResponsiveWrapper>
-            </Card.Body>
-          </Card>
+                    <tbody>
+                      {productionQueue.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
+                            Nenhum pedido na fila.
+                          </td>
+                        </tr>
+                      ) : (
+                        productionQueue.map((req: any, idx: number) => {
+                          const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                          const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
+                          const briefingKind = req.briefing?.kind || '-';
+                          const briefingLink = req.briefing?.link || '-';
+
+                          return (
+                            <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
+                              <td className="px-4 py-3">
+                                {req.created_at ? productionDateFormatter.format(new Date(req.created_at)) : '-'}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-gray-300">#{idx + 1}</td>
+                              <td className="px-4 py-3">{userLabel}</td>
+                              <td className="px-4 py-3">{itemLabel}</td>
+                              <td className="px-4 py-3">{briefingKind}</td>
+                              <td className="px-4 py-3">
+                                {briefingLink === '-' ? (
+                                  <span>-</span>
+                                ) : (
+                                  <a
+                                    href={briefingLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[#5DADE2] hover:underline truncate block max-w-xs"
+                                  >
+                                    Abrir link
+                                  </a>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
+                                  {statusLabelPt(req.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </TableResponsiveWrapper>
+              </Card.Body>
+            </Card>
+
+            <Card>
+              <Card.Header>
+                <h3 className="text-lg font-bold text-white">Histórico de Conclusão (Produção) ({productionHistory.length})</h3>
+              </Card.Header>
+
+              <Card.Body noPadding>
+                <TableResponsiveWrapper>
+                  <table className="w-full text-sm text-left text-[#B3B3B3]">
+                    <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
+                      <tr>
+                        <th className="px-4 py-3">Concluído</th>
+                        <th className="px-4 py-3">Artista</th>
+                        <th className="px-4 py-3">Item</th>
+                        <th className="px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {productionHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-gray-600 italic">
+                            Nenhum histórico.
+                          </td>
+                        </tr>
+                      ) : (
+                        productionHistory.map((req: any) => {
+                          const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
+                          const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
+                          const deliveredAt = req.result?.delivered_at || req.updated_at || req.created_at;
+
+                          return (
+                            <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
+                              <td className="px-4 py-3">
+                                {deliveredAt ? productionDateFormatter.format(new Date(deliveredAt)) : '-'}
+                              </td>
+                              <td className="px-4 py-3">{userLabel}</td>
+                              <td className="px-4 py-3">{itemLabel}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass('delivered')}`}>
+                                  {statusLabelPt('delivered')}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </TableResponsiveWrapper>
+              </Card.Body>
+            </Card>
+          </div>
         )}
       </div>
       

@@ -331,29 +331,23 @@ const UsableItemCard: React.FC<{
                 <h3 className="text-lg font-bold text-white font-chakra uppercase tracking-wide leading-tight group-hover:text-[#FFD369] transition-colors">{usableItem.name}</h3>
                 <p className="text-xs text-[#808080] mt-2 mb-6 line-clamp-2">{usableItem.description}</p>
                 {queueInfo && (
-                    <div className="mb-3 text-[11px] text-[#B3B3B3] bg-black/30 border border-[#333] rounded-xl px-3 py-2">
+                    <div className="mb-3 mt-1 bg-[#0E1014] border border-[#242A33] rounded-2xl px-4 py-3 text-sm">
                         <div className="flex items-center justify-between">
-                            <span className="text-white font-bold">Status:</span>
-                            <span className="font-mono">{queueInfo.status}</span>
+                            <span className="text-gray-300">Posição na fila</span>
+                            <span className="font-mono text-white">
+                                {queueInfo.position_in_queue ?? '—'}
+                            </span>
                         </div>
-
-                        {queueInfo.status === 'queued' && (
-                            <div className="flex items-center justify-between mt-1">
-                                <span className="text-white font-bold">Posição na fila:</span>
-                                <span className="font-mono">
-                                    #{queueInfo.position_in_queue} • Ativos: {queueInfo.total_active}
-                                </span>
-                            </div>
-                        )}
-
-                        {queueInfo.status === 'in_progress' && (
-                            <div className="mt-1 text-[#FFD369] font-bold">
-                                Em andamento (sua posição pode não ser exibida)
-                            </div>
-                        )}
-
-                        <div className="mt-1 text-[#808080] font-mono">
-                            Criado: {fmtDate(queueInfo.created_at)}
+                        <div className="flex items-center justify-between mt-1">
+                            <span>Ativos:</span>
+                            <span className="font-mono">{queueInfo.total_active ?? 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                            <span>À frente:</span>
+                            <span className="font-mono">{queueInfo.active_ahead ?? 0}</span>
+                        </div>
+                        <div className="mt-1 text-[#8BD3FF] font-semibold">
+                            Em produção (em andamento)
                         </div>
                     </div>
                 )}
@@ -689,11 +683,17 @@ const Inventory: React.FC = () => {
     const fetchData = useCallback(async (force = false) => {
         const now = Date.now();
         if (!force && lastLoadRef.current && (now - lastLoadRef.current) < CACHE_TTL_MS) {
+            // evita loading infinito quando o cache impede novo fetch
+            setIsLoading(false);
             return;
         }
         lastLoadRef.current = now;
-        if (!currentUser) return;
+        if (!currentUser) {
+            setIsLoading(false);
+            return;
+        }
         setError(null);
+        setIsLoading(true);
         try {
             const result = await api.fetchInventoryData(currentUser.id);
             if (result.success && result.data) {
@@ -714,7 +714,6 @@ const Inventory: React.FC = () => {
     }, [currentUser]);
     
     useEffect(() => {
-        setIsLoading(true);
         fetchData(false);
     }, [fetchData]); 
 
@@ -897,20 +896,6 @@ const Inventory: React.FC = () => {
 
                 {activeTab === 'usable' && (
                      <div>
-                        {isSupabase && (
-                            <div className="mb-8 max-w-3xl mx-auto flex items-center justify-between gap-3 bg-[#0E0E0E]/70 border border-[#333] rounded-2xl px-5 py-4">
-                                <div className="text-sm text-[#B3B3B3]">
-                                    <span className="text-white font-bold">Fila real</span> (ordem de chegada) • Atualiza quando o admin conclui
-                                </div>
-                                <button
-                                    onClick={loadUsableQueueInfo}
-                                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#1A1A1A] border border-[#333] text-white hover:bg-[#FFD369] hover:text-black hover:border-[#FFD369] transition"
-                                    disabled={queueLoading}
-                                >
-                                    {queueLoading ? 'Atualizando...' : 'Atualizar'}
-                                </button>
-                            </div>
-                        )}
                         {userUsableItems.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
                                 {userUsableItems.map(item => item && (
