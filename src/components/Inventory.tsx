@@ -469,7 +469,12 @@ const ItemQueue: React.FC<{ queue: UsableItemQueueEntry[]; currentUser: User; }>
 }
 
 // UPDATED HISTORY CARD WITH "CONCLUÍDO" FX V2
-const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: StoreItem | UsableItem | undefined }> = ({ redeemedItem, itemDetails }) => {
+const HistoryItemCard: React.FC<{
+    redeemedItem: RedeemedItem;
+    itemDetails: StoreItem | UsableItem | undefined;
+    queueInfoByRequestId: Record<string, any>;
+    fmtDate: (iso?: string | null) => string;
+}> = ({ redeemedItem, itemDetails, queueInfoByRequestId, fmtDate }) => {
     const statusConfig = {
         InProgress: { color: 'text-[#A855F7]', bg: 'bg-[#A855F7]/10', border: 'border-[#A855F7]/30', label: 'Em Produção', icon: '⚙️' },
         Used: { color: 'text-[#6BFF8A]', bg: 'bg-[#6BFF8A]/10', border: 'border-[#6BFF8A]/50', label: 'Concluído', icon: '✅' },
@@ -488,6 +493,8 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
 
     const isUsable = redeemedItem.productionCategory === 'usable' || ('platform' in (itemDetails || {}) && !(itemDetails as any).rarity);
     const hasSubmittedLink = Boolean(redeemedItem.submittedLink);
+    const reqId = (redeemedItem as any).productionRequestId as string | undefined;
+    const queueInfo = reqId ? queueInfoByRequestId[reqId] : null;
 
     const handleOpenSubmitted = () => {
         if (redeemedItem.submittedLink) window.open(redeemedItem.submittedLink, '_blank');
@@ -552,6 +559,24 @@ const HistoryItemCard: React.FC<{ redeemedItem: RedeemedItem, itemDetails: Store
                                 {redeemedItem.submittedKind ? <>Tipo: <span className="text-white">{redeemedItem.submittedKind}</span></> : null}
                                 {redeemedItem.deliveredAt ? <> · Concluído: <span className="text-white">{fmtSP(redeemedItem.deliveredAt)}</span></> : null}
                             </div>
+
+                            {queueInfo && (queueInfo.status === 'queued' || queueInfo.status === 'in_progress') && (
+                                <div className="text-[10px] text-[#B3B3B3] font-mono bg-black/30 border border-[#333] rounded-xl px-3 py-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-white font-bold">Fila:</span>
+                                        {queueInfo.status === 'queued' ? (
+                                            <span className="text-white">
+                                                #{queueInfo.position_in_queue} • Ativos: {queueInfo.total_active}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[#FFD36B] font-bold">Em andamento</span>
+                                        )}
+                                    </div>
+                                    <div className="mt-1 text-[#808080]">
+                                        Criado: {fmtDate(queueInfo.created_at)}
+                                    </div>
+                                </div>
+                            )}
 
                             <button
                                 onClick={handleOpenSubmitted}
@@ -704,7 +729,7 @@ const Inventory: React.FC = () => {
     }, [inventoryInitialTab]);
 
     useEffect(() => {
-        if (activeTab === 'usable') {
+        if (activeTab === 'usable' || activeTab === 'history') {
             loadUsableQueueInfo();
         }
     }, [activeTab, loadUsableQueueInfo]);
@@ -918,7 +943,15 @@ const Inventory: React.FC = () => {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {historyInventory.map(ri => {
                                     const itemDetails = [...storeItems, ...usableItems].find(item => item.id === ri.itemId);
-                                    return <HistoryItemCard key={ri.id} redeemedItem={ri} itemDetails={itemDetails} />
+                                    return (
+                                        <HistoryItemCard
+                                            key={ri.id}
+                                            redeemedItem={ri}
+                                            itemDetails={itemDetails}
+                                            queueInfoByRequestId={usablePositions}
+                                            fmtDate={fmtSP}
+                                        />
+                                    );
                                 })}
                             </div>
                         ) : (
