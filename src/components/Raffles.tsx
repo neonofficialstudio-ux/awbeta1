@@ -712,6 +712,22 @@ const TicketCard: React.FC<{ raffle: Raffle; myTickets: number; totalTickets: nu
 
 // 3.5 WINNER CARD (Hall of Fame)
 const WinnerCard: React.FC<{ raffle: Raffle; winner: User | undefined }> = ({ raffle, winner }) => {
+    const eventTitle = (raffle as any)?.meta?.title || raffle.itemName;
+    const prizeType = (raffle.prizeType || '').toLowerCase();
+    const prizeText =
+        prizeType === 'coins' ? `${Number(raffle.coinReward || 0)} LC`
+        : prizeType === 'hybrid' ? `${raffle.itemName} + ${Number(raffle.coinReward || 0)} LC`
+        : prizeType === 'manual_text' ? (raffle.customRewardText || raffle.itemName)
+        : raffle.itemName;
+
+    const winnerLabel =
+        (winner as any)?.artisticName ||
+        (winner as any)?.artistic_name ||
+        winner?.displayName ||
+        winner?.name ||
+        raffle.winnerName ||
+        '?';
+
     return (
         <div className="flex-shrink-0 w-80 bg-[#0E0E0E] border border-[#FFD447]/20 rounded-xl p-4 flex items-center gap-4 shadow-[0_0_15px_rgba(255,212,71,0.05)] hover:shadow-[0_0_20px_rgba(255,212,71,0.15)] hover:border-[#FFD447]/40 transition-all duration-300 group">
              <div className="relative">
@@ -720,10 +736,11 @@ const WinnerCard: React.FC<{ raffle: Raffle; winner: User | undefined }> = ({ ra
              </div>
              <div className="overflow-hidden min-w-0 flex-1">
                  <p className="text-[9px] text-[#FFD447] font-bold uppercase tracking-widest mb-1">🎉 Vencedor Confirmado</p>
-                 <h4 className="text-white font-bold truncate text-lg leading-tight">{raffle.winnerName}</h4>
-                 <p className="text-xs text-gray-400 truncate mt-0.5">Prêmio: <span className="text-gray-200">{raffle.itemName}</span></p>
+                 <h4 className="text-white font-bold truncate text-lg leading-tight">{winnerLabel}</h4>
+                 <p className="text-[11px] text-gray-500 truncate">Evento: <span className="text-gray-300">{eventTitle}</span></p>
+                 <p className="text-xs text-gray-400 truncate mt-0.5">Prêmio: <span className="text-gray-200">{prizeText}</span></p>
                  <p className="text-[10px] text-gray-600 mt-2 font-mono border-t border-white/5 pt-1">
-                     {raffle.winnerDefinedAt ? new Date(raffle.winnerDefinedAt).toLocaleDateString() : 'Data N/A'}
+                     {raffle.winnerDefinedAt ? new Date(raffle.winnerDefinedAt).toLocaleString('pt-BR') : 'Data N/A'}
                  </p>
              </div>
         </div>
