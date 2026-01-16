@@ -11,7 +11,7 @@ import AdminDrawJackpotModal from './AdminDrawJackpotModal';
 import { EditIcon, DeleteIcon, UsersIcon, CoinIcon, TrendingUpIcon, TrophyIcon, SettingsIcon, CheckIcon, StarIcon, TicketIcon, CrownIcon } from '../../constants';
 import * as api from '../../api/index';
 import { parseLocalDate, toLocalInputValue } from '../../api/utils/localDate';
-import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot, adminAwardManual } from '../../api/admin/raffles';
+import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot, adminAwardManual, drawRaffleWinner } from '../../api/admin/raffles';
 import { PrizeResolver } from '../../api/raffles/prize.resolver';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
@@ -354,6 +354,7 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     const [drawModalRaffle, setDrawModalRaffle] = useState<Raffle | null>(null);
     const [drawParticipants, setDrawParticipants] = useState<User[]>([]);
     const [drawTickets, setDrawTickets] = useState<RaffleTicket[]>([]);
+    const [lastDraw, setLastDraw] = useState<{ raffle: Raffle; winner: User | null } | null>(null);
     
     const [jackpotState, setJackpotState] = useState<JackpotState | null>(null);
     const [isEditJackpotModalOpen, setIsEditJackpotModalOpen] = useState(false);
@@ -514,6 +515,21 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     };
 
     const handleInitiateDraw = async (raffle: Raffle) => {
+        if (config.backendProvider === 'supabase') {
+            try {
+                const res: any = await drawRaffleWinner(raffle.id);
+                const winnerId = res?.winner_user_id || res?.winnerUserId || res?.winnerId || null;
+                const winner = winnerId ? (allUsers || []).find((u) => u.id === winnerId) || null : null;
+                setLastDraw({ raffle, winner });
+                toast.success('Apuração concluída! Vencedor definido e prêmio registrado.');
+                await refreshAdminData();
+                return;
+            } catch (e: any) {
+                toast.error(e?.message || 'Erro ao apurar sorteio.');
+                return;
+            }
+        }
+
         try {
             const data = await adminPrepareRaffleDraw(raffle.id);
             setDrawParticipants(data.users);
@@ -592,10 +608,31 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     };
 
     const allItems = [...storeItems, ...usableItems];
-    const activeRaffles = rafflesList.filter(r => r.status === 'active');
-    const scheduledRaffles = rafflesList.filter(r => r.status === 'scheduled');
-    const awaitingDrawRaffles = rafflesList.filter(r => r.status === 'awaiting_draw');
-    const finishedRaffles = rafflesList.filter(r => r.status === 'finished' || r.status === 'winner_defined' || r.status === 'ended');
+    const now = new Date();
+    const getDerivedStatus = (raffle: Raffle) => {
+        if (raffle?.status === 'winner_defined' || raffle?.winnerId) {
+            return 'winner_defined';
+        }
+
+        const endsAt = raffle?.endsAt ? new Date(raffle.endsAt) : null;
+        const startsAt = raffle?.startsAt ? new Date(raffle.startsAt) : null;
+
+        if (endsAt && !Number.isNaN(endsAt.getTime()) && now >= endsAt) {
+            return 'in_apuration';
+        }
+
+        if (startsAt && !Number.isNaN(startsAt.getTime()) && now < startsAt) {
+            return 'scheduled';
+        }
+
+        return raffle?.status || 'active';
+    };
+
+    const derivedRaffles = rafflesList.map((raffle) => ({ ...raffle, __derivedStatus: getDerivedStatus(raffle) }));
+    const activeRaffles = derivedRaffles.filter(raffle => raffle.__derivedStatus === 'active');
+    const scheduledRaffles = derivedRaffles.filter(raffle => raffle.__derivedStatus === 'scheduled');
+    const awaitingDrawRaffles = derivedRaffles.filter(raffle => raffle.__derivedStatus === 'in_apuration');
+    const finishedRaffles = derivedRaffles.filter(raffle => raffle.__derivedStatus === 'winner_defined' || raffle.status === 'ended' || raffle.status === 'finished');
     const isJackpotDisabled = !!(jackpotState as any)?.disabled;
     const jackpotDisabledMessage = isJackpotDisabled ? (jackpotState as any)?.message || "Jackpot em breve" : "";
 
@@ -774,6 +811,7 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                     {[...activeRaffles, ...scheduledRaffles].map(raffle => {
                                         const ticketCount = allTickets.filter(t => t.raffleId === raffle.id).length;
                                         const prize = PrizeResolver.resolve(raffle);
+                                        const dStatus = raffle.__derivedStatus;
                                         
                                         return (
                                             <tr key={raffle.id} className="bg-[#181818] border-b border-gray-800 hover:bg-gray-800/50">
@@ -786,15 +824,29 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                                 </td>
                                                 <td className="px-6 py-4 text-xs uppercase font-bold text-gray-500">{prize.type}</td>
                                                 <td className="px-6 py-4">
-                                                    {raffle.status === 'active' 
-                                                        ? <span className="text-green-400 bg-green-900/20 px-2 py-1 rounded text-xs font-bold border border-green-500/30">ATIVO</span>
-                                                        : <span className="text-blue-400 bg-blue-900/20 px-2 py-1 rounded text-xs font-bold border border-blue-500/30">AGENDADO</span>
-                                                    }
+                                                    {dStatus === 'active' && (
+                                                        <span className="text-green-400 bg-green-900/20 px-2 py-1 rounded text-xs font-bold border border-green-500/30">ATIVO</span>
+                                                    )}
+                                                    {dStatus === 'scheduled' && (
+                                                        <span className="text-blue-400 bg-blue-900/20 px-2 py-1 rounded text-xs font-bold border border-blue-500/30">AGENDADO</span>
+                                                    )}
+                                                    {dStatus === 'in_apuration' && (
+                                                        <span className="text-red-300 bg-red-900/20 px-2 py-1 rounded text-xs font-black border border-red-500/30 animate-pulse">EM APURAÇÃO</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 font-bold">{ticketCount}</td>
                                                 <td className="px-6 py-4 text-xs font-mono">{new Date(raffle.endsAt).toLocaleString('pt-BR')}</td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end space-x-1">
+                                                        {raffle.__derivedStatus === 'in_apuration' && (
+                                                            <ActionButton
+                                                                onClick={() => handleInitiateDraw(raffle)}
+                                                                title="Apurar / Sortear agora"
+                                                                className="text-red-300 hover:bg-red-500/15"
+                                                            >
+                                                                <TrophyIcon className="w-5 h-5" />
+                                                            </ActionButton>
+                                                        )}
                                                         <ActionButton onClick={() => handleSetHighlight(raffle.id)} title="Definir Destaque" className="text-yellow-300 hover:bg-yellow-500/20">
                                                             <StarIcon className={`w-5 h-5 ${raffle.id === highlightedRaffleId ? "text-yellow-400 animate-pulse" : "text-gray-500"}`} />
                                                         </ActionButton>
@@ -818,15 +870,23 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                             <table className="w-full text-sm text-left text-gray-500">
                                 <tbody className="divide-y divide-[#222]">
                                     {finishedRaffles.map(raffle => (
-                                         <tr key={raffle.id} className="hover:bg-[#181818]">
+                                        <tr key={raffle.id} className="hover:bg-[#181818]">
                                             <td className="px-6 py-3 text-gray-300">{raffle.itemName}</td>
                                             <td className="px-6 py-3">
-                                                {raffle.status === 'ended' 
+                                                {raffle.__derivedStatus !== 'winner_defined' && raffle.status === 'ended'
                                                     ? <span className="text-gray-400 bg-gray-800 px-2 py-1 rounded text-xs">SEM VENCEDOR</span>
                                                     : <span className="text-green-400 bg-green-900/20 px-2 py-1 rounded text-xs border border-green-500/20">FINALIZADO</span>
                                                 }
                                             </td>
-                                            <td className="px-6 py-3 text-xs">Vencedor: <strong className="text-goldenYellow-500">{raffle.winnerName || '-'}</strong></td>
+                                            <td className="px-6 py-3 text-xs">
+                                                Vencedor:{' '}
+                                                <strong className="text-goldenYellow-500">
+                                                    {raffle.winnerId
+                                                        ? (getDisplayName((allUsers || []).find(user => user.id === raffle.winnerId) as User)
+                                                            || raffle.winnerId.slice(0, 8))
+                                                        : '-'}
+                                                </strong>
+                                            </td>
                                             <td className="px-6 py-3 text-right">
                                                 <ActionButton onClick={() => setRaffleToDelete(raffle)} title="Apagar Histórico" className="text-red-900 hover:text-red-500"><DeleteIcon className="w-4 h-4" /></ActionButton>
                                             </td>
@@ -953,6 +1013,58 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                     onClose={() => setDrawModalRaffle(null)}
                     onConfirmWinner={handleConfirmRaffleWinner}
                 />
+            )}
+
+            {lastDraw && (
+                <ModalPortal>
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setLastDraw(null)}>
+                        <div className="bg-[#0E0E0E] rounded-2xl border border-neon-cyan/30 w-full max-w-lg p-6 shadow-[0_0_60px_rgba(0,230,255,0.12)]" onClick={(event) => event.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-black text-white uppercase tracking-wide">Apuração Concluída</h3>
+                                <button onClick={() => setLastDraw(null)} className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10">✕</button>
+                            </div>
+
+                            <div className="flex items-center gap-4 border border-white/10 rounded-xl p-4 bg-white/5">
+                                <img
+                                    src={PrizeResolver.resolve(lastDraw.raffle).displayImage}
+                                    className="w-14 h-14 rounded-lg object-cover border border-white/10"
+                                />
+                                <div className="flex-1">
+                                    <p className="text-white font-black">{PrizeResolver.resolve(lastDraw.raffle).displayTitle}</p>
+                                    <p className="text-xs text-white/50">Sorteio: {lastDraw.raffle.id}</p>
+                                    <p className="text-xs text-white/50">Tipo: {(PrizeResolver.resolve(lastDraw.raffle).type || '').toUpperCase()}</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 border border-white/10 rounded-xl p-4 bg-black/30">
+                                <p className="text-xs text-white/50 uppercase font-bold mb-2">Vencedor</p>
+                                {lastDraw.winner ? (
+                                    <div className="flex items-center gap-3">
+                                        <AvatarWithFrame user={lastDraw.winner as User} sizeClass="w-12 h-12" />
+                                        <div>
+                                            <p className="text-white font-black">{getDisplayName(lastDraw.winner as User) || lastDraw.winner.id.slice(0, 8)}</p>
+                                            <p className="text-xs text-white/50">{lastDraw.winner.id}</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-white/70 text-sm">Vencedor registrado no backend (ID indisponível no cache de usuários).</p>
+                                )}
+                                <p className="mt-3 text-xs text-neon-cyan">
+                                    ✅ Prêmio já foi registrado automaticamente (coins/inventário) pelo Supabase.
+                                </p>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                                <button
+                                    onClick={() => setLastDraw(null)}
+                                    className="px-5 py-2 rounded-lg bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-black"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </ModalPortal>
             )}
 
             {isModalOpen && <AdminRaffleModal raffle={editingRaffle} allItems={allItems} onClose={() => setIsModalOpen(false)} onSave={handleSaveAndClose} />}
