@@ -315,15 +315,17 @@ export const fetchRafflesData = async (userId: string) => {
         if (userIds.length > 0) {
             const { data: profilesRows, error: profilesErr } = await supabase
                 .from('profiles')
-                .select('id, display_name, name, avatar_url, coins, xp, level')
+                .select('id, display_name, name, artistic_name, avatar_url, coins, xp, level')
                 .in('id', userIds);
 
             if (profilesErr) throw profilesErr;
 
             allUsers = (profilesRows || []).map((p: any) => ({
                 id: p.id,
-                name: p.display_name || p.name || 'User',
-                displayName: p.display_name || p.name || 'User',
+                // ✅ Prefer artistic_name when present (Hall da Fama / UI)
+                name: p.artistic_name || p.display_name || p.name || 'User',
+                displayName: p.artistic_name || p.display_name || p.name || 'User',
+                artisticName: p.artistic_name || '',
                 avatarUrl: p.avatar_url || '',
                 coins: p.coins ?? 0,
                 xp: p.xp ?? 0,

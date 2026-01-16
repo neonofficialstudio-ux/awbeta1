@@ -60,7 +60,9 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
     useEffect(() => {
         if (raffle) {
             // Restore V2 or Legacy V1 State
-            setPrizeType(raffle.prizeType || 'item');
+            // Restore V2 State (Manual award moved to separate flow)
+            const normalizedPrizeType = (raffle.prizeType === 'custom' ? 'item' : (raffle.prizeType || 'item')) as any;
+            setPrizeType(normalizedPrizeType);
             
             setTicketPrice(raffle.ticketPrice);
             setTicketLimitPerUser(raffle.ticketLimitPerUser || 0);
@@ -127,7 +129,8 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
             coinReward: (prizeType === 'coins' || prizeType === 'hybrid') ? coinReward : 0,
             itemName: customName,
             itemImageUrl: customImage || 'https://via.placeholder.com/300?text=Sorteio',
-            customRewardText: (prizeType === 'custom') ? customName : undefined
+            // Manual/Custom prize moved to Admin "Premiação Manual" flow
+            customRewardText: undefined
         });
     };
 
@@ -144,11 +147,10 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
                     {/* Prize Type Selector */}
                     <div>
                         <label className="block text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider">Tipo de Prêmio</label>
-                        <div className="grid grid-cols-4 gap-3">
+                        <div className="grid grid-cols-3 gap-3">
                             <PrizeTypeButton active={prizeType === 'item'} onClick={() => setPrizeType('item')} icon={StoreIcon} label="Item" />
                             <PrizeTypeButton active={prizeType === 'coins'} onClick={() => setPrizeType('coins')} icon={CoinIcon} label="Coins" />
                             <PrizeTypeButton active={prizeType === 'hybrid'} onClick={() => setPrizeType('hybrid')} icon={TrophyIcon} label="Híbrido" />
-                            <PrizeTypeButton active={prizeType === 'custom'} onClick={() => setPrizeType('custom')} icon={EditIcon} label="Manual" />
                         </div>
                     </div>
 
