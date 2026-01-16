@@ -349,12 +349,12 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
                       <Button 
                         onClick={handleArchiveExpired} 
                         disabled={isArchivingExpired || isLoadingMissions}
-                        className="bg-gray-900 border border-yellow-500/50 text-yellow-300 hover:bg-yellow-500 hover:text-black font-bold"
+                        className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold"
                       >
                         {isArchivingExpired ? 'Arquivando...' : 'Arquivar expiradas agora'}
                       </Button>
                     )}
-                    <Button onClick={() => handleOpenModal()} leftIcon={<span className="text-xl leading-none">+</span>} className="bg-navy-deep border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan hover:text-black font-bold">
+                    <Button onClick={() => handleOpenModal()} leftIcon={<span className="text-xl leading-none">+</span>} className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold">
                       Adicionar Missão
                     </Button>
                   </div>

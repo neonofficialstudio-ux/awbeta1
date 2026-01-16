@@ -609,7 +609,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 <Toolbar 
                     start={<h3 className="text-xl font-bold text-white font-chakra">Recompensas Visuais</h3>}
                     end={
-                         <Button onClick={() => handleOpenStoreItemModal()} leftIcon={<span>+</span>} className="bg-[#FFD74B] text-[#00E6FF] font-bold border border-[#FFECAA]/40 shadow-[0_0_15px_rgba(255,215,72,0.35)] hover:brightness-105 rounded-[14px] transition-all">Adicionar Item</Button>
+                         <Button onClick={() => handleOpenStoreItemModal()} leftIcon={<span>+</span>} className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold rounded-[14px] transition-all">Adicionar Item</Button>
                     }
                 />
             </Card.Header>
@@ -662,7 +662,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 <Toolbar 
                     start={<h3 className="text-xl font-bold text-white font-chakra">Itens Utilizáveis</h3>}
                     end={
-                         <Button onClick={() => handleOpenUsableItemModal()} leftIcon={<span>+</span>} className="bg-[#FFD74B] text-[#00E6FF] font-bold border border-[#FFECAA]/40 shadow-[0_0_15px_rgba(255,215,72,0.35)] hover:brightness-105 rounded-[14px] transition-all">Adicionar Item</Button>
+                         <Button onClick={() => handleOpenUsableItemModal()} leftIcon={<span>+</span>} className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold rounded-[14px] transition-all">Adicionar Item</Button>
                     }
                 />
             </Card.Header>
@@ -719,7 +719,7 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 <Toolbar 
                     start={<h3 className="text-xl font-bold text-white font-chakra">Pacotes de Moedas</h3>}
                     end={
-                         <Button onClick={() => handleOpenCoinPackModal()} leftIcon={<span>+</span>} className="bg-navy-deep border border-gold-cinematic/50 text-gold-cinematic hover:bg-gold-cinematic hover:text-black font-bold">Adicionar Pacote</Button>
+                         <Button onClick={() => handleOpenCoinPackModal()} leftIcon={<span>+</span>} className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold rounded-[14px] transition-all">Adicionar Pacote</Button>
                     }
                 />
             </Card.Header>
