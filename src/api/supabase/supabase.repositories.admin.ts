@@ -183,7 +183,9 @@ export const supabaseAdminRepository = {
         supabase.from('coin_packs').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
         supabase
           .from('coin_purchase_requests')
-          .select('*, profiles(name, display_name, id), pack:coin_packs(title)')
+          // NOTE: coin_purchase_requests.user_id references auth.users, not profiles.
+          // Do not join profiles here (no relationship in schema cache). We'll map names from profilesRes.
+          .select('*, pack:coin_packs(title)')
           .order('created_at', { ascending: false })
           .limit(200),
         supabase
@@ -218,6 +220,11 @@ export const supabaseAdminRepository = {
       }
 
       const users = (profilesRes.data || []).map((p: any) => mapProfileToUser(p));
+      const profileNameById = new Map<string, string>();
+      (profilesRes.data || []).forEach((p: any) => {
+        const name = p?.display_name || p?.name || '';
+        if (p?.id && name) profileNameById.set(p.id, name);
+      });
       const missions = (missionsRes.data || []).map((m: any) => mapMissionToApp(m));
       const missionSubmissions = (submissionsRes.data || []).map((s: any) => mapSubmission(s));
       const allTransactions = (ledgerRes.data || []).map((l: any) => mapLedgerToTransaction(l));
@@ -260,7 +267,7 @@ export const supabaseAdminRepository = {
       const coinPurchaseRequests = (coinPurchaseRequestsRes.data || []).map((r: any) => ({
         id: r.id,
         userId: r.user_id,
-        userName: r?.profiles?.display_name || r?.profiles?.name || '',
+        userName: profileNameById.get(String(r.user_id)) || '',
         packId: r.pack_id,
         packName: r?.pack?.title ?? 'Pacote',
         coins: Number(r.total_coins ?? 0),
