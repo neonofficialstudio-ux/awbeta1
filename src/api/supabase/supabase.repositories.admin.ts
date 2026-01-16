@@ -289,6 +289,31 @@ export const supabaseAdminRepository = {
       const raffles = rafflesRes.data || [];
       const allTickets = ticketsRes.data || [];
 
+      // ✅ Map Supabase (snake_case) -> App Types (camelCase)
+      const mappedRaffles = (raffles || []).map((r: any) => ({
+        id: r.id,
+        itemId: r.item_id || '',
+        itemName: r.item_name,
+        itemImageUrl: r.item_image_url || '',
+        ticketPrice: Number(r.ticket_price ?? 0),
+        ticketLimitPerUser: Number(r.ticket_limit_per_user ?? 0),
+        startsAt: r.starts_at ?? undefined,
+        endsAt: r.ends_at,
+        status: r.status,
+        winnerId: r.winner_user_id ?? undefined,
+        winnerDefinedAt: r.winner_defined_at ?? undefined,
+        prizeType: r.prize_type ?? undefined,
+        coinReward: r.coin_reward ?? undefined,
+        customRewardText: r.custom_reward_text ?? undefined,
+      }));
+
+      const mappedTickets = (allTickets || []).map((t: any) => ({
+        id: t.id,
+        raffleId: t.raffle_id,
+        userId: t.user_id,
+        purchasedAt: t.purchased_at || t.created_at,
+      }));
+
       const systemHealth = {
         status: 'healthy',
         lastUpdate: new Date().toISOString(),
@@ -310,8 +335,8 @@ export const supabaseAdminRepository = {
           coinPacks,
           coinPurchaseRequests,
           hallOfFame: allTransactions.filter((entry) => ['raffle_win', 'mission_complete'].includes(entry.source)),
-          raffles,
-          allTickets,
+          raffles: mappedRaffles,
+          allTickets: mappedTickets,
           highlightedRaffleId: raffles.find((r: any) => r.is_highlighted)?.id || null,
           systemHealth,
           subscriptionStats: { newUsersLastDay: statsRes.count || 0 },

@@ -123,6 +123,24 @@ export const saveRaffle = (raffleData: any) => withLatency(async () => {
 
         // CREATE: usa RPC (já audita no admin_audit_log)
         const created = await adminCreateRaffle(raffleData);
+
+        // ✅ Hardening: garantir item_id preenchido quando o prêmio é item/híbrido
+        // (não depende do RPC aceitar p_item_id)
+        try {
+            const createdId =
+                (created && typeof created === 'object' && (created as any).id) ? (created as any).id :
+                (typeof created === 'string' ? created : null);
+
+            if (createdId && (raffleData?.prizeType === 'item' || raffleData?.prizeType === 'hybrid') && raffleData?.itemId) {
+                await supabase
+                    .from('raffles')
+                    .update({ item_id: raffleData.itemId })
+                    .eq('id', createdId);
+            }
+        } catch {
+            // não quebra o create caso o update falhe
+        }
+
         return { success: true, created };
     }
 
