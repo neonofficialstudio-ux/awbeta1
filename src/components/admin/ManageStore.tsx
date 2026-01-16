@@ -23,6 +23,7 @@ import Section from '../ui/layout/Section';
 import Toolbar from '../ui/advanced/Toolbar';
 import MetricCard from '../ui/patterns/MetricCard';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
+import { useAppContext } from '../../constants';
 
 interface ManageStoreProps {
   storeItems: StoreItem[];
@@ -159,8 +160,14 @@ const ManageStore: React.FC<ManageStoreProps> = ({
     onConvertItemToMission,
     onCreateMissionFromQueue,
 }) => {
+  const { dispatch } = useAppContext();
   const [activeTab, setActiveTab] = useState<AdminStoreTab>(initialSubTab || 'visual');
   const isSupabase = config.backendProvider === 'supabase';
+
+  // ✅ Persistir a última sub-aba visitada no Admin (evita voltar para outra aba ao sair/voltar)
+  useEffect(() => {
+    dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: 'store', subTab: activeTab } });
+  }, [activeTab, dispatch]);
 
   type StoreOpsSection = 'catalog' | 'operations' | 'audit';
 
