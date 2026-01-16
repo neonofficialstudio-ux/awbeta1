@@ -230,6 +230,84 @@ const ManageStore: React.FC<ManageStoreProps> = ({
   const [opsLoading, setOpsLoading] = useState(false);
   const [opsError, setOpsError] = useState<string | null>(null);
 
+  // ✅ Filtros inteligentes (Histórico Operacional)
+  const [opsPeriod, setOpsPeriod] = useState<'all' | '7d' | '30d'>('all');
+  const [opsStatus, setOpsStatus] = useState<string>('all');
+  const [opsCategory, setOpsCategory] = useState<string>('all');
+  const [opsUser, setOpsUser] = useState<string>('all');
+  const [opsItem, setOpsItem] = useState<string>('all');
+
+  const getOpsDate = (r: any): Date | null => {
+    const raw = r?.result?.delivered_at || r?.updated_at || r?.created_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const opsOptionSets = useMemo(() => {
+    const statuses = new Set<string>();
+    const categories = new Set<string>();
+    const users = new Set<string>();
+    const items = new Set<string>();
+
+    (opsRequests || []).forEach((r: any) => {
+      if (r?.status) statuses.add(String(r.status));
+      if (r?.category) categories.add(String(r.category));
+
+      const userLabel =
+        r?.profiles?.artistic_name ||
+        r?.profiles?.display_name ||
+        r?.profiles?.name ||
+        r?.user_id?.slice(0, 8) ||
+        '';
+      if (userLabel) users.add(String(userLabel));
+
+      const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8) || '';
+      if (itemLabel) items.add(String(itemLabel));
+    });
+
+    const sortAlpha = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
+    return {
+      statuses: Array.from(statuses).sort(sortAlpha),
+      categories: Array.from(categories).sort(sortAlpha),
+      users: Array.from(users).sort(sortAlpha),
+      items: Array.from(items).sort(sortAlpha),
+    };
+  }, [opsRequests]);
+
+  const filteredOpsRequests = useMemo(() => {
+    const now = new Date();
+    const cutoff =
+      opsPeriod === '7d'
+        ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        : opsPeriod === '30d'
+          ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          : null;
+
+    return (opsRequests || []).filter((r: any) => {
+      if (cutoff) {
+        const d = getOpsDate(r);
+        if (!d || d < cutoff) return false;
+      }
+
+      if (opsStatus !== 'all' && String(r?.status) !== opsStatus) return false;
+      if (opsCategory !== 'all' && String(r?.category) !== opsCategory) return false;
+
+      const userLabel =
+        r?.profiles?.artistic_name ||
+        r?.profiles?.display_name ||
+        r?.profiles?.name ||
+        r?.user_id?.slice(0, 8) ||
+        '';
+      if (opsUser !== 'all' && String(userLabel) !== opsUser) return false;
+
+      const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8) || '';
+      if (opsItem !== 'all' && String(itemLabel) !== opsItem) return false;
+
+      return true;
+    });
+  }, [opsRequests, opsPeriod, opsStatus, opsCategory, opsUser, opsItem]);
+
   const tryParseDate = (value: any): Date | null => {
     if (!value) return null;
     if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
@@ -802,6 +880,104 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                 {opsLoading && <div className="p-4 text-sm text-gray-300">Carregando...</div>}
                 {opsError && <div className="p-4 text-sm text-red-300">{opsError}</div>}
 
+                {/* ✅ Filtros inteligentes */}
+                <div className="px-4 pt-4 pb-2">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Período</label>
+                      <select
+                        value={opsPeriod}
+                        onChange={(e) => setOpsPeriod(e.target.value as any)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Tudo</option>
+                        <option value="7d">Últimos 7 dias</option>
+                        <option value="30d">Últimos 30 dias</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Status</label>
+                      <select
+                        value={opsStatus}
+                        onChange={(e) => setOpsStatus(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {opsOptionSets.statuses.map((s) => (
+                          <option key={s} value={s}>
+                            {statusPt(s)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Categoria</label>
+                      <select
+                        value={opsCategory}
+                        onChange={(e) => setOpsCategory(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todas</option>
+                        {opsOptionSets.categories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Usuário</label>
+                      <select
+                        value={opsUser}
+                        onChange={(e) => setOpsUser(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {opsOptionSets.users.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Item</label>
+                      <select
+                        value={opsItem}
+                        onChange={(e) => setOpsItem(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {opsOptionSets.items.map((i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between text-xs text-white/50">
+                    <span>
+                      Exibindo <span className="text-white/80 font-semibold">{filteredOpsRequests.length}</span> de{' '}
+                      <span className="text-white/80 font-semibold">{opsRequests.length}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpsPeriod('all');
+                        setOpsStatus('all');
+                        setOpsCategory('all');
+                        setOpsUser('all');
+                        setOpsItem('all');
+                      }}
+                      className="text-neon-cyan hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  </div>
+                </div>
+
                 <TableResponsiveWrapper>
                   <table className="w-full text-sm text-left text-[#B3B3B3]">
                     <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
@@ -815,14 +991,14 @@ const ManageStore: React.FC<ManageStoreProps> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {opsRequests.length === 0 ? (
+                      {filteredOpsRequests.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
                             Sem registros.
                           </td>
                         </tr>
                       ) : (
-                        opsRequests.map((r: any) => {
+                        filteredOpsRequests.map((r: any) => {
                           const userLabel =
                             r?.profiles?.artistic_name ||
                             r?.profiles?.display_name ||

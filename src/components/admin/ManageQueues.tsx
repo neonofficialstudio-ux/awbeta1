@@ -177,6 +177,105 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [deliverReq, setDeliverReq] = useState<any | null>(null);
   const [deliverUrl, setDeliverUrl] = useState('');
+
+  // ✅ Filtros inteligentes — Histórico de Conclusão (Utilizáveis)
+  const [usablePeriod, setUsablePeriod] = useState<'all' | '7d' | '30d'>('all');
+  const [usableStatus, setUsableStatus] = useState<string>('all');
+  const [usableCategory, setUsableCategory] = useState<string>('all');
+  const [usableUser, setUsableUser] = useState<string>('all');
+  const [usableItem, setUsableItem] = useState<string>('all');
+
+  // ✅ Filtros inteligentes — Histórico de Conclusão (Produção)
+  const [prodPeriod, setProdPeriod] = useState<'all' | '7d' | '30d'>('all');
+  const [prodStatus, setProdStatus] = useState<string>('all');
+  const [prodCategory, setProdCategory] = useState<string>('all');
+  const [prodUser, setProdUser] = useState<string>('all');
+  const [prodItem, setProdItem] = useState<string>('all');
+
+  const getHistoryDate = (req: any): Date | null => {
+    const raw = req?.result?.delivered_at || req?.updated_at || req?.created_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const buildOptionSets = (rows: any[]) => {
+    const statuses = new Set<string>();
+    const categories = new Set<string>();
+    const users = new Set<string>();
+    const items = new Set<string>();
+    (rows || []).forEach((r: any) => {
+      if (r?.status) statuses.add(String(r.status));
+      const cat = r?.category || (r?.briefing ? 'usable' : 'visual_reward');
+      if (cat) categories.add(String(cat));
+      const userLabel =
+        r?.profiles?.artistic_name ||
+        r?.profiles?.display_name ||
+        r?.profiles?.name ||
+        r?.user_id?.slice(0, 8) ||
+        '';
+      if (userLabel) users.add(String(userLabel));
+      const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8) || '';
+      if (itemLabel) items.add(String(itemLabel));
+    });
+    const sortAlpha = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
+    return {
+      statuses: Array.from(statuses).sort(sortAlpha),
+      categories: Array.from(categories).sort(sortAlpha),
+      users: Array.from(users).sort(sortAlpha),
+      items: Array.from(items).sort(sortAlpha),
+    };
+  };
+
+  const usableOptionSets = useMemo(() => buildOptionSets(usableHistory), [usableHistory]);
+  const prodOptionSets = useMemo(() => buildOptionSets(productionHistory), [productionHistory]);
+
+  const filterRows = (
+    rows: any[],
+    period: 'all' | '7d' | '30d',
+    status: string,
+    category: string,
+    user: string,
+    item: string
+  ) => {
+    const now = new Date();
+    const cutoff =
+      period === '7d'
+        ? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        : period === '30d'
+          ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          : null;
+
+    return (rows || []).filter((r: any) => {
+      if (cutoff) {
+        const d = getHistoryDate(r);
+        if (!d || d < cutoff) return false;
+      }
+      if (status !== 'all' && String(r?.status) !== status) return false;
+      const cat = String(r?.category || (r?.briefing ? 'usable' : 'visual_reward'));
+      if (category !== 'all' && cat !== category) return false;
+      const userLabel =
+        r?.profiles?.artistic_name ||
+        r?.profiles?.display_name ||
+        r?.profiles?.name ||
+        r?.user_id?.slice(0, 8) ||
+        '';
+      if (user !== 'all' && String(userLabel) !== user) return false;
+      const itemLabel = r?.store_items?.name || r?.store_item_id?.slice(0, 8) || '';
+      if (item !== 'all' && String(itemLabel) !== item) return false;
+      return true;
+    });
+  };
+
+  const filteredUsableHistory = useMemo(
+    () => filterRows(usableHistory, usablePeriod, usableStatus, usableCategory, usableUser, usableItem),
+    [usableHistory, usablePeriod, usableStatus, usableCategory, usableUser, usableItem]
+  );
+
+  const filteredProductionHistory = useMemo(
+    () => filterRows(productionHistory, prodPeriod, prodStatus, prodCategory, prodUser, prodItem),
+    [productionHistory, prodPeriod, prodStatus, prodCategory, prodUser, prodItem]
+  );
   const [deliverNotes, setDeliverNotes] = useState('');
   const [deliverSaving, setDeliverSaving] = useState(false);
   const [usableDoneOpen, setUsableDoneOpen] = useState(false);
@@ -772,6 +871,103 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                   </Card.Header>
 
                   <Card.Body noPadding>
+                    {/* ✅ Filtros inteligentes (Utilizáveis) */}
+                    <div className="px-4 pt-4 pb-2">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                          <label className="block text-[11px] uppercase text-white/40 mb-1">Período</label>
+                          <select
+                            value={usablePeriod}
+                            onChange={(e) => setUsablePeriod(e.target.value as any)}
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                          >
+                            <option value="all">Tudo</option>
+                            <option value="7d">Últimos 7 dias</option>
+                            <option value="30d">Últimos 30 dias</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] uppercase text-white/40 mb-1">Status</label>
+                          <select
+                            value={usableStatus}
+                            onChange={(e) => setUsableStatus(e.target.value)}
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                          >
+                            <option value="all">Todos</option>
+                            {usableOptionSets.statuses.map((s) => (
+                              <option key={s} value={s}>
+                                {statusLabelPt(s as any) || s}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] uppercase text-white/40 mb-1">Categoria</label>
+                          <select
+                            value={usableCategory}
+                            onChange={(e) => setUsableCategory(e.target.value)}
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                          >
+                            <option value="all">Todas</option>
+                            {usableOptionSets.categories.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] uppercase text-white/40 mb-1">Usuário</label>
+                          <select
+                            value={usableUser}
+                            onChange={(e) => setUsableUser(e.target.value)}
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                          >
+                            <option value="all">Todos</option>
+                            {usableOptionSets.users.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] uppercase text-white/40 mb-1">Item</label>
+                          <select
+                            value={usableItem}
+                            onChange={(e) => setUsableItem(e.target.value)}
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                          >
+                            <option value="all">Todos</option>
+                            {usableOptionSets.items.map((i) => (
+                              <option key={i} value={i}>
+                                {i}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs text-white/50">
+                        <span>
+                          Exibindo <span className="text-white/80 font-semibold">{filteredUsableHistory.length}</span> de{' '}
+                          <span className="text-white/80 font-semibold">{usableHistory.length}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUsablePeriod('all');
+                            setUsableStatus('all');
+                            setUsableCategory('all');
+                            setUsableUser('all');
+                            setUsableItem('all');
+                          }}
+                          className="text-neon-cyan hover:underline"
+                        >
+                          Limpar filtros
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="max-h-96 overflow-y-auto custom-scrollbar">
                       <TableResponsiveWrapper>
                         <table className="w-full text-sm text-left text-[#B3B3B3]">
@@ -787,14 +983,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                           </thead>
 
                           <tbody>
-                            {usableHistory.length === 0 ? (
+                            {filteredUsableHistory.length === 0 ? (
                               <tr>
                                 <td colSpan={6} className="px-4 py-8 text-center text-gray-600 italic">
                                   Nenhum histórico.
                                 </td>
                               </tr>
                             ) : (
-                              usableHistory.map((req: any) => {
+                              filteredUsableHistory.map((req: any) => {
                                 const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                                 const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
                                 const kind = req.briefing?.kind || '-';
@@ -1154,6 +1350,103 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
               </Card.Header>
 
               <Card.Body noPadding>
+                {/* ✅ Filtros inteligentes (Produção) */}
+                <div className="px-4 pt-4 pb-2">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Período</label>
+                      <select
+                        value={prodPeriod}
+                        onChange={(e) => setProdPeriod(e.target.value as any)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Tudo</option>
+                        <option value="7d">Últimos 7 dias</option>
+                        <option value="30d">Últimos 30 dias</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Status</label>
+                      <select
+                        value={prodStatus}
+                        onChange={(e) => setProdStatus(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {prodOptionSets.statuses.map((s) => (
+                          <option key={s} value={s}>
+                            {statusLabelPt(s as any) || s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Categoria</label>
+                      <select
+                        value={prodCategory}
+                        onChange={(e) => setProdCategory(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todas</option>
+                        {prodOptionSets.categories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Usuário</label>
+                      <select
+                        value={prodUser}
+                        onChange={(e) => setProdUser(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {prodOptionSets.users.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] uppercase text-white/40 mb-1">Item</label>
+                      <select
+                        value={prodItem}
+                        onChange={(e) => setProdItem(e.target.value)}
+                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                      >
+                        <option value="all">Todos</option>
+                        {prodOptionSets.items.map((i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-white/50">
+                    <span>
+                      Exibindo <span className="text-white/80 font-semibold">{filteredProductionHistory.length}</span>{' '}
+                      de <span className="text-white/80 font-semibold">{productionHistory.length}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProdPeriod('all');
+                        setProdStatus('all');
+                        setProdCategory('all');
+                        setProdUser('all');
+                        setProdItem('all');
+                      }}
+                      className="text-neon-cyan hover:underline"
+                    >
+                      Limpar filtros
+                    </button>
+                  </div>
+                </div>
+
                 <TableResponsiveWrapper>
                   <table className="w-full text-sm text-left text-[#B3B3B3]">
                     <thead className="text-xs text-[#808080] uppercase bg-[#14171C] border-b border-[#2A2D33]">
@@ -1166,14 +1459,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                     </thead>
 
                     <tbody>
-                      {productionHistory.length === 0 ? (
+                      {filteredProductionHistory.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="px-4 py-8 text-center text-gray-600 italic">
                             Nenhum histórico.
                           </td>
                         </tr>
                       ) : (
-                        productionHistory.map((req: any) => {
+                        filteredProductionHistory.map((req: any) => {
                           const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                           const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
                           const deliveredAt = req.result?.delivered_at || req.updated_at || req.created_at;
@@ -1186,8 +1479,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                               <td className="px-4 py-3">{userLabel}</td>
                               <td className="px-4 py-3">{itemLabel}</td>
                               <td className="px-4 py-3">
-                                <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass('delivered')}`}>
-                                  {statusLabelPt('delivered')}
+                                <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status || 'delivered')}`}>
+                                  {statusLabelPt((req.status || 'delivered') as any)}
                                 </span>
                               </td>
                             </tr>
