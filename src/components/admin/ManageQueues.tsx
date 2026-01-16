@@ -99,7 +99,18 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
       return isNaN(d.getTime()) ? null : d;
     }
     if (typeof v === 'string') {
-      // Aceita ISO e também YYYY-MM-DD
+      // ✅ Aceita ISO e também YYYY-MM-DD (date-only)
+      // IMPORTANT: new Date('YYYY-MM-DD') é UTC -> pode mostrar "dia anterior" no Brasil.
+      const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) {
+        const y = Number(m[1]);
+        const mo = Number(m[2]);
+        const da = Number(m[3]);
+        // Usa 12:00 local para evitar qualquer shift por timezone/DST
+        const dLocal = new Date(y, mo - 1, da, 12, 0, 0);
+        return isNaN(dLocal.getTime()) ? null : dLocal;
+      }
+
       const d = new Date(v);
       return isNaN(d.getTime()) ? null : d;
     }
