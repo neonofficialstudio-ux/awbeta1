@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { UsableItemQueueEntry, ProcessedUsableItemQueueEntry, ArtistOfTheDayQueueEntry, ProcessedArtistOfTheDayQueueEntry, User, Mission } from '../../types';
+import type { UsableItemQueueEntry, ProcessedUsableItemQueueEntry, ArtistOfTheDayQueueEntry, ProcessedArtistOfTheDayQueueEntry, User, Mission, RedeemedItem } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { CheckIcon, PromoteIcon, MissionIcon } from '../../constants';
 import { toast } from 'react-hot-toast';
 import AdminMissionModal from './AdminMissionModal';
+import AdminRewardDetailsModal from './AdminRewardDetailsModal';
 import { getSupabase } from '../../api/supabase/client';
 import { config } from '../../core/config';
 
@@ -191,6 +192,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   // Defensively initialize queues to prevent undefined map errors
   const usableItemQueue = propUsableItemQueue || [];
   const processedItemQueueHistory = propProcessedItemQueueHistory || [];
+
+  const [viewingDetails, setViewingDetails] = useState<RedeemedItem | null>(null);
   
   // Mission Modal State
   const [itemToConvert, setItemToConvert] = useState<UsableItemQueueEntry | null>(null);
@@ -1051,10 +1054,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         <th className="px-4 py-3">#</th>
                         <th className="px-4 py-3">Artista</th>
                         <th className="px-4 py-3">Item</th>
-                        <th className="px-4 py-3">Tipo</th>
-                        <th className="px-4 py-3">Link</th>
+                        <th className="px-4 py-3">Prazo</th>
                         <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Briefing</th>
                         <th className="px-4 py-3 text-right">Ações</th>
                       </tr>
                     </thead>
@@ -1062,7 +1063,7 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                     <tbody>
                       {filteredProductionQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-gray-600 italic">
+                          <td colSpan={7} className="px-4 py-8 text-center text-gray-600 italic">
                             {productionQueue.length === 0
                               ? 'Nenhum pedido na fila.'
                               : 'Nenhum pedido para este filtro.'}
@@ -1072,8 +1073,26 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                         filteredProductionQueue.map((req: any, idx: number) => {
                           const userLabel = req.profiles?.artistic_name || req.profiles?.display_name || req.profiles?.name || req.user_id?.slice(0, 8);
                           const itemLabel = req.store_items?.name || req.store_item_id?.slice(0, 8);
-                          const briefingKind = req.briefing?.kind || '-';
-                          const briefingLink = req.briefing?.link || '-';
+                          const deadline = getDeadline(req);
+
+                          const detailsItem: RedeemedItem = {
+                            id: req.inventory_id || req.id,
+                            userId: req.user_id,
+                            userName: userLabel,
+                            itemId: req.store_item_id || '',
+                            itemName: itemLabel,
+                            itemPrice: 0,
+                            redeemedAt: req.created_at ? productionDateFormatter.format(new Date(req.created_at)) : '-',
+                            redeemedAtISO: req.created_at || new Date().toISOString(),
+                            coinsBefore: 0,
+                            coinsAfter: 0,
+                            status: req.status === 'in_progress' ? 'InProgress' : 'Redeemed',
+                            productionStartedAt: req.status === 'in_progress' ? (req.updated_at || req.created_at) : undefined,
+                            estimatedCompletionDate: (req?.result?.estimated_completion_date || (deadline ? deadline.toISOString() : undefined)) as any,
+                            completionUrl: (req?.result?.delivery_url || req?.result?.deliveryUrl) as any,
+                            productionRequestId: req.id,
+                            productionCategory: 'visual_reward',
+                          };
 
                           return (
                             <tr key={req.id} className="border-b border-[#20242B] hover:bg-[#101216]">
@@ -1083,20 +1102,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                               <td className="px-4 py-3 font-mono text-gray-300">#{idx + 1}</td>
                               <td className="px-4 py-3">{userLabel}</td>
                               <td className="px-4 py-3">{itemLabel}</td>
-                              <td className="px-4 py-3">{briefingKind}</td>
                               <td className="px-4 py-3">
-                                {briefingLink === '-' ? (
-                                  <span>-</span>
-                                ) : (
-                                  <a
-                                    href={briefingLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[#5DADE2] hover:underline truncate block max-w-xs"
-                                  >
-                                    Abrir link
-                                  </a>
-                                )}
+                                {deadline ? deadline.toLocaleDateString('pt-BR') : <span className="text-white/50">—</span>}
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`px-2 py-1 rounded-full text-xs border ${statusBadgeClass(req.status)}`}>
@@ -1105,16 +1112,14 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
                                 {slaBadge(req)}
                               </td>
                               <td className="px-4 py-3">
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyBriefing(req.briefing)}
-                                  className="text-xs text-neon-cyan hover:underline"
-                                >
-                                  Copiar briefing
-                                </button>
-                              </td>
-                              <td className="px-4 py-3">
                                 <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setViewingDetails(detailsItem)}
+                                  >
+                                    Ver detalhes
+                                  </Button>
                                   <Button
                                     variant="secondary"
                                     size="sm"
@@ -1274,6 +1279,13 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           </div>
         </div>
       </Modal>
+
+      {viewingDetails && (
+        <AdminRewardDetailsModal
+          item={viewingDetails}
+          onClose={() => setViewingDetails(null)}
+        />
+      )}
 
     </div>
   );
