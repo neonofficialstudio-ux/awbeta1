@@ -65,6 +65,76 @@ const ArcaneStyles = `
   }
 `;
 
+// ✅ Empty State Premium (quando não há Sorteio Standard ativo)
+const NoActiveStandardRaffle: React.FC<{ hasUpcoming?: boolean }> = ({ hasUpcoming }) => {
+  const hints = [
+    'Estamos preparando o próximo evento.',
+    'Novos prêmios chegam em breve.',
+    'Fique atento — o próximo sorteio pode ser épico.',
+  ];
+  const hint = hints[Math.floor(Math.random() * hints.length)];
+
+  return (
+    <div className="w-full mb-16 relative z-10 px-2 md:px-0">
+      <div className="rounded-[28px] p-8 md:p-10 bg-gradient-to-br from-[#0c0f14] to-[#050608] border border-[#9d4dff]/40 shadow-[0_0_40px_rgba(157,77,255,0.18)] overflow-hidden relative">
+        <div
+          className="absolute inset-0 opacity-30 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 30% 20%, rgba(157,77,255,0.25), transparent 55%), radial-gradient(circle at 70% 60%, rgba(255,214,90,0.18), transparent 55%)',
+          }}
+        />
+
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="max-w-2xl">
+            <p className="text-xs font-black uppercase tracking-[0.35em] text-[#9d4dff] mb-2">
+              Sorteios • Em breve
+            </p>
+            <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase leading-tight">
+              Nenhum sorteio ativo agora
+            </h3>
+            <p className="text-gray-400 mt-2 font-medium">
+              {hint} {hasUpcoming ? 'Veja os próximos sorteios logo abaixo.' : 'Em breve você verá novos eventos aqui.'}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-[#9d4dff]/10 border border-[#9d4dff]/30 text-[#cdb3ff]">
+                Notificações no painel
+              </span>
+              <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-[#FFD447]/10 border border-[#FFD447]/25 text-[#FFE25A]">
+                Prêmios exclusivos
+              </span>
+              <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
+                Tickets com coins
+              </span>
+            </div>
+          </div>
+
+          <div className="min-w-[240px]">
+            <div className="rounded-2xl border border-white/10 bg-black/40 p-5">
+              <p className="text-[10px] text-white/50 uppercase font-black tracking-[0.3em]">
+                Dica
+              </p>
+              <p className="text-white font-black mt-2">
+                Volte amanhã e garanta seus tickets cedo.
+              </p>
+              <p className="text-xs text-white/50 mt-2">
+                Quem compra primeiro geralmente fica com mais chances no final.
+              </p>
+              <div className="mt-4 h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/10">
+                <div className="h-full bg-[#9d4dff]/60 animate-pulse" style={{ width: '62%' }} />
+              </div>
+              <p className="text-[10px] text-white/40 mt-2 font-mono">
+                status: aguardando novo sorteio
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- UTILS ---
 const isRaffleEnded = (raffle: Raffle) => {
   return new Date(raffle.endsAt).getTime() <= Date.now();
@@ -952,13 +1022,17 @@ const Raffles: React.FC = () => {
             )}
             
             {/* 2. STANDARD RAFFLE MAIN CARD (Restored V1.0 with V2 Logic) */}
-            {featuredStandardRaffle && (
+            {featuredStandardRaffle ? (
                 <StandardRaffleHero
                     raffle={featuredStandardRaffle}
                     myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
                     totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
                     userCoins={activeUser.coins}
                     onBuy={setRaffleToBuy}
+                />
+            ) : (
+                <NoActiveStandardRaffle
+                    hasUpcoming={raffles.some(r => r.status === 'scheduled' || (r.startsAt && new Date(r.startsAt) > new Date()))}
                 />
             )}
 
