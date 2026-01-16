@@ -600,7 +600,30 @@ export const AdminService = {
           if (error) return { success: false, error: error.message || 'Falha ao salvar pacote' };
 
           CacheService.invalidate('admin_dashboard_data');
-          return { success: true, id: data as string };
+
+          // ✅ Compat com UI (ManageStore.tsx): retorna lista atualizada em `packages`
+          const { data: packs, error: packsErr } = await supabase
+            .from('coin_packs')
+            .select('id,title,coins,bonus_coins,price_cents,in_stock,meta,created_at,sort_order')
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: false });
+
+          if (packsErr) {
+            // Mesmo se falhar o fetch, mantém o save ok.
+            return { success: true, id: data as string };
+          }
+
+          const packages = (packs || []).map((p: any) => ({
+            id: p.id,
+            name: p.title ?? 'Pacote',
+            coins: Number(p.coins ?? 0) + Number(p.bonus_coins ?? 0),
+            price: Number(p.price_cents ?? 0) / 100,
+            paymentLink: String(p?.meta?.paymentLink ?? ''),
+            isOutOfStock: !(p.in_stock === true),
+            imageUrl: p?.meta?.imageUrl ?? '',
+          }));
+
+          return { success: true, id: data as string, packages };
         },
 
         deleteCoinPack: async (id: string) => {
