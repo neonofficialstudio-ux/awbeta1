@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
 import type { Raffle, RaffleTicket, StoreItem, UsableItem, User, JackpotRound } from '../../types';
 import type { JackpotState } from '../../state/state.types';
 import AdminRaffleModal from './AdminRaffleModal';
@@ -10,7 +11,7 @@ import AdminDrawJackpotModal from './AdminDrawJackpotModal';
 import { EditIcon, DeleteIcon, UsersIcon, CoinIcon, TrendingUpIcon, TrophyIcon, SettingsIcon, CheckIcon, StarIcon, TicketIcon, CrownIcon } from '../../constants';
 import * as api from '../../api/index';
 import { parseLocalDate, toLocalInputValue } from '../../api/utils/localDate';
-import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot } from '../../api/admin/raffles';
+import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot, adminAwardManual } from '../../api/admin/raffles';
 import { PrizeResolver } from '../../api/raffles/prize.resolver';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
@@ -378,6 +379,15 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     // V13.5 Detailed Stats
     const [detailedStats, setDetailedStats] = useState<any>(null);
 
+    // ✅ Premiação Manual (Supabase)
+    const [isManualAwardOpen, setIsManualAwardOpen] = useState(false);
+    const [manualPrizeType, setManualPrizeType] = useState<'coins' | 'item' | 'hybrid' | 'manual_text'>('manual_text');
+    const [manualUserId, setManualUserId] = useState<string>('');
+    const [manualItemId, setManualItemId] = useState<string>('');
+    const [manualCoinReward, setManualCoinReward] = useState<number>(0);
+    const [manualText, setManualText] = useState<string>('');
+    const [isManualSubmitting, setIsManualSubmitting] = useState(false);
+
     useEffect(() => {
         setRafflesList(initialRaffles);
     }, [initialRaffles]);
@@ -531,6 +541,54 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     const handleSetHighlight = async (id: string) => {
         await adminSetHighlightedRaffle(id);
         await refreshAdminData();
+    };
+
+    const openManualAward = () => {
+        setManualPrizeType('manual_text');
+        setManualUserId(allUsers?.[0]?.id || '');
+        setManualItemId('');
+        setManualCoinReward(0);
+        setManualText('');
+        setIsManualAwardOpen(true);
+    };
+
+    const submitManualAward = async () => {
+        if (!manualUserId) {
+            toast.error('Selecione um usuário.');
+            return;
+        }
+
+        if ((manualPrizeType === 'item' || manualPrizeType === 'hybrid') && !manualItemId) {
+            toast.error('Selecione um item.');
+            return;
+        }
+
+        if ((manualPrizeType === 'coins' || manualPrizeType === 'hybrid') && (!manualCoinReward || manualCoinReward <= 0)) {
+            toast.error('Informe a quantidade de coins.');
+            return;
+        }
+
+        setIsManualSubmitting(true);
+        try {
+            if (config.backendProvider === 'supabase') {
+                await adminAwardManual({
+                    userId: manualUserId,
+                    prizeType: manualPrizeType,
+                    itemId: (manualPrizeType === 'item' || manualPrizeType === 'hybrid') ? manualItemId : null,
+                    coinReward: (manualPrizeType === 'coins' || manualPrizeType === 'hybrid') ? manualCoinReward : null,
+                    customText: manualText || null,
+                });
+                toast.success('Premiação manual registrada!');
+                setIsManualAwardOpen(false);
+                await refreshAdminData();
+            } else {
+                toast.error('Premiação manual está disponível apenas no modo Supabase.');
+            }
+        } catch (e: any) {
+            toast.error(e?.message || 'Falha ao registrar premiação manual.');
+        } finally {
+            setIsManualSubmitting(false);
+        }
     };
 
     const allItems = [...storeItems, ...usableItems];
@@ -688,7 +746,17 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                     <div>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white">Sorteios Ativos & Agendados</h3>
-                            <button onClick={() => handleOpenModal()} className="bg-goldenYellow-500 text-black font-bold py-2 px-4 rounded-lg hover:bg-goldenYellow-400 transition-colors shadow-lg">+ Criar Sorteio</button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={openManualAward}
+                                    className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold py-2 px-4 rounded-lg transition-colors shadow-lg"
+                                >
+                                    + Premiação Manual
+                                </button>
+                                <button onClick={() => handleOpenModal()} className="bg-goldenYellow-500 text-black font-bold py-2 px-4 rounded-lg hover:bg-goldenYellow-400 transition-colors shadow-lg">
+                                    + Criar Sorteio
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left text-gray-400">
@@ -891,6 +959,109 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
             {viewingParticipantsFor && <AdminRaffleParticipantsModal raffle={viewingParticipantsFor} allTickets={allTickets} allUsers={allUsers} onClose={() => setViewingParticipantsFor(null)} />}
             
             <ConfirmationModal isOpen={!!raffleToDelete} onClose={() => setRaffleToDelete(null)} onConfirm={handleConfirmDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja excluir o sorteio?`} confirmButtonText="Sim, Excluir" />
+
+            {/* ✅ MODAL: PREMIAÇÃO MANUAL (SUPABASE) */}
+            {isManualAwardOpen && (
+                <ModalPortal>
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setIsManualAwardOpen(false)}>
+                        <div className="bg-[#0E0E0E] rounded-2xl border border-neon-cyan/30 w-full max-w-lg p-6 shadow-[0_0_60px_rgba(0,230,255,0.12)]" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-black text-white uppercase tracking-wide">Premiação Manual</h3>
+                                <button onClick={() => setIsManualAwardOpen(false)} className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10">✕</button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-xs text-white/60 uppercase font-bold block mb-1">Usuário</label>
+                                    <select
+                                        value={manualUserId}
+                                        onChange={(e) => setManualUserId(e.target.value)}
+                                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                                    >
+                                        {(allUsers || []).map((u) => (
+                                            <option key={u.id} value={u.id}>
+                                                {getDisplayName(u) || u.id.slice(0, 8)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-white/60 uppercase font-bold block mb-1">Tipo</label>
+                                    <select
+                                        value={manualPrizeType}
+                                        onChange={(e) => setManualPrizeType(e.target.value as any)}
+                                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                                    >
+                                        <option value="manual_text">Texto (apenas notificação)</option>
+                                        <option value="coins">Coins</option>
+                                        <option value="item">Item (Inventário)</option>
+                                        <option value="hybrid">Híbrido (Item + Coins)</option>
+                                    </select>
+                                </div>
+
+                                {(manualPrizeType === 'item' || manualPrizeType === 'hybrid') && (
+                                    <div className="md:col-span-2">
+                                        <label className="text-xs text-white/60 uppercase font-bold block mb-1">Item</label>
+                                        <select
+                                            value={manualItemId}
+                                            onChange={(e) => setManualItemId(e.target.value)}
+                                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                                        >
+                                            <option value="">Selecione...</option>
+                                            {allItems.map((i: any) => (
+                                                <option key={i.id} value={i.id}>
+                                                    {i.name} {i.price ? `(Preço: ${i.price})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {(manualPrizeType === 'coins' || manualPrizeType === 'hybrid') && (
+                                    <div className="md:col-span-2">
+                                        <label className="text-xs text-white/60 uppercase font-bold block mb-1">Coins</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={manualCoinReward}
+                                            onChange={(e) => setManualCoinReward(Number(e.target.value))}
+                                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                                            placeholder="Ex.: 5000"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="md:col-span-2">
+                                    <label className="text-xs text-white/60 uppercase font-bold block mb-1">Mensagem (opcional)</label>
+                                    <textarea
+                                        value={manualText}
+                                        onChange={(e) => setManualText(e.target.value)}
+                                        className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none min-h-[90px]"
+                                        placeholder="Ex.: Parabéns! Você recebeu um prêmio especial..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                                <button
+                                    onClick={() => setIsManualAwardOpen(false)}
+                                    className="px-5 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={submitManualAward}
+                                    disabled={isManualSubmitting}
+                                    className="px-6 py-2 rounded-lg bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-black disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {isManualSubmitting ? 'Registrando...' : 'Confirmar Premiação'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </ModalPortal>
+            )}
         </>
     );
 };
