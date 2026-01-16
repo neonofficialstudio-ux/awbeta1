@@ -77,13 +77,63 @@ export const fetchStoreData = (userId: string) => withLatency(async () => {
                 platform: row?.meta?.platform ?? 'all',
                 kind: row?.meta?.usable_kind ?? 'instagram_post',
             }));
+        // --- coin packs (supabase)
+        const { data: rawPacks, error: packErr } = await supabase
+            .from('coin_packs')
+            .select('id,title,coins,bonus_coins,price_cents,currency,is_active,in_stock,sort_order,meta,created_at')
+            .order('sort_order', { ascending: true })
+            .order('created_at', { ascending: false });
+        if (packErr) return { success: false, error: packErr.message || 'Falha ao carregar pacotes' };
+
+        const coinPacks = (rawPacks || [])
+            .filter((p: any) => p.is_active === true)
+            .map((p: any) => ({
+                id: p.id,
+                name: p.title ?? 'Pacote',
+                coins: Number(p.coins ?? 0) + Number(p.bonus_coins ?? 0),
+                price: Number(p.price_cents ?? 0) / 100,
+                paymentLink: String(p?.meta?.paymentLink ?? ''),
+                isOutOfStock: !(p.in_stock === true),
+                imageUrl: p?.meta?.imageUrl ?? '',
+            }));
+
+        // --- coin purchase requests (supabase)
+        const { data: rawReqs, error: reqErr } = await supabase
+            .from('coin_purchase_requests')
+            .select('id,user_id,pack_id,total_coins,price_cents,status,created_at,decided_at,meta, pack:coin_packs(title)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+        if (reqErr) return { success: false, error: reqErr.message || 'Falha ao carregar pedidos' };
+
+        const statusMap: Record<string, any> = {
+            pending: 'pending_approval',
+            approved: 'approved',
+            rejected: 'rejected',
+            cancelled: 'cancelled',
+        };
+
+        const coinPurchaseRequests = (rawReqs || []).map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            userName: '',
+            packId: r.pack_id,
+            packName: r?.pack?.title ?? 'Pacote',
+            coins: Number(r.total_coins ?? 0),
+            price: Number(r.price_cents ?? 0) / 100,
+            requestedAt: r.created_at,
+            status: statusMap[String(r.status ?? 'pending')] ?? 'pending_approval',
+            paymentLink: r?.meta?.paymentLink,
+            proofUrl: r?.meta?.proofUrl,
+            reviewedAt: r.decided_at ?? undefined,
+        }));
+
         return {
             success: true,
             data: {
                 storeItems,
                 usableItems,
-                coinPacks: [],
-                coinPurchaseRequests: [],
+                coinPacks,
+                coinPurchaseRequests,
             }
         };
     }
@@ -433,7 +483,63 @@ export const queueForArtistOfTheDay = (userId: string, redeemedItemId: string) =
     return { success: false, error: "Este item foi descontinuado." };
 });
 
-export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(() => {
+export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(async () => {
+    if (config.backendProvider === 'supabase') {
+        const supabase = requireSupabaseClient();
+
+        const refId = (globalThis as any).crypto?.randomUUID
+            ? (globalThis as any).crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const { data: requestId, error } = await supabase.rpc('create_coin_purchase_request', {
+            p_pack_id: pack.id,
+            p_ref_id: refId,
+            p_provider: 'manual',
+            p_provider_payment_id: null,
+            p_meta: {
+                paymentLink: pack.paymentLink ?? null,
+                ui_source: 'store.buyCoinPack',
+            },
+        });
+
+        if (error) return { success: false, error: error.message || 'Falha ao criar pedido' };
+
+        // tenta retornar o pedido já mapeado (pra UI atualizar sem reload)
+        const { data: row, error: readErr } = await supabase
+            .from('coin_purchase_requests')
+            .select('id,user_id,pack_id,total_coins,price_cents,status,created_at,decided_at,meta, pack:coin_packs(title)')
+            .eq('id', requestId)
+            .single();
+
+        if (readErr || !row) {
+            return { success: true, newRequest: { id: requestId }, notifications: [] };
+        }
+
+        const statusMap: Record<string, any> = {
+            pending: 'pending_approval',
+            approved: 'approved',
+            rejected: 'rejected',
+            cancelled: 'cancelled',
+        };
+
+        const newRequest: any = {
+            id: row.id,
+            userId: row.user_id,
+            userName: '',
+            packId: row.pack_id,
+            packName: (row as any)?.pack?.title ?? pack.name,
+            coins: Number((row as any).total_coins ?? 0),
+            price: Number((row as any).price_cents ?? 0) / 100,
+            requestedAt: (row as any).created_at,
+            status: statusMap[String((row as any).status ?? 'pending')] ?? 'pending_approval',
+            paymentLink: (row as any)?.meta?.paymentLink,
+            proofUrl: (row as any)?.meta?.proofUrl,
+            reviewedAt: (row as any).decided_at ?? undefined,
+        };
+
+        return { success: true, newRequest, notifications: [] };
+    }
+
     const user = repo.select("users").find((u: any) => u.id === userId);
     if(!user) return { success: false, error: "User not found" };
     
@@ -457,6 +563,9 @@ export const buyCoinPack = (userId: string, pack: CoinPack) => withLatency(() =>
 });
 
 export const initiatePayment = (requestId: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: 'Pagamento manual: aguarde o admin processar o pedido.' };
+    }
     const requests = repo.select("coinPurchaseRequests");
     const requestIndex = requests.findIndex((r: any) => r.id === requestId);
     if (requestIndex === -1) return { success: false, error: "Request not found" };
@@ -477,7 +586,10 @@ export const initiatePayment = (requestId: string) => withLatency(() => {
     return { success: true, updatedRequest };
 });
 
-export const buyCustomCoinPack = (userId: string, coins: number, price: number) => withLatency(() => {
+export const buyCustomCoinPack = (userId: string, coins: number, price: number) => withLatency(async () => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: 'Compra de pacote personalizado ainda não está disponível no Supabase.' };
+    }
     const user = repo.select("users").find((u: any) => u.id === userId);
     if(!user) return { success: false, error: "User not found" };
     
@@ -492,6 +604,9 @@ export const buyCustomCoinPack = (userId: string, coins: number, price: number) 
 });
 
 export const openPaymentLink = (requestId: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: 'Link de pagamento não é gerado automaticamente. Aguarde instruções no pedido.' };
+    }
      // No-op logic for mock, just returns success
      // In real app, might log click analytics
     const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
@@ -499,6 +614,9 @@ export const openPaymentLink = (requestId: string) => withLatency(() => {
 });
 
 export const cancelCoinPurchaseRequest = (requestId: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: 'Cancelamento não disponível no modo Supabase (pedido é auditável).' };
+    }
     const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
     if (!req) return { success: false, error: "Request not found" };
 
@@ -512,6 +630,9 @@ export const cancelCoinPurchaseRequest = (requestId: string) => withLatency(() =
 });
 
 export const submitCoinPurchaseProof = (userId: string, requestId: string, proofDataUrl: string) => withLatency(() => {
+    if (config.backendProvider === 'supabase') {
+        return { success: false, error: 'Envio de comprovante não disponível: use o canal combinado e aguarde aprovação.' };
+    }
     const req = repo.select("coinPurchaseRequests").find((r: any) => r.id === requestId);
     if (!req) return { success: false, error: "Request not found" };
 
