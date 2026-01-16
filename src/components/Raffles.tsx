@@ -462,6 +462,14 @@ const StandardRaffleHero: React.FC<{
     const hasReachedLimit = limit > 0 && myTickets >= limit;
     const percent = limit > 0 ? (myTickets / limit) * 100 : 0;
 
+    const raffleTitle = (raffle as any)?.meta?.title || raffle.itemName;
+    const prizeType = (raffle.prizeType || '').toLowerCase();
+    const prizeText =
+        prizeType === 'coins' ? `${Number(raffle.coinReward || 0)} LC`
+        : prizeType === 'hybrid' ? `${raffle.itemName} + ${Number(raffle.coinReward || 0)} LC`
+        : prizeType === 'manual_text' ? (raffle.customRewardText || raffle.itemName)
+        : raffle.itemName;
+
     // Highlight Logic: Determine target date (Start or End) and Label
     const targetDate = !hasStarted && raffle.startsAt ? raffle.startsAt : raffle.endsAt;
     const label = !hasStarted ? "INICIA EM" : "TEMPO RESTANTE";
@@ -509,9 +517,13 @@ const StandardRaffleHero: React.FC<{
                     <div className="flex justify-between items-start mb-6">
                         <div>
                             <h2 className="text-3xl md:text-5xl font-black text-white font-chakra uppercase leading-none mb-2 drop-shadow-[0_0_10px_rgba(157,77,255,0.5)]">
-                                {raffle.itemName}
+                                {raffleTitle}
                             </h2>
                             <p className="text-[#B3B3B3] text-sm font-medium">Sorteio Standard • ID: {raffle.id.slice(0,6)}</p>
+                            <p className="text-[#B3B3B3] text-sm mt-2">
+                                <span className="text-white/60 font-bold">Prêmio:</span>{' '}
+                                <span className="text-white/90 font-semibold">{prizeText}</span>
+                            </p>
                         </div>
                         <div className="text-right hidden md:block">
                             {!hasEnded && <DigitalCountdown targetDate={targetDate} large label={label} />}
@@ -559,6 +571,18 @@ const StandardRaffleHero: React.FC<{
                             <button disabled className="flex-1 w-full py-5 rounded-xl font-black text-sm uppercase tracking-[0.2em] bg-gray-800 text-gray-400 border border-gray-600 cursor-not-allowed opacity-70">
                                 ENCERRADO
                             </button>
+                        )}
+
+                        {hasEnded && raffle.winnerId && (
+                            <div className="flex-1 w-full text-center md:text-right">
+                                <p className="text-xs text-white/50 uppercase font-bold tracking-widest">Vencedor</p>
+                                <p className="text-white font-black">
+                                    {raffle.winnerName || (raffle.winnerId ? raffle.winnerId.slice(0, 8) : '—')}
+                                </p>
+                                <p className="text-xs text-white/50">
+                                    {raffle.winnerDefinedAt ? new Date(raffle.winnerDefinedAt).toLocaleString('pt-BR') : ''}
+                                </p>
+                            </div>
                         )}
 
                         {!hasStarted && (

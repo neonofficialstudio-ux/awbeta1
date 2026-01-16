@@ -53,18 +53,40 @@ export async function adminDrawRaffle(raffleId: string) {
     assertSupabaseProvider('admin.raffles.draw');
 
     const supabase = requireSupabaseClient();
-    const { data, error } = await supabase.rpc(
-        "admin_draw_raffle",
-        {
-            p_raffle: raffleId,
-            p_ref_id: crypto.randomUUID(),
-        }
-    );
+    const { data, error } = await supabase.rpc("admin_draw_raffle", {
+        p_raffle: raffleId,
+        p_ref_id: crypto.randomUUID(),
+    });
 
     if (error) throw error;
     return data;
 }
 
+export async function adminPreviewDrawRaffle(raffleId: string, refId: string) {
+    assertSupabaseProvider('admin.raffles.preview_draw');
+    const supabase = requireSupabaseClient();
+
+    const { data, error } = await supabase.rpc("admin_preview_raffle_draw", {
+        p_raffle: raffleId,
+        p_ref_id: refId,
+    });
+
+    if (error) throw error;
+    return data;
+}
+
+export async function adminDrawRaffleWithRef(raffleId: string, refId: string) {
+    assertSupabaseProvider('admin.raffles.draw_with_ref');
+    const supabase = requireSupabaseClient();
+
+    const { data, error } = await supabase.rpc("admin_draw_raffle", {
+        p_raffle: raffleId,
+        p_ref_id: refId,
+    });
+
+    if (error) throw error;
+    return data;
+}
 export async function adminAwardManual(payload: {
     userId: string;
     prizeType: 'coins' | 'item' | 'hybrid' | 'manual_text';

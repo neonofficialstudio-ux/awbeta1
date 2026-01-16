@@ -11,7 +11,7 @@ import AdminDrawJackpotModal from './AdminDrawJackpotModal';
 import { EditIcon, DeleteIcon, UsersIcon, CoinIcon, TrendingUpIcon, TrophyIcon, SettingsIcon, CheckIcon, StarIcon, TicketIcon, CrownIcon } from '../../constants';
 import * as api from '../../api/index';
 import { parseLocalDate, toLocalInputValue } from '../../api/utils/localDate';
-import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot, adminAwardManual, drawRaffleWinner } from '../../api/admin/raffles';
+import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminScheduleJackpot, adminAwardManual, adminPreviewDrawRaffle, adminDrawRaffleWithRef } from '../../api/admin/raffles';
 import { PrizeResolver } from '../../api/raffles/prize.resolver';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
@@ -355,6 +355,13 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     const [drawParticipants, setDrawParticipants] = useState<User[]>([]);
     const [drawTickets, setDrawTickets] = useState<RaffleTicket[]>([]);
     const [lastDraw, setLastDraw] = useState<{ raffle: Raffle; winner: User | null } | null>(null);
+
+    // ✅ Enterprise confirm modal (preview -> approve)
+    const [drawConfirmOpen, setDrawConfirmOpen] = useState(false);
+    const [drawConfirmRaffle, setDrawConfirmRaffle] = useState<Raffle | null>(null);
+    const [drawRefId, setDrawRefId] = useState<string>('');
+    const [drawPreview, setDrawPreview] = useState<any>(null);
+    const [drawPhase, setDrawPhase] = useState<'loading' | 'ready' | 'confirming'>('loading');
     
     const [jackpotState, setJackpotState] = useState<JackpotState | null>(null);
     const [isEditJackpotModalOpen, setIsEditJackpotModalOpen] = useState(false);
@@ -515,14 +522,20 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
     };
 
     const handleInitiateDraw = async (raffle: Raffle) => {
+        // ✅ Supabase: backend faz o draw + premia (coins/item/hybrid) de forma auditável
         if (config.backendProvider === 'supabase') {
             try {
-                const res: any = await drawRaffleWinner(raffle.id);
-                const winnerId = res?.winner_user_id || res?.winnerUserId || res?.winnerId || null;
-                const winner = winnerId ? (allUsers || []).find((u) => u.id === winnerId) || null : null;
-                setLastDraw({ raffle, winner });
-                toast.success('Apuração concluída! Vencedor definido e prêmio registrado.');
-                await refreshAdminData();
+                // Enterprise flow: preview -> admin approve
+                const refId = crypto.randomUUID();
+                setDrawRefId(refId);
+                setDrawConfirmRaffle(raffle);
+                setDrawPreview(null);
+                setDrawPhase('loading');
+                setDrawConfirmOpen(true);
+
+                const preview = await adminPreviewDrawRaffle(raffle.id, refId);
+                setDrawPreview(preview);
+                setDrawPhase('ready');
                 return;
             } catch (e: any) {
                 toast.error(e?.message || 'Erro ao apurar sorteio.');
@@ -538,6 +551,34 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
         } catch (e: any) {
             alert("Erro ao preparar sorteio: " + e.message);
         }
+    };
+
+    const confirmDraw = async () => {
+        if (!drawConfirmRaffle || !drawRefId) return;
+        setDrawPhase('confirming');
+        try {
+            const res: any = await adminDrawRaffleWithRef(drawConfirmRaffle.id, drawRefId);
+            const winnerId = res?.winner_user_id || res?.winnerUserId || res?.winnerId || null;
+            const winner = winnerId ? (allUsers || []).find((u) => u.id === winnerId) || null : null;
+            setDrawConfirmOpen(false);
+            setDrawConfirmRaffle(null);
+            setDrawPreview(null);
+            toast.success('Apuração concluída! Vencedor definido e prêmio registrado.');
+            setLastDraw({ raffle: drawConfirmRaffle, winner });
+            await refreshAdminData();
+        } catch (e: any) {
+            toast.error(e?.message || 'Falha ao confirmar apuração.');
+            setDrawPhase('ready');
+        }
+    };
+
+    const formatPrizeAdmin = (r: any) => {
+        const type = (r?.prizeType || r?.prize_type || '').toLowerCase();
+        if (type === 'coins') return `+${Number(r?.coinReward ?? 0)} LC`;
+        if (type === 'item') return 'ITEM';
+        if (type === 'hybrid') return `ITEM + ${Number(r?.coinReward ?? 0)} LC`;
+        if (type === 'manual_text') return 'TEXTO';
+        return (type || '—').toUpperCase();
     };
 
     const handleConfirmRaffleWinner = async (winnerId: string) => {
@@ -878,14 +919,22 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                                     : <span className="text-green-400 bg-green-900/20 px-2 py-1 rounded text-xs border border-green-500/20">FINALIZADO</span>
                                                 }
                                             </td>
-                                            <td className="px-6 py-3 text-xs">
-                                                Vencedor:{' '}
+                                            <td className="px-6 py-3 text-xs text-white/70">
+                                                <span className="text-white/40">Premiação:</span>{' '}
+                                                <span className="text-white font-bold">{formatPrizeAdmin(raffle)}</span>
+                                                <span className="mx-2 text-white/20">•</span>
+                                                <span className="text-white/40">Vencedor:</span>{' '}
                                                 <strong className="text-goldenYellow-500">
                                                     {raffle.winnerId
                                                         ? (getDisplayName((allUsers || []).find(user => user.id === raffle.winnerId) as User)
                                                             || raffle.winnerId.slice(0, 8))
                                                         : '-'}
                                                 </strong>
+                                                <span className="mx-2 text-white/20">•</span>
+                                                <span className="text-white/40">Apurado em:</span>{' '}
+                                                <span className="text-white/70">
+                                                    {raffle.winnerDefinedAt ? new Date(raffle.winnerDefinedAt).toLocaleString('pt-BR') : '—'}
+                                                </span>
                                             </td>
                                             <td className="px-6 py-3 text-right">
                                                 <ActionButton onClick={() => setRaffleToDelete(raffle)} title="Apagar Histórico" className="text-red-900 hover:text-red-500"><DeleteIcon className="w-4 h-4" /></ActionButton>
@@ -1060,6 +1109,95 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                     className="px-5 py-2 rounded-lg bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-black"
                                 >
                                     Fechar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </ModalPortal>
+            )}
+
+            {/* ✅ Enterprise: modal de confirmação do draw (preview -> approve/recuse) */}
+            {drawConfirmOpen && drawConfirmRaffle && (
+                <ModalPortal>
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setDrawConfirmOpen(false)}>
+                        <div className="bg-[#0E0E0E] rounded-2xl border border-neon-cyan/30 w-full max-w-2xl p-6 shadow-[0_0_60px_rgba(0,230,255,0.12)]" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-black text-white uppercase tracking-wide">Confirmar Apuração</h3>
+                                <button onClick={() => setDrawConfirmOpen(false)} className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10">✕</button>
+                            </div>
+
+                            {/* “sorteio acontecendo” */}
+                            <div className="border border-white/10 rounded-xl p-4 bg-white/5">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-white font-black">{drawConfirmRaffle.itemName}</p>
+                                        <p className="text-xs text-white/50">Raffle ID: {drawConfirmRaffle.id}</p>
+                                    </div>
+                                    <span className={`text-xs font-black px-3 py-1 rounded border ${drawPhase === 'loading' ? 'text-yellow-300 border-yellow-500/30 bg-yellow-900/20' : 'text-neon-cyan border-neon-cyan/40 bg-neon-cyan/10'}`}>
+                                        {drawPhase === 'loading' ? 'SORTEANDO…' : drawPhase === 'confirming' ? 'CONFIRMANDO…' : 'PRÉVIA PRONTA'}
+                                    </span>
+                                </div>
+                                <div className="mt-3 h-2 w-full bg-[#1a1a1a] rounded-full overflow-hidden border border-white/10">
+                                    <div className={`h-full ${drawPhase === 'loading' || drawPhase === 'confirming' ? 'animate-pulse bg-neon-cyan/60' : 'bg-neon-cyan/30'}`} style={{ width: drawPhase === 'loading' ? '55%' : drawPhase === 'confirming' ? '85%' : '100%' }} />
+                                </div>
+                            </div>
+
+                            {/* resultado */}
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="border border-white/10 rounded-xl p-4 bg-black/30">
+                                    <p className="text-xs text-white/50 uppercase font-bold mb-2">Vencedor (prévia)</p>
+                                    {drawPreview?.winner_user_id ? (
+                                        (() => {
+                                            const w = (allUsers || []).find(u => u.id === drawPreview.winner_user_id) || null;
+                                            return w ? (
+                                                <div className="flex items-center gap-3">
+                                                    <AvatarWithFrame user={w as any} sizeClass="w-12 h-12" />
+                                                    <div>
+                                                        <p className="text-white font-black">{getDisplayName(w as any) || w.id.slice(0, 8)}</p>
+                                                        <p className="text-xs text-white/50">{w.id}</p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-white/80 text-sm font-mono">{drawPreview.winner_user_id}</p>
+                                            );
+                                        })()
+                                    ) : (
+                                        <p className="text-white/60 text-sm">{drawPhase === 'loading' ? 'Calculando vencedor…' : '—'}</p>
+                                    )}
+                                </div>
+
+                                <div className="border border-white/10 rounded-xl p-4 bg-black/30">
+                                    <p className="text-xs text-white/50 uppercase font-bold mb-2">Prêmio</p>
+                                    <div className="flex items-center gap-3">
+                                        <img
+                                            src={PrizeResolver.resolve(drawConfirmRaffle).displayImage}
+                                            className="w-12 h-12 rounded-lg object-cover border border-white/10"
+                                        />
+                                        <div>
+                                            <p className="text-white font-black">{PrizeResolver.resolve(drawConfirmRaffle).displayTitle}</p>
+                                            <p className="text-xs text-white/50">Tipo: {(PrizeResolver.resolve(drawConfirmRaffle).type || '').toUpperCase()}</p>
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-xs text-white/60">
+                                        Ao <span className="text-neon-cyan font-bold">aprovar</span>, o Supabase registra automaticamente (coins/inventário).
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                                <button
+                                    onClick={() => setDrawConfirmOpen(false)}
+                                    className="px-5 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-bold"
+                                    disabled={drawPhase === 'confirming'}
+                                >
+                                    Recusar
+                                </button>
+                                <button
+                                    onClick={confirmDraw}
+                                    className="px-6 py-2 rounded-lg bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-black disabled:opacity-60 disabled:cursor-not-allowed"
+                                    disabled={drawPhase !== 'ready'}
+                                >
+                                    Aprovar e Premiar
                                 </button>
                             </div>
                         </div>
