@@ -160,6 +160,8 @@ export const supabaseAdminRepository = {
         submissionsRes,
         ledgerRes,
         storeItemsRes,
+        coinPacksRes,
+        coinPurchaseRequestsRes,
         inventoryRes,
         rafflesRes,
         ticketsRes,
@@ -178,6 +180,12 @@ export const supabaseAdminRepository = {
           .order('created_at', { ascending: false })
           .limit(100),
         supabase.from('store_items').select('*'),
+        supabase.from('coin_packs').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
+        supabase
+          .from('coin_purchase_requests')
+          .select('*, profiles(name, display_name, id), pack:coin_packs(title)')
+          .order('created_at', { ascending: false })
+          .limit(200),
         supabase
           .from('inventory')
           .select(`*, store_items(name), profiles(name)`)
@@ -197,6 +205,8 @@ export const supabaseAdminRepository = {
         submissionsRes.error,
         ledgerRes.error,
         storeItemsRes.error,
+        coinPacksRes.error,
+        coinPurchaseRequestsRes.error,
         inventoryRes.error,
         rafflesRes.error,
         ticketsRes.error,
@@ -229,6 +239,38 @@ export const supabaseAdminRepository = {
           platform: (i?.meta?.platform ?? 'all'),
           kind: (i?.meta?.usable_kind ?? 'instagram_post'),
         }));
+
+      const coinPacks = (coinPacksRes.data || []).map((p: any) => ({
+        id: p.id,
+        name: p.title ?? 'Pacote',
+        coins: Number(p.coins ?? 0) + Number(p.bonus_coins ?? 0),
+        price: Number(p.price_cents ?? 0) / 100,
+        paymentLink: String(p?.meta?.paymentLink ?? ''),
+        isOutOfStock: !(p.in_stock === true),
+        imageUrl: p?.meta?.imageUrl ?? '',
+      }));
+
+      const statusMap: Record<string, any> = {
+        pending: 'pending_approval',
+        approved: 'approved',
+        rejected: 'rejected',
+        cancelled: 'cancelled',
+      };
+
+      const coinPurchaseRequests = (coinPurchaseRequestsRes.data || []).map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: r?.profiles?.display_name || r?.profiles?.name || '',
+        packId: r.pack_id,
+        packName: r?.pack?.title ?? 'Pacote',
+        coins: Number(r.total_coins ?? 0),
+        price: Number(r.price_cents ?? 0) / 100,
+        requestedAt: r.created_at,
+        status: statusMap[String(r.status ?? 'pending')] ?? 'pending_approval',
+        paymentLink: r?.meta?.paymentLink,
+        proofUrl: r?.meta?.proofUrl,
+        reviewedAt: r.decided_at ?? undefined,
+      }));
       const redeemedItems = (inventoryRes.data || []).map((row: any) =>
         mapInventoryToRedeemedItem(
           row,
@@ -258,6 +300,8 @@ export const supabaseAdminRepository = {
           allTransactions,
           storeItems,
           usableItems,
+          coinPacks,
+          coinPurchaseRequests,
           hallOfFame: allTransactions.filter((entry) => ['raffle_win', 'mission_complete'].includes(entry.source)),
           raffles,
           allTickets,

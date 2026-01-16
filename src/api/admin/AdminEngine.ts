@@ -564,9 +564,87 @@ export const AdminService = {
           return { success: true };
         },
 
-        saveCoinPack: (pack: CoinPack) => { ensureMockBackend('store.saveCoinPack'); /* mantém mock */ return { success: false, error: 'mock_only' }; },
-        deleteCoinPack: (id: string) => { ensureMockBackend('store.deleteCoinPack'); return { success: false, error: 'mock_only' }; },
-        toggleCoinPackStock: (id: string) => { ensureMockBackend('store.toggleCoinPackStock'); return { success: false, error: 'mock_only' }; },
+        saveCoinPack: async (pack: any) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.saveCoinPack');
+            return { success: false, error: 'mock_only' };
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error('[AdminCoinPacks] Supabase client not initialized');
+
+          const priceCents = Math.max(0, Math.round(Number(pack?.price ?? 0) * 100));
+          const meta = {
+            paymentLink: pack?.paymentLink ?? '',
+            imageUrl: pack?.imageUrl ?? '',
+            legacy: {
+              name: pack?.name ?? '',
+              price: pack?.price ?? 0,
+            }
+          };
+
+          const { data, error } = await supabase.rpc('admin_upsert_coin_pack', {
+            p_id: pack?.id || null,
+            p_title: String(pack?.name ?? 'Pacote de Coins'),
+            p_description: null,
+            p_coins: Math.max(1, Number(pack?.coins ?? 1)),
+            p_bonus_coins: 0,
+            p_price_cents: priceCents,
+            p_currency: 'BRL',
+            p_is_active: true,
+            p_in_stock: !Boolean(pack?.isOutOfStock),
+            p_sort_order: 0,
+            p_meta: meta,
+          });
+
+          if (error) return { success: false, error: error.message || 'Falha ao salvar pacote' };
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true, id: data as string };
+        },
+
+        deleteCoinPack: async (id: string) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.deleteCoinPack');
+            return { success: false, error: 'mock_only' };
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error('[AdminCoinPacks] Supabase client not initialized');
+
+          const { error } = await supabase.rpc('admin_delete_coin_pack', { p_id: id });
+          if (error) return { success: false, error: error.message || 'Falha ao deletar pacote' };
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true };
+        },
+
+        toggleCoinPackStock: async (id: string) => {
+          if (!isSupabaseProvider()) {
+            ensureMockBackend('store.toggleCoinPackStock');
+            return { success: false, error: 'mock_only' };
+          }
+
+          const supabase = getSupabase();
+          if (!supabase) throw new Error('[AdminCoinPacks] Supabase client not initialized');
+
+          const { data: current, error: readErr } = await supabase
+            .from('coin_packs')
+            .select('id, in_stock')
+            .eq('id', id)
+            .single();
+          if (readErr) return { success: false, error: readErr.message || 'Falha ao ler pacote' };
+
+          const nextInStock = !Boolean((current as any)?.in_stock);
+          const { error: rpcErr } = await supabase.rpc('admin_toggle_coin_pack_stock', {
+            p_id: id,
+            p_in_stock: nextInStock,
+          });
+          if (rpcErr) return { success: false, error: rpcErr.message || 'Falha ao atualizar estoque' };
+
+          CacheService.invalidate('admin_dashboard_data');
+          return { success: true };
+        },
 
         setEstimatedCompletionDate: async (itemId: string, date: string) => {
             if (!isSupabaseProvider()) {
@@ -847,33 +925,71 @@ export const AdminService = {
         return { success: true };
     },
     
-    adminSubmitPaymentLink: (requestId: string, link: string) => {
+    adminSubmitPaymentLink: async (requestId: string, link: string) => {
+        if (isSupabaseProvider()) {
+            const supabase = getSupabase();
+            if (!supabase) throw new Error('[AdminCoinPurchases] Supabase client not initialized');
+
+            // Admin-only update via RLS policy
+            const { data: current, error: readErr } = await supabase
+              .from('coin_purchase_requests')
+              .select('id, meta')
+              .eq('id', requestId)
+              .single();
+            if (readErr) return { success: false, error: readErr.message || 'Falha ao ler pedido' };
+
+            const prev = (current?.meta ?? {}) as any;
+            const next = { ...prev, paymentLink: link };
+
+            const { error: updErr } = await supabase
+              .from('coin_purchase_requests')
+              .update({ meta: next })
+              .eq('id', requestId);
+            if (updErr) return { success: false, error: updErr.message || 'Falha ao salvar link' };
+
+            CacheService.invalidate('admin_dashboard_data');
+            return { success: true };
+        }
+
         ensureMockBackend('adminSubmitPaymentLink');
-        // Implementation
-         const requests = repo.select("coinPurchaseRequests");
-         const requestIndex = requests.findIndex((r: any) => r.id === requestId);
-         if (requestIndex > -1) {
-             requests[requestIndex].paymentLink = link;
-             requests[requestIndex].status = 'pending_payment';
-             return { success: true };
-         }
-         return { success: false };
+        const requests = repo.select('coinPurchaseRequests');
+        const requestIndex = requests.findIndex((r: any) => r.id === requestId);
+        if (requestIndex > -1) {
+            requests[requestIndex].paymentLink = link;
+            requests[requestIndex].status = 'pending_payment';
+            return { success: true };
+        }
+        return { success: false };
     },
     
     reviewCoinPurchase: async (requestId: string, status: 'approved' | 'rejected') => {
+        if (isSupabaseProvider()) {
+            const supabase = getSupabase();
+            if (!supabase) throw new Error('[AdminCoinPacks] Supabase client not initialized');
+
+            const { error } = await supabase.rpc('admin_decide_coin_purchase_request', {
+                p_request_id: requestId,
+                p_decision: status,
+                p_admin_note: null,
+            });
+            if (error) return { success: false, error: error.message || 'Falha ao revisar compra' };
+
+            CacheService.invalidate('admin_dashboard_data');
+            return { success: true };
+        }
+
         ensureMockBackend('reviewCoinPurchase');
-        const requests = repo.select("coinPurchaseRequests");
+        const requests = repo.select('coinPurchaseRequests');
         const requestIndex = requests.findIndex((r: any) => r.id === requestId);
         if (requestIndex === -1) return { success: false };
-        
+
         const req = requests[requestIndex];
         req.status = status;
-        
+
         if (status === 'approved') {
             await EconomyService.addCoins(req.userId, req.coins, `Compra de Pacote: ${req.packName}`);
-            // Notification handled by EconomyService or add manual
         }
-        
+
         return { success: true };
     },
     
