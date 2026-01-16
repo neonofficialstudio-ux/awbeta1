@@ -65,6 +65,29 @@ export async function adminDrawRaffle(raffleId: string) {
     return data;
 }
 
+export async function adminAwardManual(payload: {
+    userId: string;
+    prizeType: 'coins' | 'item' | 'hybrid' | 'manual_text';
+    itemId?: string | null;
+    coinReward?: number | null;
+    customText?: string | null;
+}) {
+    assertSupabaseProvider('admin.raffles.award_manual');
+    const supabase = requireSupabaseClient();
+
+    const { data, error } = await supabase.rpc('admin_award_manual', {
+        p_user: payload.userId,
+        p_prize_type: payload.prizeType,
+        p_item_id: payload.itemId ?? null,
+        p_coin_reward: (payload.coinReward ?? 0) > 0 ? Number(payload.coinReward) : null,
+        p_custom_text: payload.customText ?? null,
+        p_ref_id: crypto.randomUUID(),
+    });
+
+    if (error) throw error;
+    return data;
+}
+
 export const adminPrepareRaffleDraw = (raffleId: string) => withLatency(() => {
     ensureMockBackend('adminPrepareRaffleDraw');
     return RaffleEngineV2.prepareDraw(raffleId);
