@@ -2,12 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import type { Raffle, StoreItem, UsableItem, RafflePrizeType } from '../../types';
 import { parseLocalDate, toLocalInputValue } from '../../api/utils/localDate';
-import { StoreCatalog } from '../../api/store/store.catalog';
 import { CoinIcon, StoreIcon, TrophyIcon, EditIcon } from '../../constants';
 
 interface AdminRaffleModalProps {
   raffle: Raffle | null;
-  allItems: (StoreItem | UsableItem)[]; // Legacy prop, we use StoreCatalog now internally but keeping signature compatible
+  allItems: (StoreItem | UsableItem)[];
   onClose: () => void;
   onSave: (raffleData: any) => void;
 }
@@ -31,7 +30,7 @@ const PrizeTypeButton: React.FC<{
     </button>
 );
 
-const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, onClose, onSave }) => {
+const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, onClose, onSave }) => {
     const [prizeType, setPrizeType] = useState<RafflePrizeType>('item');
     
     // Common
@@ -48,8 +47,15 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, onClose, on
     const [customName, setCustomName] = useState('');
     const [customImage, setCustomImage] = useState('');
 
-    // Catalog
-    const validItems = StoreCatalog.getValidRaffleItems();
+    // ✅ Catalog (Supabase): usa itens reais recebidos do dashboard (storeItems + usableItems)
+    const validItems = (allItems || [])
+        .filter((i: any) => !i?.isOutOfStock)
+        .map((i: any) => ({
+            id: i.id,
+            name: i.name,
+            price: Number(i.price ?? 0),
+            imageUrl: i.imageUrl ?? '',
+        }));
 
     useEffect(() => {
         if (raffle) {
