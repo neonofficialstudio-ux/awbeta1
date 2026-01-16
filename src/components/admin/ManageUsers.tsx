@@ -434,8 +434,8 @@ const LeadsTable: React.FC<{ users: User[] }> = ({ users }) => {
                         </div>
                     }
                     end={
-                        <Button onClick={handleCopyLeads} variant="primary" className="bg-navy-deep border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan hover:text-black">
-                             {copySuccess ? 'Copiado!' : 'Copiar Leads'}
+                        <Button onClick={handleCopyLeads} variant="primary" className="bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 hover:border-neon-cyan/50 font-bold">
+                              {copySuccess ? 'Copiado!' : 'Copiar Leads'}
                         </Button>
                     }
                 />
