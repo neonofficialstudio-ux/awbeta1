@@ -46,6 +46,7 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
     const [coinReward, setCoinReward] = useState(0);
     const [customName, setCustomName] = useState('');
     const [customImage, setCustomImage] = useState('');
+    const [eventTitle, setEventTitle] = useState<string>('');
 
     // ✅ Catalog (Supabase): usa itens reais recebidos do dashboard (storeItems + usableItems)
     const validItems = (allItems || [])
@@ -76,6 +77,7 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
             setCoinReward(raffle.coinReward || 0);
             setCustomName(raffle.itemName); // Always populate for editing override
             setCustomImage(raffle.itemImageUrl);
+            setEventTitle((raffle as any)?.meta?.title || '');
         } else {
              const now = new Date();
              const tomorrow = new Date();
@@ -84,6 +86,7 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
              setStartsAt(toLocalInputValue(now));
              setEndsAt(toLocalInputValue(tomorrow));
              setTicketLimitPerUser(0);
+             setEventTitle('');
         }
     }, [raffle]);
 
@@ -129,6 +132,10 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
             coinReward: (prizeType === 'coins' || prizeType === 'hybrid') ? coinReward : 0,
             itemName: customName,
             itemImageUrl: customImage || 'https://via.placeholder.com/300?text=Sorteio',
+            meta: {
+                ...(raffle as any)?.meta,
+                title: eventTitle?.trim() || undefined
+            },
             // Manual/Custom prize moved to Admin "Premiação Manual" flow
             customRewardText: undefined
         });
@@ -143,6 +150,22 @@ const AdminRaffleModal: React.FC<AdminRaffleModalProps> = ({ raffle, allItems, o
                 </div>
                 
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+
+                    {/* Event Title (meta.title) */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">
+                            Nome do Sorteio (Evento)
+                        </label>
+                        <input
+                            value={eventTitle}
+                            onChange={(e) => setEventTitle(e.target.value)}
+                            placeholder="Ex.: OPEN BETA GRAND PRIZE"
+                            className="w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-4 py-3 text-white outline-none"
+                        />
+                        <p className="text-[11px] text-white/40 mt-2">
+                            Esse nome aparece para os usuários como “Evento” e como título principal do card.
+                        </p>
+                    </div>
                     
                     {/* Prize Type Selector */}
                     <div>
