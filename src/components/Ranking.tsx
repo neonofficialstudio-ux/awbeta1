@@ -50,7 +50,7 @@ const RankingItem: React.FC<{ user: RankingUser; rank: number }> = React.memo(({
     const displayName = getDisplayName({ ...user, artistic_name: user.artisticName });
     return (
         <div 
-            className="relative w-full bg-[#111] rounded-[18px] border border-[#FFD65A]/10 mb-3 overflow-hidden group hover:border-[#FFD65A]/40 transition-all duration-300 animate-fade-in-up"
+            className={`relative w-full bg-[#111] rounded-[18px] border border-[#FFD65A]/10 mb-3 overflow-hidden group hover:border-[#FFD65A]/40 transition-all duration-300 animate-fade-in-up ${rank <= 3 ? 'border border-[#C8AA6E]/25 bg-[#0E0E0E]/60' : ''}`}
             style={{ animationDelay: `${0.1 + (rank * 0.05)}s` }}
         >
             <div className="absolute inset-0 bg-[#FFD65A]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
@@ -100,49 +100,61 @@ const RankingItem: React.FC<{ user: RankingUser; rank: number }> = React.memo(({
 const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => {
     const displayName = getDisplayName({ ...user, artistic_name: user.artisticName });
     return (
-    <div className="relative w-full mb-8 group perspective-1000 animate-fade-in-up z-10">
-        <div className="absolute inset-0 bg-[#FFD65A]/20 blur-[60px] rounded-[32px] opacity-60 group-hover:opacity-80 transition-opacity duration-700"></div>
-        
-        <div className="relative bg-[radial-gradient(ellipse_at_top,#1b1b1b_0%,#0c0c0c_100%)] border-2 border-[#FFD65A]/60 rounded-[32px] p-8 md:p-10 shadow-[0_0_45px_rgba(255,214,90,0.2)] overflow-hidden">
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
-            
-            <div className="relative z-20 flex flex-col items-center text-center">
-                <div className="relative mb-8 mt-4">
-                    <div className="absolute -top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-[float_4s_ease-in-out_infinite]">
-                         <CrownIcon className="w-14 h-14 md:w-16 md:h-16 text-[#FFD65A] drop-shadow-[0_0_25px_rgba(255,214,90,0.8)]" />
-                    </div>
+    <div className="relative overflow-hidden rounded-3xl border border-[#C8AA6E]/35 bg-black/30 shadow-[0_0_80px_rgba(200,170,110,0.14)]">
+        <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: "radial-gradient(1200px 380px at 50% 0%, rgba(200,170,110,0.18), transparent 60%)" }} />
+        <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full blur-3xl opacity-30" style={{ background: "rgba(200,170,110,0.35)" }} />
+
+        <div className="relative p-7">
+            <div className="flex items-center justify-center mb-4">
+                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#C8AA6E] text-black text-[11px] font-black uppercase tracking-[0.25em]">
+                    👑 Líder da Temporada
+                </span>
+            </div>
+            <div className="relative w-full mb-8 group perspective-1000 animate-fade-in-up z-10">
+                <div className="absolute inset-0 bg-[#FFD65A]/20 blur-[60px] rounded-[32px] opacity-60 group-hover:opacity-80 transition-opacity duration-700"></div>
+
+                <div className="relative bg-[radial-gradient(ellipse_at_top,#1b1b1b_0%,#0c0c0c_100%)] border-2 border-[#FFD65A]/60 rounded-[32px] p-8 md:p-10 shadow-[0_0_45px_rgba(255,214,90,0.2)] overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
                     
-                    <div className="relative w-36 h-36 md:w-44 md:h-44 rounded-full p-1.5 bg-gradient-to-b from-[#FFD65A] to-[#C79B2C] shadow-[0_0_50px_rgba(255,214,90,0.4)] z-10">
-                        <img 
-                            src={user.avatarUrl} 
-                            alt={user.name} 
-                            className="w-full h-full rounded-full object-cover border-[4px] border-[#050505]"
-                        />
-                         <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-[#FFD65A] text-black text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full shadow-[0_0_15px_rgba(255,214,90,0.5)] whitespace-nowrap border-2 border-[#050505]">
-                            Líder da Temporada
+                    <div className="relative z-20 flex flex-col items-center text-center">
+                        <div className="relative mb-8 mt-4">
+                            <div className="absolute -top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-[float_4s_ease-in-out_infinite]">
+                                <CrownIcon className="w-14 h-14 md:w-16 md:h-16 text-[#FFD65A] drop-shadow-[0_0_25px_rgba(255,214,90,0.8)]" />
+                            </div>
+                            
+                            <div className="relative w-36 h-36 md:w-44 md:h-44 rounded-full p-1.5 bg-gradient-to-b from-[#FFD65A] to-[#C79B2C] shadow-[0_0_50px_rgba(255,214,90,0.4)] z-10">
+                                <img 
+                                    src={user.avatarUrl} 
+                                    alt={user.name} 
+                                    className="w-full h-full rounded-full object-cover border-[4px] border-[#050505]"
+                                />
+                                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-[#FFD65A] text-black text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full shadow-[0_0_15px_rgba(255,214,90,0.5)] whitespace-nowrap border-2 border-[#050505]">
+                                    Líder da Temporada
+                                </div>
+                            </div>
+                        </div>
+
+                        <h1 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight uppercase drop-shadow-lg leading-none mb-8 mt-2">
+                            {displayName}
+                        </h1>
+
+                        <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8">
+                            <div className="bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-4 rounded-2xl border border-[#FFD65A]/20 backdrop-blur-sm flex flex-col items-center justify-center group hover:border-[#FFD65A]/40 transition-all hover:-translate-y-1 shadow-lg">
+                                <MissionIcon className="w-6 h-6 text-[#FFD65A]/50 mb-2 group-hover:text-[#FFD65A] transition-colors filter drop-shadow-sm" />
+                                <span className="block text-2xl md:text-3xl font-black text-white font-chakra tracking-tight">{formatNumber(user.monthlyMissionsCompleted)}</span>
+                                <span className="text-[9px] md:text-[10px] text-[#808080] uppercase font-bold tracking-widest mt-1 group-hover:text-[#FFD65A]/80 transition-colors">Missões Feitas</span>
+                            </div>
+                            <div className="bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-4 rounded-2xl border border-[#FFD65A]/20 backdrop-blur-sm flex flex-col items-center justify-center group hover:border-[#FFD65A]/40 transition-all hover:-translate-y-1 shadow-lg">
+                                <StarIcon className="w-6 h-6 text-[#FFD65A]/50 mb-2 group-hover:text-[#FFD65A] transition-colors filter drop-shadow-sm" />
+                                <span className="block text-2xl md:text-3xl font-black text-[#FFD65A] font-chakra tracking-tight">{formatNumber(user.level)}</span>
+                                <span className="text-[9px] md:text-[10px] text-[#808080] uppercase font-bold tracking-widest mt-1 group-hover:text-[#FFD65A]/80 transition-colors">Nível Atual</span>
+                            </div>
+                        </div>
+
+                        <div className="pt-2">
+                            <SocialRow user={user} size="lg" />
                         </div>
                     </div>
-                </div>
-
-                <h1 className="text-3xl md:text-5xl font-black text-white font-chakra tracking-tight uppercase drop-shadow-lg leading-none mb-8 mt-2">
-                    {displayName}
-                </h1>
-
-                <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8">
-                    <div className="bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-4 rounded-2xl border border-[#FFD65A]/20 backdrop-blur-sm flex flex-col items-center justify-center group hover:border-[#FFD65A]/40 transition-all hover:-translate-y-1 shadow-lg">
-                        <MissionIcon className="w-6 h-6 text-[#FFD65A]/50 mb-2 group-hover:text-[#FFD65A] transition-colors filter drop-shadow-sm" />
-                        <span className="block text-2xl md:text-3xl font-black text-white font-chakra tracking-tight">{formatNumber(user.monthlyMissionsCompleted)}</span>
-                        <span className="text-[9px] md:text-[10px] text-[#808080] uppercase font-bold tracking-widest mt-1 group-hover:text-[#FFD65A]/80 transition-colors">Missões Feitas</span>
-                    </div>
-                    <div className="bg-gradient-to-b from-[#1A1A1A] to-[#0D0D0D] p-4 rounded-2xl border border-[#FFD65A]/20 backdrop-blur-sm flex flex-col items-center justify-center group hover:border-[#FFD65A]/40 transition-all hover:-translate-y-1 shadow-lg">
-                        <StarIcon className="w-6 h-6 text-[#FFD65A]/50 mb-2 group-hover:text-[#FFD65A] transition-colors filter drop-shadow-sm" />
-                        <span className="block text-2xl md:text-3xl font-black text-[#FFD65A] font-chakra tracking-tight">{formatNumber(user.level)}</span>
-                        <span className="text-[9px] md:text-[10px] text-[#808080] uppercase font-bold tracking-widest mt-1 group-hover:text-[#FFD65A]/80 transition-colors">Nível Atual</span>
-                    </div>
-                </div>
-
-                <div className="pt-2">
-                    <SocialRow user={user} size="lg" />
                 </div>
             </div>
         </div>
@@ -173,6 +185,20 @@ const Ranking: React.FC = () => {
     const [timeFilter, setTimeFilter] = useState<'mensal' | 'geral'>('mensal');
     const [latestCycle, setLatestCycle] = useState<any | null>(null);
     const [latestWinners, setLatestWinners] = useState<any[]>([]);
+    const getMonthLabel = () => {
+        const d = new Date();
+        const month = d.toLocaleString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
+        const year = d.getFullYear();
+        return `${month}/${year}`;
+    };
+
+    const getMonthRange = () => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const fmt = (x: Date) => x.toLocaleDateString('pt-BR');
+        return `${fmt(start)} → ${fmt(end)}`;
+    };
 
     useEffect(() => {
         const fetchRanking = async () => {
@@ -259,6 +285,29 @@ const Ranking: React.FC = () => {
                     ))}
                 </div>
                 {timeFilter === 'mensal' && (
+                    <div className="max-w-3xl mx-auto mt-6">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-black/25 border border-white/10 rounded-2xl px-5 py-4">
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E]">
+                                    Temporada Mensal • {getMonthLabel()}
+                                </p>
+                                <p className="text-sm text-white/60 mt-1">
+                                    Período: <span className="text-white/80 font-semibold">{getMonthRange()}</span>
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-black">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                    CICLO EM ANDAMENTO
+                                </span>
+                                <span className="hidden md:inline text-xs text-white/45">
+                                    Fechamento pelo admin no fim do mês
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {timeFilter === 'mensal' && (
                     <p className="text-center text-sm text-gray-400 -mt-4 mb-8">
                         Ranking baseado na quantidade de missões concluídas no mês
                     </p>
@@ -273,7 +322,13 @@ const Ranking: React.FC = () => {
                             <p className="text-xs text-muted mt-1">
                                 Classificação por missões concluídas
                             </p>
-                            <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E] mt-4">VENCEDORES DO ÚLTIMO CICLO</p>
+                            <div className="flex items-center justify-between gap-3 mt-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E]">VENCEDORES DO ÚLTIMO CICLO</p>
+                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-black">
+                                    <span className="w-2 h-2 rounded-full bg-red-400" />
+                                    CICLO ENCERRADO
+                                </span>
+                            </div>
                             <p className="text-sm text-white/60 mt-2">
                                 {latestCycle?.label ? latestCycle.label : 'Ciclo fechado'} • {latestCycle?.ends_at ? new Date(latestCycle.ends_at).toLocaleDateString('pt-BR') : ''}
                             </p>
