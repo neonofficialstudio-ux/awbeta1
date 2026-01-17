@@ -79,6 +79,8 @@ export {
     useUsableItem, 
     queueForArtistOfTheDay, 
     buyRaffleTickets,
+    // ✅ Raffles (User) — Supabase driven
+    // (mantém compat com src/components/Raffles.tsx)
     openPaymentLink,
     cancelCoinPurchaseRequest,
     submitCoinPurchaseProof,
@@ -87,6 +89,9 @@ export {
     getMyRequests,
     getQueuePosition
 } from "./store";
+
+// ✅ Raffles data fetch (sem Events)
+export { fetchRafflesData } from "./raffles/fetchRafflesData";
 
 // Events removidos do produto (UI + Admin + API)
 
