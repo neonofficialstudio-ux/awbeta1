@@ -34,7 +34,7 @@ const normalizeLedgerEntry = (row: any): LedgerEntry => {
     const amount = Number(legacyAmount ?? (type === 'COIN' ? deltaCoins : deltaXp));
     const refId = row?.ref_id || row?.refId;
 
-    return {
+  return {
         id: row?.id || row?.ledger_id || `ledger-${createdAt}`,
         userId: row?.user_id || row?.userId || '',
         type,
@@ -87,16 +87,23 @@ const normalizeLeaderboardEntry = (row: any, index: number): RankingUser => {
         artisticName: row?.artistic_name || row?.artist_name || display,
         avatarUrl: row?.avatar_url || row?.avatar || 'https://i.pravatar.cc/150?u=leaderboard',
         level: Number(row?.level ?? row?.xp_level ?? 1),
-        monthlyMissionsCompleted: Number(row?.monthly_missions_completed ?? row?.monthly_missions ?? row?.missions ?? 0),
+    // ✅ Mensal usa get_monthly_leaderboard e manda "xp" como compat => missões do mês
+    // Geral continua podendo usar coins/xp real.
+    monthlyMissionsCompleted: Number(
+      row?.monthly_missions_completed ??
+      row?.monthly_missions ??
+      row?.missions ??
+      row?.xp ?? 0
+    ),
         isCurrentUser: Boolean(row?.is_current_user || row?.isCurrentUser),
         spotifyUrl: row?.spotify_url || row?.spotifyUrl,
         youtubeUrl: row?.youtube_url || row?.youtubeUrl,
         instagramUrl: row?.instagram_url || row?.instagramUrl || '',
         tiktokUrl: row?.tiktok_url || row?.tiktokUrl,
         plan: normalizePlan(row?.plan),
-        xp: row?.xp,
-        coins: row?.coins,
-    };
+    xp: Number(row?.xp ?? 0),
+    coins: row?.coins,
+  };
 };
 
 export const fetchMyLedger = async (limit = 20, offset = 0) => {
