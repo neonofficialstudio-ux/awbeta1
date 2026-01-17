@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { RankingUser } from '../types';
 import { CrownIcon, SpotifyIcon, YoutubeIcon, MissionIcon, InstagramIcon, StarIcon, HistoryIcon as ClockIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
@@ -152,7 +152,7 @@ const TopOneCard: React.FC<{ user: RankingUser }> = React.memo(({ user }) => {
 
 const faqData = [
     { question: "Como funciona a pontuação?", answer: "Sua pontuação é baseada na quantidade de missões realizadas (fator principal) e XP total acumulado (critério de desempate)." },
-    { question: "Quando o ranking reseta?", answer: "O ranking 'Mensal' reseta automaticamente no primeiro dia de cada mês. O ranking 'Geral' é vitalício." },
+    { question: "Quando o ranking mensal reseta?", answer: "No fim do mês, um admin fecha o ciclo mensal e o mês reinicia. O ranking 'Geral' é vitalício." },
     { question: "O que ganho ficando em 1º lugar?", answer: "O líder do ranking mensal recebe destaque na plataforma, uma conquista exclusiva 'O Número Um' e um bônus generoso de Lummi Coins." },
     { question: "Como ver minha posição exata?", answer: "Se você estiver fora do Top 10, sua posição aparecerá no rodapé da lista ou destacada no seu card de usuário." }
 ];
@@ -171,6 +171,8 @@ const Ranking: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<'mensal' | 'geral'>('mensal');
+    const [latestCycle, setLatestCycle] = useState<any | null>(null);
+    const [latestWinners, setLatestWinners] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchRanking = async () => {
@@ -188,6 +190,14 @@ const Ranking: React.FC = () => {
                     }));
                 }
                 setRanking(rankingData);
+                if (timeFilter === 'mensal') {
+                    const hist = await (api as any).fetchLatestMonthlyWinnersHistory?.();
+                    setLatestCycle(hist?.cycle || null);
+                    setLatestWinners(Array.isArray(hist?.winners) ? hist.winners : []);
+                } else {
+                    setLatestCycle(null);
+                    setLatestWinners([]);
+                }
             } catch (err) {
                 console.error("Failed to fetch ranking:", err);
                 setError("Não foi possível carregar o Hall of Fame.");
@@ -251,6 +261,33 @@ const Ranking: React.FC = () => {
 
                 {/* RANKING LIST */}
                 <div className="relative z-10 mb-20">
+                    {/* Último ciclo fechado (somente Mensal) */}
+                    {timeFilter === 'mensal' && latestWinners?.length > 0 && (
+                        <div className="mb-8 bg-[#0E0E0E] border border-white/10 rounded-2xl p-5">
+                            <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E]">VENCEDORES DO ÚLTIMO CICLO</p>
+                            <p className="text-sm text-white/60 mt-2">
+                                {latestCycle?.label ? latestCycle.label : 'Ciclo fechado'} • {latestCycle?.ends_at ? new Date(latestCycle.ends_at).toLocaleDateString('pt-BR') : ''}
+                            </p>
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {latestWinners.slice(0, 3).map((w: any) => (
+                                    <div key={w.user_id} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                                        <p className="text-[10px] text-white/40 uppercase font-black tracking-widest">TOP {w.position}</p>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 bg-white/5">
+                                                {w.avatar_url ? <img src={w.avatar_url} className="w-full h-full object-cover" /> : null}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-white font-black truncate">{w.display_name}</p>
+                                                <p className="text-xs text-white/50 font-mono">
+                                                    Lvl {w.level_at_close} • {w.xp_at_close} XP
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     {rankOne && <TopOneCard user={rankOne} />}
 
                     <div className="space-y-3">
