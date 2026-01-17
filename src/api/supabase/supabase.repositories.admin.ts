@@ -305,6 +305,8 @@ export const supabaseAdminRepository = {
         prizeType: r.prize_type ?? undefined,
         coinReward: r.coin_reward ?? undefined,
         customRewardText: r.custom_reward_text ?? undefined,
+        // ✅ IMPORTANT: sem isso o Admin nunca “vê” o Nome do Sorteio (meta.title)
+        meta: r.meta ?? undefined,
       }));
 
       const mappedTickets = (allTickets || []).map((t: any) => ({

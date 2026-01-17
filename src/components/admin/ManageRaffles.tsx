@@ -695,6 +695,12 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
         if (raffle?.status === 'winner_defined' || raffle?.winnerId) {
             return 'winner_defined';
         }
+        if (raffle?.status === 'awaiting_draw' || raffle?.status === 'drawing') {
+            return 'in_apuration';
+        }
+        if (raffle?.status === 'ended' || raffle?.status === 'finished') {
+            return 'ended';
+        }
 
         const endsAt = raffle?.endsAt ? new Date(raffle.endsAt) : null;
         const startsAt = raffle?.startsAt ? new Date(raffle.startsAt) : null;
@@ -925,7 +931,7 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                                 <td className="px-6 py-4 text-xs font-mono">{new Date(raffle.endsAt).toLocaleString('pt-BR')}</td>
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end space-x-1">
-                                                        {raffle.__derivedStatus === 'in_apuration' && (
+                                                        {raffle.__derivedStatus === 'in_apuration' && ticketCount > 0 && (
                                                             <ActionButton
                                                                 onClick={() => handleInitiateDraw(raffle)}
                                                                 title="Apurar / Sortear agora"
