@@ -73,10 +73,18 @@ const normalizeNotification = (row: any): AWNotification => {
 };
 
 const normalizeLeaderboardEntry = (row: any, index: number): RankingUser => {
+    const display =
+        row?.display_name ||
+        row?.displayName ||
+        row?.name ||
+        row?.user_name ||
+        row?.userName ||
+        'Artista';
+
     return {
         rank: Number(row?.rank ?? index + 1),
-        name: row?.name || row?.user_name || 'Artista',
-        artisticName: row?.artistic_name || row?.artist_name || row?.name || 'Artista',
+        name: display,
+        artisticName: row?.artistic_name || row?.artist_name || display,
         avatarUrl: row?.avatar_url || row?.avatar || 'https://i.pravatar.cc/150?u=leaderboard',
         level: Number(row?.level ?? row?.xp_level ?? 1),
         monthlyMissionsCompleted: Number(row?.monthly_missions_completed ?? row?.monthly_missions ?? row?.missions ?? 0),

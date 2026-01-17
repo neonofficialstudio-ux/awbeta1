@@ -131,6 +131,44 @@ export const submitMission = async (userId: string, missionId: string, proof: st
 
 export const fetchRankingData = async (type: 'mensal' | 'geral' = 'mensal', limit = 50, offset = 0) => {
     if (config.backendProvider === 'supabase') {
+        // ✅ Mensal: último ciclo fechado (ranking_cycles/ranking_cycle_winners)
+        if (type === 'mensal') {
+            try {
+                const supabase = (await import('./supabase/client')).getSupabase();
+                if (!supabase) return [];
+
+                const { data, error } = await supabase.rpc('get_ranking_history', { p_limit: 1, p_offset: 0 });
+                if (error) throw error;
+
+                const payload: any = data || {};
+                const items = Array.isArray(payload?.items) ? payload.items : [];
+                const latest = items[0];
+                const winners = Array.isArray(latest?.winners) ? latest.winners : [];
+
+                // Map winners -> RankingUser
+                return winners.map((w: any, i: number) => ({
+                    rank: Number(w?.position ?? i + 1),
+                    name: w?.display_name || `User ${String(w?.user_id || '').slice(0, 6)}`,
+                    artisticName: w?.display_name || `User ${String(w?.user_id || '').slice(0, 6)}`,
+                    avatarUrl: w?.avatar_url || 'https://i.pravatar.cc/150?u=monthly',
+                    level: Number(w?.level_at_close ?? 1),
+                    monthlyMissionsCompleted: 0,
+                    isCurrentUser: false,
+                    spotifyUrl: undefined,
+                    youtubeUrl: undefined,
+                    instagramUrl: '',
+                    tiktokUrl: undefined,
+                    plan: undefined,
+                    xp: Number(w?.xp_at_close ?? 0),
+                    coins: 0,
+                }));
+            } catch (err) {
+                console.error('[API] fetchRankingData mensal failed', err);
+                return [];
+            }
+        }
+
+        // ✅ Geral: leaderboard atual
         const response = await fetchLeaderboard(limit, offset);
         if (!response.success) {
             console.error('[API] fetchRankingData supabase failed', response.error);
