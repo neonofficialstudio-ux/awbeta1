@@ -61,6 +61,20 @@ const ArcaneStyles = `
     pointer-events: none;
     animation: particleFloat 4s infinite ease-in-out;
   }
+
+  /* ✅ AAA micro-animations (landing) */
+  @keyframes awFadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .aw-anim {
+    opacity: 0;
+    animation: awFadeUp 700ms ease forwards;
+  }
+  .aw-delay-1 { animation-delay: 80ms; }
+  .aw-delay-2 { animation-delay: 170ms; }
+  .aw-delay-3 { animation-delay: 260ms; }
+  .aw-delay-4 { animation-delay: 350ms; }
 `;
 
 // ✅ Landing Hero (Arena de Sorteios) — estilo "Assinaturas" (Riot/AAA)
@@ -75,43 +89,24 @@ const ArenaLandingHero: React.FC<{ hasActive: boolean }> = ({ hasActive }) => {
       {/* Back Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-[720px] bg-[#FFD36A]/10 blur-[110px] rounded-full pointer-events-none" />
       <div className="text-center max-w-5xl mx-auto relative z-10">
-        <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#9d4dff] mb-3">
-          ARENA OFICIAL
-        </p>
-
-        <h1 className="text-4xl md:text-6xl font-black text-[#FFD36A] font-chakra uppercase tracking-tighter mb-4 drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]">
+        <h1 className="aw-anim aw-delay-1 text-4xl md:text-6xl font-black text-[#FFD36A] font-chakra uppercase tracking-tighter mb-4 drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]">
           ARENA DE SORTEIOS
         </h1>
 
-        <div className="flex items-center justify-center mb-6">
+        <div className="aw-anim aw-delay-2 flex items-center justify-center mb-6">
           <div className="h-[2px] w-12 bg-gradient-to-r from-transparent to-[#FF3CE6]" />
           <div className="mx-4 text-[#FF3CE6] animate-pulse">◆</div>
           <div className="h-[2px] w-12 bg-gradient-to-l from-transparent to-[#3CFFF8]" />
         </div>
 
-        <h2 className="text-lg md:text-2xl text-gray-200 max-w-3xl mx-auto leading-relaxed font-bold">
+        <h2 className="aw-anim aw-delay-3 text-lg md:text-2xl text-gray-200 max-w-3xl mx-auto leading-relaxed font-bold">
           Onde talento, estratégia e sorte se encontram.
         </h2>
-        <p className="text-sm md:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed font-medium mt-3">
-          Eventos oficiais do Artist World com <span className="text-white font-bold">prêmios reais</span>. Um vencedor por evento. Resultado registrado no sistema.
+        <p className="aw-anim aw-delay-4 text-sm md:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed font-medium mt-3">
+          Eventos oficiais do Artist World com <span className="text-white font-bold">prêmios reais</span>. Um vencedor por evento.
         </p>
 
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
-          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
-            🔒 Sistema auditável
-          </span>
-          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
-            ⚡ Resultado automático
-          </span>
-          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
-            🎁 Prêmio instantâneo
-          </span>
-          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
-            🧾 Histórico público
-          </span>
-        </div>
-
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="aw-anim aw-delay-4 mt-8 flex flex-col items-center gap-3">
           <button
             type="button"
             onClick={scrollToActive}
@@ -155,7 +150,7 @@ const HowItWorksSection: React.FC = () => {
 
   return (
     <section className="mb-12 md:mb-16">
-      <div className="text-center mb-8">
+      <div className="aw-anim aw-delay-1 text-center mb-8">
         <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#C8AA6E]">COMO FUNCIONA</p>
         <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide mt-2">
           Entenda em 10 segundos
@@ -163,7 +158,7 @@ const HowItWorksSection: React.FC = () => {
         <p className="text-gray-400 text-sm mt-2">Simples. Transparente. Competitivo.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="aw-anim aw-delay-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {steps.map((s) => (
           <div
             key={s.title}
@@ -181,8 +176,6 @@ const HowItWorksSection: React.FC = () => {
           </div>
         ))}
       </div>
-
-      <p className="mt-5 text-xs text-gray-500 text-center">Sem manipulação manual. Tudo registrado.</p>
     </section>
   );
 };
@@ -757,14 +750,14 @@ const Raffles: React.FC = () => {
             <div className="max-w-6xl mx-auto px-4 md:px-6">
                 {/* 0. LANDING (Arena) */}
                 <ArenaLandingHero hasActive={!!featuredStandardRaffle} />
-                <HowItWorksSection />
+                <div className="aw-anim aw-delay-2"><HowItWorksSection /></div>
 
-                {/* 1. EVENTO EM DESTAQUE */}
-                <section id="evento-ativo" className="scroll-mt-24">
-                    <div className="text-center mb-6">
-                        <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#C8AA6E]">EVENTO EM ANDAMENTO</p>
-                        <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide mt-2">
-                            🔥 Participe agora
+            {/* 1. EVENTO EM DESTAQUE */}
+            <section id="evento-ativo" className="scroll-mt-24">
+                <div className="aw-anim aw-delay-3 text-center mb-6">
+                    <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#C8AA6E]">EVENTO EM ANDAMENTO</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide mt-2">
+                        🔥 Participe agora
                         </h3>
                         <p className="text-gray-400 text-sm mt-2">
                             Entre no evento ativo e concorra ao prêmio — só quem tem ticket pode vencer.
