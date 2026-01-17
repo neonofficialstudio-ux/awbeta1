@@ -258,13 +258,22 @@ const Ranking: React.FC = () => {
                         </button>
                     ))}
                 </div>
+                {timeFilter === 'mensal' && (
+                    <p className="text-center text-sm text-gray-400 -mt-4 mb-8">
+                        Ranking baseado na quantidade de missões concluídas no mês
+                    </p>
+                )}
 
                 {/* RANKING LIST */}
                 <div className="relative z-10 mb-20">
                     {/* Último ciclo fechado (somente Mensal) */}
                     {timeFilter === 'mensal' && latestWinners?.length > 0 && (
                         <div className="mb-8 bg-[#0E0E0E] border border-white/10 rounded-2xl p-5">
-                            <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E]">VENCEDORES DO ÚLTIMO CICLO</p>
+                            <h3 className="text-lg font-black text-white uppercase tracking-wide">Top 3 do Ranking Mensal</h3>
+                            <p className="text-xs text-muted mt-1">
+                                Classificação por missões concluídas
+                            </p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E] mt-4">VENCEDORES DO ÚLTIMO CICLO</p>
                             <p className="text-sm text-white/60 mt-2">
                                 {latestCycle?.label ? latestCycle.label : 'Ciclo fechado'} • {latestCycle?.ends_at ? new Date(latestCycle.ends_at).toLocaleDateString('pt-BR') : ''}
                             </p>
@@ -279,7 +288,7 @@ const Ranking: React.FC = () => {
                                             <div className="min-w-0">
                                                 <p className="text-white font-black truncate">{w.display_name}</p>
                                                 <p className="text-xs text-white/50 font-mono">
-                                                    Lvl {w.level_at_close} • {w.xp_at_close} XP
+                                                    Lvl {w.level_at_close} • {w.missions_at_close} missões
                                                 </p>
                                             </div>
                                         </div>
