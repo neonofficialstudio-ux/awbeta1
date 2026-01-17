@@ -63,6 +63,140 @@ const ArcaneStyles = `
   }
 `;
 
+// ✅ Landing Hero (Arena de Sorteios) — fora do card do sorteio
+const ArenaLandingHero: React.FC<{ hasActive: boolean }> = ({ hasActive }) => {
+  const scrollToActive = () => {
+    const el = document.getElementById('evento-ativo');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  return (
+    <section className="w-full mb-10 md:mb-14 px-2 md:px-0">
+      <div className="relative overflow-hidden rounded-[32px] border border-[#9d4dff]/35 bg-gradient-to-br from-[#0c0f14] to-[#050608] shadow-[0_0_60px_rgba(157,77,255,0.18)]">
+        <div
+          className="absolute inset-0 opacity-40 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at 20% 30%, rgba(157,77,255,0.30), transparent 55%), radial-gradient(circle at 80% 40%, rgba(255,214,90,0.18), transparent 55%)',
+          }}
+        />
+
+        <div className="relative p-8 md:p-12">
+          <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#9d4dff] mb-4">
+            ARENA OFICIAL
+          </p>
+
+          <h1 className="text-3xl md:text-5xl font-black text-white font-chakra uppercase tracking-wide leading-none drop-shadow-[0_0_12px_rgba(157,77,255,0.35)]">
+            ARENA DE SORTEIOS
+          </h1>
+          <h2 className="mt-3 text-lg md:text-2xl font-black text-white/90 leading-snug">
+            Onde talento, estratégia e sorte se encontram.
+          </h2>
+
+          <p className="mt-4 text-sm md:text-base text-white/60 max-w-3xl">
+            Eventos oficiais do Artist World com <span className="text-white/80 font-bold">prêmios reais</span>. Um vencedor por evento. Resultado registrado no sistema.
+          </p>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
+              🔒 Sistema auditável
+            </span>
+            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
+              ⚡ Resultado automático
+            </span>
+            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
+              🎁 Prêmio instantâneo
+            </span>
+            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
+              🧾 Histórico público
+            </span>
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={scrollToActive}
+              className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-[#9d4dff]/15 border border-[#9d4dff]/45 text-[#d7c6ff] hover:bg-[#9d4dff]/25 hover:border-[#9d4dff]/65 transition-all font-black uppercase tracking-[0.22em] text-xs"
+            >
+              PARTICIPAR AGORA ↓
+            </button>
+            <p className="text-xs text-white/45">
+              {hasActive ? 'Entre no evento ativo abaixo.' : 'Sem evento ativo? Veja os próximos e prepare seus LC.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// ✅ Como funciona (Riot-style) — 4 cards de clareza/credibilidade
+const HowItWorksSection: React.FC = () => {
+  const steps = [
+    {
+      title: 'Compre tickets com LC',
+      icon: '🎟️',
+      text: 'Use suas Lummi Coins para entrar no evento.',
+    },
+    {
+      title: 'Evento com prazo real',
+      icon: '⏳',
+      text: 'Cada sorteio tem horário final público.',
+    },
+    {
+      title: 'Apuração registrada',
+      icon: '🎯',
+      text: 'O sistema define 1 vencedor de forma determinística e auditável.',
+    },
+    {
+      title: 'Entrega instantânea',
+      icon: '🏆',
+      text: 'Coins caem no saldo ou item vai direto pro inventário.',
+    },
+  ];
+
+  return (
+    <section className="w-full mb-10 md:mb-14 px-2 md:px-0">
+      <div className="flex items-end justify-between gap-4 mb-4">
+        <div>
+          <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#FFD65A]">
+            COMO FUNCIONA
+          </p>
+          <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wide font-chakra">
+            Entenda em 10 segundos
+          </h3>
+          <p className="text-xs md:text-sm text-white/50 mt-1">
+            Simples. Transparente. Competitivo.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {steps.map((s) => (
+          <div
+            key={s.title}
+            className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 to-black/30 p-5 shadow-[0_0_30px_rgba(157,77,255,0.06)]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#9d4dff]/10 border border-[#9d4dff]/25 flex items-center justify-center text-lg">
+                {s.icon}
+              </div>
+              <p className="text-white font-black uppercase tracking-wide text-sm">
+                {s.title}
+              </p>
+            </div>
+            <p className="text-xs text-white/55 mt-3 leading-relaxed">{s.text}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-4 text-xs text-white/45">
+        Sem manipulação manual. Tudo registrado.
+      </p>
+    </section>
+  );
+};
+
 // ✅ Empty State Premium (quando não há Sorteio Standard ativo)
 const NoActiveStandardRaffle: React.FC<{ hasUpcoming?: boolean }> = ({ hasUpcoming }) => {
   const hints = [
@@ -641,45 +775,35 @@ const Raffles: React.FC = () => {
             {/* --- STYLE INJECTION --- */}
             <style>{ArcaneStyles}</style>
 
-            {/* 1. STANDARD RAFFLE MAIN CARD (Restored V1.0 with V2 Logic) */}
-            {featuredStandardRaffle ? (
-                <StandardRaffleHero
-                    raffle={featuredStandardRaffle}
-                    myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
-                    totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
-                    userCoins={activeUser.coins}
-                    onBuy={setRaffleToBuy}
-                />
-            ) : (
-                <NoActiveStandardRaffle
-                    hasUpcoming={raffles.some(r => r.status === 'scheduled' || (r.startsAt && new Date(r.startsAt) > new Date()))}
-                />
-            )}
+            {/* 0. LANDING (Arena) */}
+            <ArenaLandingHero hasActive={!!featuredStandardRaffle} />
+            <HowItWorksSection />
 
-            {/* 2. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
-            {/* FIX V1.0: Exclude highlighted raffle to avoid duplication if it is scheduled */}
-            <RiotUpcomingList raffles={raffles.filter(r => r.id !== featuredStandardRaffle?.id)} />
-            
-            {/* 3. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
-            {displayRaffles.length > 0 && (
-                <div className="mb-16">
-                    <div className="flex items-center gap-3 mb-3 pl-2 border-l-4 border-green-500">
-                        <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros eventos em andamento</h3>
-                    </div>
-                    <p className="text-xs text-white/50 px-2 mb-6">
-                        Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {displayRaffles.map(raffle => {
-                            const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
-                            const totalCount = allTickets.filter(t => t.raffleId === raffle.id).length;
-                            return <TicketCard key={raffle.id} raffle={raffle} myTickets={myCount} totalTickets={totalCount} userCoins={activeUser.coins} onBuy={setRaffleToBuy} />;
-                        })}
-                    </div>
+            {/* 1. EVENTO EM DESTAQUE */}
+            <section id="evento-ativo" className="scroll-mt-24">
+                <div className="flex items-center gap-3 mb-4 pl-2 border-l-4 border-[#9d4dff]">
+                    <h3 className="text-xl font-black text-white uppercase tracking-wider font-chakra">🔥 Evento em andamento</h3>
                 </div>
-            )}
-            
-            {/* 4. HALL OF FAME (Winners) */}
+                <p className="text-xs text-white/50 px-2 mb-6">
+                    Entre agora ou assista de fora — mas só quem tem ticket pode vencer.
+                </p>
+
+                {featuredStandardRaffle ? (
+                    <StandardRaffleHero
+                        raffle={featuredStandardRaffle}
+                        myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
+                        totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
+                        userCoins={activeUser.coins}
+                        onBuy={setRaffleToBuy}
+                    />
+                ) : (
+                    <NoActiveStandardRaffle
+                        hasUpcoming={raffles.some(r => r.status === 'scheduled' || (r.startsAt && new Date(r.startsAt) > new Date()))}
+                    />
+                )}
+            </section>
+
+            {/* 2. HALL OF FAME (Winners) */}
             {winnerRaffles.length > 0 && (
                 <div className="mb-12 bg-[#151515] p-6 rounded-2xl border border-white/5">
                     <div className="flex items-center gap-3 mb-6">
@@ -693,6 +817,29 @@ const Raffles: React.FC = () => {
                         {winnerRaffles.map(raffle => {
                             const winner = allUsers.find(u => u.id === raffle.winnerId);
                             return <WinnerCard key={raffle.id} raffle={raffle} winner={winner} />;
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* 3. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
+            {/* FIX V1.0: Exclude highlighted raffle to avoid duplication if it is scheduled */}
+            <RiotUpcomingList raffles={raffles.filter(r => r.id !== featuredStandardRaffle?.id)} />
+            
+            {/* 4. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
+            {displayRaffles.length > 0 && (
+                <div className="mb-16">
+                    <div className="flex items-center gap-3 mb-3 pl-2 border-l-4 border-green-500">
+                        <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros eventos em andamento</h3>
+                    </div>
+                    <p className="text-xs text-white/50 px-2 mb-6">
+                        Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {displayRaffles.map(raffle => {
+                            const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
+                            const totalCount = allTickets.filter(t => t.raffleId === raffle.id).length;
+                            return <TicketCard key={raffle.id} raffle={raffle} myTickets={myCount} totalTickets={totalCount} userCoins={activeUser.coins} onBuy={setRaffleToBuy} />;
                         })}
                     </div>
                 </div>
