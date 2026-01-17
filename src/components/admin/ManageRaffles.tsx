@@ -567,7 +567,21 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
             setLastDraw({ raffle: drawConfirmRaffle, winner });
             await refreshAdminData();
         } catch (e: any) {
-            toast.error(e?.message || 'Falha ao confirmar apuração.');
+            // ✅ Hardening: Supabase/PostgREST pode retornar 409 em retry/double-click/estado já aplicado.
+            const status = Number(e?.status ?? e?.code ?? 0);
+            const msg = e?.message || e?.details || e?.hint || 'Falha ao confirmar apuração.';
+
+            if (status === 409) {
+                toast.success('Apuração já foi aplicada (idempotente). Atualizando painel…');
+                setDrawConfirmOpen(false);
+                setDrawConfirmRaffle(null);
+                setDrawPreview(null);
+                await refreshAdminData();
+                setDrawPhase('loading');
+                return;
+            }
+
+            toast.error(msg);
             setDrawPhase('ready');
         }
     };
