@@ -4,7 +4,6 @@ import { LogEngineV4 } from "./logEngineV4";
 import { AnomalyScanner } from "./anomalyScanner";
 import { EconomyHealthEngine } from "./economyHealthEngine";
 import { MissionEngineUnified } from "../missions/MissionEngineUnified";
-import { EventEngineUnified } from "../events/EventEngineUnified";
 import { QueueEngineV5 } from "../queue/queueEngineV5";
 import { EconomyService } from "../economy/economyEngineV6";
 import { LedgerEngine } from "../economy/ledgerEngine";
@@ -14,7 +13,7 @@ import { AdminAwardsEngine } from "./adminAwards.engine";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";
 import { normalizeStoreItem } from "../core/normalizeStoreItem";
 import type { 
-    Mission, StoreItem, UsableItem, CoinPack, Event, EventMission, FeaturedWinner, 
+    Mission, StoreItem, UsableItem, CoinPack, FeaturedWinner, 
     Advertisement, SubscriptionPlan, SubmissionStatus, User, PunishmentType 
 } from "../../types";
 import { updateUserInDb, createNotification } from "../helpers";
@@ -118,11 +117,7 @@ const reviewSubmissionFn = async (submissionId: string, status: 'approved' | 're
     return { success: true, updatedUser: healed, notifications };
 };
 
-// Define helper function for approveAllPendingEventSubmissions
-const approveAllPendingEventSubmissionsFn = () => {
-     // Implementation for batch event approval if needed
-     return { success: true };
-};
+// (Eventos removidos do produto)
 
 export const AdminService = {
     
@@ -766,29 +761,7 @@ export const AdminService = {
     },
 
     // --- EVENTS ---
-    events: {
-        saveEvent: (event: Event) => {
-             ensureMockBackend('events.saveEvent');
-             const res = EventEngineUnified.saveEvent(event);
-             CacheService.invalidate('admin_dashboard_data');
-             return res;
-        },
-        deleteEvent: (id: string) => {
-             ensureMockBackend('events.deleteEvent');
-             const res = EventEngineUnified.deleteEvent(id);
-             CacheService.invalidate('admin_dashboard_data');
-             return res;
-        },
-        saveEventMission: (m: EventMission) => { ensureMockBackend('events.saveEventMission'); return EventEngineUnified.saveEventMission(m); },
-        deleteEventMission: (missionId: string) => { 
-            ensureMockBackend('events.deleteEventMission');
-            const m = repo.select("eventMissions").find((m:any) => m.id === missionId);
-            if (!m) return { success: false, error: "Mission not found" };
-            return EventEngineUnified.deleteEventMission(m.eventId, missionId);
-        },
-        reviewEventMission: (...args: any[]) => { ensureMockBackend('events.reviewEventMission'); return EventEngineUnified.reviewEventMission(...args as [any]); },
-        approveAllPendingEventSubmissions: () => { ensureMockBackend('events.approveAllPendingEventSubmissions'); return approveAllPendingEventSubmissionsFn(); },
-    },
+    // (removido)
 
     // --- RAFFLES ---
   raffles: {
