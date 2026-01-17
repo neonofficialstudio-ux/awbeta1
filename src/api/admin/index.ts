@@ -37,18 +37,7 @@ export const completeVisualReward = AdminEngine.completeVisualReward;
 export const adminSubmitPaymentLink = AdminEngine.adminSubmitPaymentLink;
 export const reviewCoinPurchase = AdminEngine.reviewCoinPurchase;
 
-// Events
-export const saveEvent = AdminEngine.events.saveEvent;
-export const deleteEvent = AdminEngine.events.deleteEvent;
-export const saveFeaturedWinner = AdminEngine.saveFeaturedWinner;
-export const deleteFeaturedWinner = AdminEngine.deleteFeaturedWinner;
-export const setArtistsOfTheDay = AdminEngine.setArtistsOfTheDay;
-export const setArtistCarouselDuration = AdminEngine.setArtistCarouselDuration;
-export const saveEventMission = AdminEngine.events.saveEventMission;
-export const deleteEventMission = AdminEngine.events.deleteEventMission;
-export const reviewEventMission = AdminEngine.events.reviewEventMission;
-export const addManualEventPoints = AdminEngine.addManualEventPoints;
-export const approveAllPendingEventSubmissions = AdminEngine.events.approveAllPendingEventSubmissions;
+// Events removed from product (no exports)
 
 // Queue
 export const processQueueItem = AdminEngine.queue.processQueueItem;
