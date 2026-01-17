@@ -1,14 +1,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Raffle, RaffleTicket, User, JackpotRound } from '../types';
+import type { Raffle, RaffleTicket, User } from '../types';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import { CoinIcon, TicketIcon, CrownIcon, HistoryIcon, CheckIcon, ShieldIcon } from '../constants';
 import AvatarWithFrame from './AvatarWithFrame';
-import { MasterSync } from '../state/masterSync';
 import RiotUpcomingList from './raffles/RiotUpcomingList';
 import { RaffleEngineV2 } from '../api/raffles/raffle.engine';
-import { ModalPortal } from './ui/overlays/ModalPortal'; // Ensure this import exists
 import Button from './ui/base/Button';
 import FaqItem from './ui/patterns/FaqItem';
 
@@ -190,327 +188,7 @@ const DigitalCountdown: React.FC<{ targetDate: string; large?: boolean; label?: 
         </div>
     );
 };
-
-const JackpotCountdown: React.FC<{ targetDate: string; status: string; nextStart?: string }> = ({ targetDate, status, nextStart }) => {
-    const [timeLeft, setTimeLeft] = useState<any>(null);
-
-    useEffect(() => {
-        const tick = () => {
-            let target = status === 'active' ? targetDate : (nextStart || '');
-            const difference = +new Date(target) - +new Date();
-            
-            if (difference > 0) {
-                setTimeLeft({
-                    hoursTotal: Math.floor(difference / (1000 * 60 * 60)),
-                    d: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                    h: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                    m: Math.floor((difference / 1000 / 60) % 60),
-                    s: Math.floor((difference / 1000) % 60),
-                });
-            } else {
-                setTimeLeft(null);
-            }
-        };
-
-        tick(); // Initial call
-        const timer = setInterval(tick, 1000);
-        return () => clearInterval(timer);
-    }, [targetDate, status, nextStart]);
-
-    if (status === 'in_apuration') {
-        return <span className="text-red-500 font-black uppercase tracking-widest animate-pulse">APURANDO VENCEDOR...</span>;
-    }
-    
-    if (status === 'waiting_start') {
-        if (timeLeft) {
-            const timeString = timeLeft.d > 0 
-            ? `${timeLeft.d}d ${timeLeft.h}h` 
-            : `${String(timeLeft.h).padStart(2,'0')}:${String(timeLeft.m).padStart(2,'0')}:${String(timeLeft.s).padStart(2,'0')}`;
-             return (
-                 <div className="flex flex-col items-center">
-                     <span className="text-[10px] font-black uppercase tracking-[0.25em] mb-1 text-gray-500">PRÓXIMO CICLO EM</span>
-                     <span className="text-lg font-mono font-bold text-white">{timeString}</span>
-                 </div>
-             );
-        } else {
-            return <span className="text-gray-400 font-bold uppercase tracking-widest">AGUARDANDO INÍCIO</span>;
-        }
-    }
-
-    if (!timeLeft) {
-         // Active but timed out locally
-        return <span className="text-red-600 font-black uppercase tracking-widest animate-pulse">ENCERRADO - APURAÇÃO</span>;
-    }
-
-    let colorClass = "text-[#FFE25A]";
-    let pulseClass = "";
-    
-    if (timeLeft.hoursTotal < 1) {
-        colorClass = "text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]";
-        pulseClass = "animate-pulse";
-    } else if (timeLeft.hoursTotal < 24) {
-        colorClass = "text-orange-400";
-    }
-
-    const timeString = timeLeft.d > 0 
-        ? `${timeLeft.d}d ${timeLeft.h}h` 
-        : `${String(timeLeft.h).padStart(2,'0')}:${String(timeLeft.m).padStart(2,'0')}:${String(timeLeft.s).padStart(2,'0')}`;
-
-    return (
-        <div className="flex flex-col items-center">
-            <span className={`text-[10px] font-black uppercase tracking-[0.25em] mb-1 ${timeLeft.hoursTotal < 24 ? 'text-red-400' : 'text-gray-500'}`}>
-                {timeLeft.hoursTotal < 1 ? 'ÚLTIMA CHANCE' : 'PRÓXIMO SORTEIO'}
-            </span>
-            <span className={`text-lg font-mono font-bold ${colorClass} ${pulseClass}`}>
-                {timeString}
-            </span>
-        </div>
-    );
-}
-
-// --- NEW V13.6 JACKPOT BUY MODAL ---
-const JackpotBuyModal: React.FC<{ 
-    ticketPrice: number; 
-    currentTickets: number; 
-    userLimit: number; 
-    userCoins: number; 
-    onClose: () => void; 
-    onConfirm: (quantity: number) => void; 
-    isProcessing: boolean;
-}> = ({ ticketPrice, currentTickets, userLimit, userCoins, onClose, onConfirm, isProcessing }) => {
-    const [quantity, setQuantity] = useState(1);
-    
-    // V3.1 Update: Limit calculation logic
-    const maxByCoins = Math.floor(userCoins / ticketPrice);
-    
-    // If limit is 0, it's unlimited (effectively huge number)
-    const effectiveLimit = userLimit > 0 ? userLimit : 999999;
-    const maxByLimit = Math.max(0, effectiveLimit - currentTickets);
-    
-    const maxCanBuy = Math.max(0, Math.min(maxByCoins, maxByLimit));
-    const totalCost = quantity * ticketPrice;
-
-    useEffect(() => {
-        // Adjust quantity if it exceeds limits on mount or prop change
-        if (quantity > maxCanBuy) setQuantity(maxCanBuy > 0 ? maxCanBuy : 1);
-    }, [maxCanBuy]);
-
-    return (
-        <ModalPortal>
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={onClose}>
-                <div className="bg-[#0E0E0E] rounded-3xl border-2 border-[#FFD447]/30 w-full max-w-md p-8 shadow-[0_0_60px_rgba(255,212,71,0.15)] relative flex flex-col animate-pop-in" onClick={e => e.stopPropagation()}>
-                    <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white p-2 rounded-full hover:bg-white/10">✕</button>
-                    
-                    <div className="text-center mb-8">
-                         <div className="w-16 h-16 bg-[#FFD447]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#FFD447]/30">
-                             <TicketIcon className="w-8 h-8 text-[#FFD447]" />
-                         </div>
-                         <h2 className="text-2xl font-black text-white font-chakra uppercase tracking-wide">Comprar Tickets</h2>
-                         <p className="text-gray-400 text-sm mt-1">Aumente suas chances no Jackpot</p>
-                    </div>
-
-                    {maxCanBuy <= 0 ? (
-                        <div className="bg-red-900/20 border border-red-500/30 p-4 rounded-xl text-center mb-6">
-                            <p className="text-red-300 font-bold text-sm">
-                                {maxByLimit <= 0 ? "Limite individual de tickets atingido." : "Saldo insuficiente para novos tickets."}
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center gap-4 mb-8 bg-[#151515] p-4 rounded-2xl border border-[#333]">
-                            <button 
-                                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                                className="w-10 h-10 bg-[#222] rounded-lg text-white hover:bg-[#333] border border-[#444] font-bold text-xl"
-                            >-</button>
-                            
-                            <div className="text-center w-24">
-                                <input 
-                                    type="number" 
-                                    value={quantity} 
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        if (!isNaN(val)) setQuantity(Math.min(maxCanBuy, Math.max(1, val)));
-                                    }}
-                                    className="w-full bg-transparent text-center text-3xl font-black text-white outline-none" 
-                                />
-                                <p className="text-[10px] text-gray-500 uppercase font-bold">Quantidade</p>
-                            </div>
-
-                            <button 
-                                onClick={() => setQuantity(Math.min(maxCanBuy, quantity + 1))}
-                                className="w-10 h-10 bg-[#222] rounded-lg text-white hover:bg-[#333] border border-[#444] font-bold text-xl"
-                            >+</button>
-                        </div>
-                    )}
-                    
-                    <div className="space-y-2 mb-8 text-sm">
-                        <div className="flex justify-between text-gray-400">
-                            <span>Preço Unitário</span>
-                            <span className="text-white font-bold">{ticketPrice} LC</span>
-                        </div>
-                        <div className="flex justify-between text-gray-400">
-                            <span>Seus Tickets Atuais</span>
-                            <span className="text-[#FFD447] font-bold">{currentTickets} / {userLimit === 0 ? '∞' : userLimit}</span>
-                        </div>
-                        <div className="h-px bg-white/10 my-2"></div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-white font-bold uppercase">Total a Pagar</span>
-                            <div className="flex items-center gap-2 text-[#FFD447] font-black text-xl">
-                                <CoinIcon className="w-5 h-5" />
-                                {totalCost.toLocaleString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={() => onConfirm(quantity)}
-                        disabled={isProcessing || maxCanBuy <= 0}
-                        className="w-full py-4 rounded-xl bg-gradient-to-r from-[#FFD447] to-[#F6C560] text-black font-black uppercase tracking-widest hover:shadow-[0_0_30px_rgba(255,212,71,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                    >
-                        {isProcessing ? "Processando..." : "Confirmar Compra"}
-                    </button>
-                </div>
-            </div>
-        </ModalPortal>
-    );
-}
-
-// --- MAIN RAFFLE HERO (JACKPOT) ---
-const MainRaffleHero: React.FC<{ 
-    currentValue: number; 
-    ticketPrice: number;
-    onBuyTicket: (qty: number) => void; 
-    userCoins: number; 
-    isBuying: boolean;
-    tickets: any[];
-    nextDraw: string;
-    lastRound?: JackpotRound;
-    allUsers: User[];
-    status: string;
-    nextStartDate?: string;
-    userTicketCount: number;
-    ticketLimits?: { perUser?: number; global?: number };
-}> = ({ currentValue, ticketPrice, onBuyTicket, userCoins, isBuying, tickets, nextDraw, lastRound, allUsers, status, nextStartDate, userTicketCount, ticketLimits }) => {
-    const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
-    
-    const limit = ticketLimits?.perUser || 0;
-    const globalLimit = ticketLimits?.global || 0;
-    const currentTickets = userTicketCount;
-    const remainingByLimit = limit > 0 ? Math.max(0, limit - currentTickets) : Infinity;
-    const remainingByGlobal = globalLimit > 0 ? Math.max(0, globalLimit - tickets.length) : Infinity;
-    const remaining = Math.min(remainingByLimit, remainingByGlobal);
-    
-    const chance = tickets.length > 0 ? (currentTickets / tickets.length) * 100 : 0;
-    const chanceDisplay = chance > 0 && chance < 0.1 ? "< 0.1%" : `${chance.toFixed(1)}%`;
-    const isActive = status === 'active';
-
-    let lastWinnerUser: User | undefined = undefined;
-    if (lastRound) lastWinnerUser = allUsers.find(u => u.id === lastRound.winnerId);
-
-    return (
-        <div className="w-full mb-16 relative z-10 px-2 md:px-0">
-            <div className="arcane-card rounded-[32px] p-8 md:p-12 relative group">
-                
-                {/* Animated Particles (CSS) */}
-                <div className="absolute top-1/4 left-1/4 w-1 h-1 arcane-particle" style={{ animationDelay: '0s' }}></div>
-                <div className="absolute top-3/4 right-1/4 w-1 h-1 arcane-particle" style={{ animationDelay: '1s' }}></div>
-                <div className="absolute bottom-10 left-1/2 w-1.5 h-1.5 arcane-particle" style={{ animationDelay: '2.5s' }}></div>
-
-                {/* Header / Timer */}
-                <div className="flex flex-col items-center justify-center relative z-20 mb-8">
-                    <div className="bg-black/60 backdrop-blur-md border border-[#FFD447]/20 px-6 py-2 rounded-full mb-6 shadow-lg">
-                        <JackpotCountdown targetDate={nextDraw} status={status} nextStart={nextStartDate} />
-                    </div>
-                    
-                    <h3 className="text-[#C8AA6E] text-sm font-bold uppercase tracking-[0.4em] mb-2 text-center drop-shadow-md">
-                        Jackpot da Comunidade
-                    </h3>
-                    
-                    <div className="flex items-center justify-center gap-4 md:gap-6 transform group-hover:scale-105 transition-transform duration-500">
-                        <CrownIcon className="w-12 h-12 md:w-16 md:h-16 text-[#FFD447] drop-shadow-[0_0_25px_rgba(255,212,71,0.6)] animate-pulse-slow" />
-                        <p className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-[#FFF] via-[#FFD447] to-[#C8AA6E] font-chakra drop-shadow-[0_0_30px_rgba(255,212,71,0.2)]">
-                            {currentValue.toLocaleString('pt-BR')}
-                        </p>
-                        <p className="text-3xl md:text-4xl font-black text-[#C8AA6E] mt-4">LC</p>
-                    </div>
-                </div>
-                
-                {/* Limit Info (V13.7) */}
-                {isActive && (
-                    <div className="text-center mb-6">
-                        <p className="text-xs text-gray-400 uppercase font-bold tracking-widest bg-black/30 inline-block px-4 py-1 rounded-full border border-white/5">
-                            Seu Limite: <span className="text-white">{limit === 0 ? 'Ilimitado' : limit}</span> • Comprados: <span className="text-[#FFD447]">{currentTickets}</span> • Restam: <span className="text-green-400">{limit === 0 ? '∞' : remaining}</span>
-                        </p>
-                    </div>
-                )}
-
-                {/* Interaction Area */}
-                <div className="flex flex-col items-center gap-6 relative z-20">
-                    <button 
-                        onClick={() => setIsBuyModalOpen(true)}
-                        disabled={isBuying || !isActive || remaining <= 0}
-                        className={`
-                            px-12 py-4 rounded-xl font-black text-sm uppercase tracking-[0.2em] transition-all duration-300 shadow-2xl
-                            ${isActive && remaining > 0
-                                ? 'arcane-btn-bg text-[#050505] hover:scale-105 hover:shadow-[0_0_40px_rgba(255,212,71,0.4)]' 
-                                : 'bg-[#1A1A1A] text-gray-500 cursor-not-allowed border border-gray-800'}
-                        `}
-                    >
-                        {isBuying ? 'Processando...' : !isActive ? 'Aguardando Próximo Ciclo' : remaining <= 0 ? '🔒 Limite Atingido' : 'Entrar no Pote'}
-                    </button>
-                    
-                    <div className="flex items-center gap-8 bg-[#0A0A0A]/80 border border-[#FFD447]/20 rounded-2xl px-8 py-3 backdrop-blur-md shadow-inner">
-                        <div className="flex flex-col items-center border-r border-[#333] pr-8">
-                             <span className="text-[9px] text-[#808080] uppercase font-bold tracking-widest mb-1">Seus Tickets</span>
-                             <span className="text-2xl font-black text-white">{currentTickets}</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[9px] text-[#808080] uppercase font-bold tracking-widest mb-1">Chance</span>
-                            <span className={`text-xl font-bold ${chance > 5 ? 'text-[#2ECC71]' : 'text-[#C8AA6E]'}`}>{chanceDisplay}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Last Winner (Footer) */}
-                {lastRound && (
-                    <div className="mt-10 flex justify-center animate-fade-in-up">
-                        <div className="p-2 pr-6 bg-gradient-to-r from-[#1A1A1A] to-[#0A0A0A] border border-[#FFD447]/10 rounded-full flex items-center gap-4 shadow-lg">
-                            <div className="relative">
-                                <div className="absolute -inset-1 bg-[#FFD447] rounded-full blur opacity-20 animate-pulse"></div>
-                                <AvatarWithFrame user={lastWinnerUser || { name: lastRound.winnerName, avatarUrl: "https://i.pravatar.cc/150?u=default", plan: 'Free Flow' } as any} sizeClass="w-10 h-10" className="relative z-10 ring-2 ring-[#FFD447]/50" />
-                            </div>
-                            <div className="text-left">
-                                <p className="text-[8px] text-[#C8AA6E] uppercase font-black tracking-widest">Último Vencedor</p>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-white font-bold text-sm">{lastRound.winnerName}</span>
-                                    <span className="text-xs text-2xl font-mono font-bold bg-[#2ECC71]/10 px-1.5 rounded">+{lastRound.prizeAmount.toLocaleString()} LC</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Bottom Gradient Fade */}
-                <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-[#050505] to-transparent pointer-events-none"></div>
-            </div>
-
-            {/* V13.6 Buy Modal */}
-            {isBuyModalOpen && (
-                <JackpotBuyModal
-                    ticketPrice={ticketPrice}
-                    currentTickets={currentTickets}
-                    userLimit={limit}
-                    userCoins={userCoins}
-                    onClose={() => setIsBuyModalOpen(false)}
-                    onConfirm={(qty) => {
-                        onBuyTicket(qty);
-                        setIsBuyModalOpen(false);
-                    }}
-                    isProcessing={isBuying}
-                />
-            )}
-        </div>
-    );
-};
+// (Jackpot removido do produto: UI/fluxo descontinuados)
 
 // --- STANDARD RAFFLE MAIN CARD (RESTORED + ARCANE BOOST) ---
 const StandardRaffleHero: React.FC<{
@@ -862,9 +540,8 @@ const BuyTicketsModal: React.FC<{ raffle: Raffle; myTicketCount: number; userCoi
 
 const faqData = [
     { question: "Como funcionam os Sorteios?", answer: "Você usa suas Lummi Coins para comprar tickets. Quanto mais tickets comprar, maiores suas chances de ganhar." },
-    { question: "O que é o Jackpot?", answer: "O Jackpot é um prêmio acumulado em Coins. Todo mundo que compra tickets contribui para o valor total, e um único vencedor leva tudo no final do ciclo." },
     { question: "Posso participar de múltiplos sorteios?", answer: "Sim! Você pode comprar tickets para quantos sorteios ativos desejar, desde que tenha saldo de Coins suficiente." },
-    { question: "Como recebo o prêmio?", answer: "Se você ganhar um item, ele aparecerá no seu Inventário. Se ganhar o Jackpot ou Coins, o saldo é creditado automaticamente na sua conta." },
+    { question: "Como recebo o prêmio?", answer: "Se você ganhar um item, ele aparecerá no seu Inventário. Se ganhar Coins, o saldo é creditado automaticamente na sua conta." },
     { question: "Existe limite de tickets?", answer: "Alguns sorteios possuem limites de tickets por usuário para garantir equilíbrio. Verifique o detalhe de cada sorteio." }
 ];
 
@@ -879,7 +556,6 @@ const Raffles: React.FC = () => {
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [raffleToBuy, setRaffleToBuy] = useState<Raffle | null>(null);
-    const [isBuyingJackpot, setIsBuyingJackpot] = useState(false);
     const [highlightedRaffleId, setHighlightedRaffleId] = useState<string | null>(null); // V1.0
 
     // Fetch Data
@@ -896,8 +572,6 @@ const Raffles: React.FC = () => {
             setAllTickets(data.allTickets);
             setAllUsers(data.allUsers);
             setHighlightedRaffleId(data.highlightedRaffleId); // V1.0
-
-            await MasterSync.syncJackpot(dispatch);
         } catch (error) {
             console.error("Failed to fetch raffles:", error);
         } finally {
@@ -908,9 +582,7 @@ const Raffles: React.FC = () => {
     useEffect(() => {
         fetchData();
         const interval = setInterval(fetchData, 15000); // Poll every 15s for status updates
-        const jpListener = () => { if (activeUser) MasterSync.syncJackpot(dispatch); };
-        window.addEventListener('AW_JACKPOT_UPDATE', jpListener);
-        return () => { clearInterval(interval); window.removeEventListener('AW_JACKPOT_UPDATE', jpListener); };
+        return () => { clearInterval(interval); };
     }, [fetchData, activeUser, dispatch]);
 
     const handleBuyTickets = async (quantity: number) => {
@@ -931,44 +603,7 @@ const Raffles: React.FC = () => {
         } catch (error) { console.error(error); } finally { setRaffleToBuy(null); }
     };
     
-    const handleBuyJackpotTicketBulk = async (qty: number) => {
-        if (!activeUser) return;
-        if ((state.jackpotData as any)?.disabled) {
-            dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Jackpot em breve', message: 'O jackpot ainda não está disponível.' } });
-            return;
-        }
-        setIsBuyingJackpot(true);
-        try {
-            // Use V13.6 Bulk API
-            const res = await api.buyJackpotTicketsBulk(activeUser.id, qty);
-            if ((res as any)?.disabled) {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'info', title: 'Jackpot em breve', message: (res as any).message || 'O jackpot estará disponível em breve.' } });
-                return;
-            }
-            
-            if (res.success) {
-                const existingJackpot = state.jackpotData && !(state.jackpotData as any).disabled ? state.jackpotData : null;
-                const payload = existingJackpot ? { ...existingJackpot, currentValue: res.jackpotValue } : { currentValue: res.jackpotValue, ticketPrice: 0, nextDraw: '', tickets: [], history: [], status: 'active' as const };
-                dispatch({ type: 'SET_JACKPOT_DATA', payload });
-                if(res.updatedUser) dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Tickets Confirmados!', message: res.message || `${qty} tickets adicionados!` } });
-            } else {
-                dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro', message: res.message } });
-            }
-        } catch (e) { console.error(e); } finally { setIsBuyingJackpot(false); }
-    }
-    
     if (isLoading || !activeUser) return <div className="flex justify-center min-h-[60vh] items-center"><div className="w-10 h-10 border-4 border-dashed rounded-full animate-spin border-yellow-500"></div></div>;
-    
-    const isJackpotDisabled = !!(state.jackpotData as any)?.disabled;
-    const jackpotDisabledMessage = isJackpotDisabled ? (state.jackpotData as any)?.message || "Jackpot em breve" : "";
-    const jackpot = !state.jackpotData || isJackpotDisabled
-        ? { currentValue: 15000, ticketPrice: 100, nextDraw: '', tickets: [], history: [], status: 'active' as const, ticketLimits: { perUser: 0, global: 0 } }
-        : state.jackpotData as any;
-    const lastJackpotRound = !isJackpotDisabled && jackpot.history && jackpot.history.length > 0 ? jackpot.history[0] : undefined;
-    
-    const userLimit = !isJackpotDisabled ? jackpot.ticketLimits?.perUser || 0 : 0;
-    const userTicketCount = !isJackpotDisabled ? jackpot.tickets.filter((t: any) => t.userId === activeUser.id).length : 0;
 
     // --- RAFFLE DISPLAY LOGIC V1.0 ---
     
@@ -995,33 +630,7 @@ const Raffles: React.FC = () => {
             {/* --- STYLE INJECTION --- */}
             <style>{ArcaneStyles}</style>
 
-            {/* 1. MAIN JACKPOT HERO (Arcane Ultra Edition) */}
-            {isJackpotDisabled ? (
-                <div className="w-full mb-16 relative z-10 px-2 md:px-0">
-                    <div className="rounded-[32px] p-8 md:p-12 bg-gradient-to-r from-[#1a1a1a] to-[#0f0f0f] border border-yellow-500/40 shadow-[0_0_25px_rgba(234,179,8,0.1)] text-center">
-                        <p className="text-3xl font-black text-yellow-300 uppercase tracking-[0.3em]">Jackpot: em breve</p>
-                        <p className="text-gray-400 mt-2 font-medium">{jackpotDisabledMessage || 'Estamos preparando o Jackpot na infraestrutura Supabase.'}</p>
-                    </div>
-                </div>
-            ) : (
-                <MainRaffleHero 
-                    currentValue={jackpot.currentValue} 
-                    ticketPrice={jackpot.ticketPrice} 
-                    onBuyTicket={handleBuyJackpotTicketBulk} 
-                    userCoins={activeUser.coins} 
-                    isBuying={isBuyingJackpot} 
-                    tickets={jackpot.tickets} 
-                    nextDraw={jackpot.nextDraw} 
-                    lastRound={lastJackpotRound}
-                    allUsers={allUsers}
-                    status={jackpot.status}
-                    nextStartDate={jackpot.nextStartDate}
-                    userTicketCount={userTicketCount}
-                    ticketLimits={jackpot.ticketLimits}
-                />
-            )}
-            
-            {/* 2. STANDARD RAFFLE MAIN CARD (Restored V1.0 with V2 Logic) */}
+            {/* 1. STANDARD RAFFLE MAIN CARD (Restored V1.0 with V2 Logic) */}
             {featuredStandardRaffle ? (
                 <StandardRaffleHero
                     raffle={featuredStandardRaffle}
@@ -1036,11 +645,11 @@ const Raffles: React.FC = () => {
                 />
             )}
 
-            {/* 3. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
+            {/* 2. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
             {/* FIX V1.0: Exclude highlighted raffle to avoid duplication if it is scheduled */}
             <RiotUpcomingList raffles={raffles.filter(r => r.id !== featuredStandardRaffle?.id)} />
             
-            {/* 4. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
+            {/* 3. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
             {displayRaffles.length > 0 && (
                 <div className="mb-16">
                     <div className="flex items-center gap-3 mb-6 pl-2 border-l-4 border-green-500">
@@ -1056,7 +665,7 @@ const Raffles: React.FC = () => {
                 </div>
             )}
             
-            {/* 5. HALL OF FAME (Winners) */}
+            {/* 4. HALL OF FAME (Winners) */}
             {winnerRaffles.length > 0 && (
                 <div className="mb-12 bg-[#151515] p-6 rounded-2xl border border-white/5">
                     <div className="flex items-center gap-3 mb-6">
