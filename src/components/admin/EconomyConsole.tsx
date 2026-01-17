@@ -1,7 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { CoinIcon, XPIcon, MissionIcon, StoreIcon, TrendingUpIcon } from '../../constants';
-import { readLogFile } from '../../api/logs/virtualDisk';
 import type { User, Mission, MissionSubmission, StoreItem, UsableItem, CoinTransaction, RedeemedItem } from '../../types';
 import { SanitizeString } from '../../core/sanitizer.core';
 
@@ -41,7 +40,7 @@ const ConsoleTable: React.FC<{ headers: string[]; children: React.ReactNode }> =
 );
 
 const EconomyConsole: React.FC<EconomyConsoleProps> = ({ allUsers, missions, missionSubmissions, storeItems, usableItems, allTransactions, redeemedItems }) => {
-    const [logFile, setLogFile] = useState<'sanity' | 'auto-heal'>('sanity');
+    // logs mock removidos
     
     // --- A) Economy Summary ---
     const totalCoins = useMemo(() => allUsers.reduce((acc, u) => acc + u.coins, 0), [allUsers]);
@@ -104,13 +103,7 @@ const EconomyConsole: React.FC<EconomyConsoleProps> = ({ allUsers, missions, mis
         }).sort((a, b) => b.count - a.count);
     }, [missions, missionSubmissions]);
 
-    // --- E) Log Content ---
-    const logContent = useMemo(() => {
-        const filename = logFile === 'sanity' ? 'logs/sanity-check.log' : 'logs/auto-heal.log';
-        const content = readLogFile(filename);
-        const lines = SanitizeString(content).split('\n');
-        return lines.slice(-50).join('\n'); // Last 50 lines
-    }, [logFile]);
+    // Logs removidos: Economy Console agora é 100% Supabase-driven via adminData
 
     return (
         <div className="space-y-8 animate-fade-in-up">
@@ -190,32 +183,7 @@ const EconomyConsole: React.FC<EconomyConsoleProps> = ({ allUsers, missions, mis
                 </div>
             </div>
 
-            {/* BLOCK E: LOG VIEWER */}
-            <div className="bg-[#0d0d0d] border border-gray-700 rounded-xl p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-white flex items-center">
-                        <span className="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></span>
-                        System Logs
-                    </h3>
-                    <div className="flex space-x-2">
-                        <button 
-                            onClick={() => setLogFile('sanity')} 
-                            className={`px-3 py-1 text-xs font-bold rounded uppercase tracking-wider transition-colors ${logFile === 'sanity' ? 'bg-goldenYellow-500 text-black' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                        >
-                            Sanity Check
-                        </button>
-                        <button 
-                            onClick={() => setLogFile('auto-heal')} 
-                            className={`px-3 py-1 text-xs font-bold rounded uppercase tracking-wider transition-colors ${logFile === 'auto-heal' ? 'bg-goldenYellow-500 text-black' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                        >
-                            Auto Heal
-                        </button>
-                    </div>
-                </div>
-                <div className="bg-black rounded-lg p-4 font-mono text-xs h-64 overflow-y-auto border border-gray-800 shadow-inner">
-                    <pre className="text-green-500 whitespace-pre-wrap">{logContent}</pre>
-                </div>
-            </div>
+            {/* Logs mock removidos intencionalmente */}
         </div>
     );
 };

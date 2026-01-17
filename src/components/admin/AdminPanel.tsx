@@ -21,7 +21,7 @@ import AdminDashboard from './AdminDashboard';
 import UserBehaviorIntelligence from './UserBehaviorIntelligence';
 import AdminInsightEngine from './AdminInsightEngine';
 import EconomyConsole from './EconomyConsole';
-import StressAndPerformance from './StressAndPerformance'; 
+// Stress test removido (feature descontinuada)
 import EconomicDashboardPro from './EconomicDashboardPro';
 import TelemetryProTab from './telemetry/TelemetryProTab'; 
 
@@ -59,7 +59,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     
     // Local state
     const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(adminSettingsInitialSubTab || 'telemetry_pro');
-    const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro' | 'stress'>('console');
+    const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>('console');
 
     const refreshAdminData = useCallback(async () => {
         try {
@@ -165,13 +165,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     items={[
                                         { id: 'console', label: 'Console Geral' },
                                         { id: 'pro', label: 'Economy Pro' },
-                                        { id: 'stress', label: 'Stress & Performance' },
                                     ]}
                                 />
                             </div>
                             {activeEconomySubTab === 'console' && <EconomyConsole {...adminData} />}
-                            {activeEconomySubTab === 'pro' && <EconomicDashboardPro />}
-                            {activeEconomySubTab === 'stress' && <StressAndPerformance />}
+                            {activeEconomySubTab === 'pro' && <EconomicDashboardPro {...adminData} />}
                         </div>
                     </AntiCrashBoundary>
                 );
