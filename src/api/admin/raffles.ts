@@ -152,6 +152,7 @@ export const saveRaffle = (raffleData: any) => withLatency(async () => {
                 prize_type: raffleData.prizeType ?? null,
                 coin_reward: (raffleData.coinReward ?? 0) > 0 ? Number(raffleData.coinReward) : null,
                 custom_reward_text: raffleData.customRewardText ?? null,
+                meta: raffleData.meta ?? null,
                 updated_at: new Date().toISOString(),
             };
 
@@ -175,6 +176,14 @@ export const saveRaffle = (raffleData: any) => withLatency(async () => {
             const createdId =
                 (created && typeof created === 'object' && (created as any).id) ? (created as any).id :
                 (typeof created === 'string' ? created : null);
+
+            const nextMeta = raffleData?.meta ? raffleData.meta : null;
+            if (createdId) {
+                // sempre tenta persistir meta (ex.: meta.title)
+                if (nextMeta) {
+                    await supabase.from('raffles').update({ meta: nextMeta }).eq('id', createdId);
+                }
+            }
 
             if (createdId && (raffleData?.prizeType === 'item' || raffleData?.prizeType === 'hybrid') && raffleData?.itemId) {
                 await supabase
