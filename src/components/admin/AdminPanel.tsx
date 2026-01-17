@@ -205,7 +205,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     onBatchSaveMissions={(missions: Mission[]) => handleAdminAction(api.saveMissionsBatch(missions))}
                 /></AntiCrashBoundary>;
             case 'users':
-                return <AntiCrashBoundary><ManageUsers {...adminData} onUpdateUser={(u: User) => handleAdminAction(api.adminUpdateUser(u))} onPunishUser={(p: any) => handleAdminAction(api.punishUser(p))} onUnbanUser={onUnbanUser} onResetMonthlyRanking={() => handleAdminAction(api.resetMonthlyRanking())} onViewUserHistory={onViewUserHistory} /></AntiCrashBoundary>;
+                return (
+                    <AntiCrashBoundary>
+                        <ManageUsers
+                            {...adminData}
+                            onUpdateUser={(u: User) => handleAdminAction(api.adminUpdateUser(u))}
+                            onPunishUser={(p: any) => handleAdminAction(api.punishUser(p))}
+                            onUnbanUser={onUnbanUser}
+                            // ✅ agora serve apenas para atualizar os dados do admin após fechar/premiar
+                            onResetMonthlyRanking={refreshAdminData}
+                            onViewUserHistory={onViewUserHistory}
+                        />
+                    </AntiCrashBoundary>
+                );
             case 'store':
                 return <AntiCrashBoundary><ManageStore 
                     {...adminData} 

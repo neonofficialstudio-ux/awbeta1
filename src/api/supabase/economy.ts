@@ -187,6 +187,44 @@ export const fetchLeaderboard = async (limit = 50, offset = 0) => {
     }
 };
 
+export const fetchMonthlyLeaderboard = async (limit = 50, offset = 0) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, leaderboard: [] as RankingUser[], error: 'Supabase client not available' };
+
+    try {
+        const { data, error } = await supabase.rpc('get_monthly_leaderboard', { p_limit: limit, p_offset: offset });
+        if (error) throw error;
+
+        const rows = Array.isArray(data) ? data : [];
+        return {
+            success: true as const,
+            leaderboard: rows.map((row, index) => normalizeLeaderboardEntry(row, index)),
+        };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] fetchMonthlyLeaderboard failed', err);
+        return { success: false as const, leaderboard: [] as RankingUser[], error: err?.message || 'Falha ao carregar ranking mensal' };
+    }
+};
+
+export const fetchLatestMonthlyWinners = async () => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: true as const, winners: [] as any[] };
+
+    try {
+        const { data, error } = await supabase.rpc('get_ranking_history', { p_limit: 1, p_offset: 0 });
+        if (error) throw error;
+
+        const payload: any = data || {};
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        const latest = items[0];
+        const winners = Array.isArray(latest?.winners) ? latest.winners : [];
+        return { success: true as const, cycle: latest || null, winners };
+    } catch (err) {
+        console.warn('[SupabaseEconomy] fetchLatestMonthlyWinners failed', err);
+        return { success: true as const, cycle: null, winners: [] as any[] };
+    }
+};
+
 export const fetchHallOfFame = async (limit = 50, offset = 0) => {
     const supabase = ensureClient();
     if (!supabase) return { success: true as const, entries: [] as RankingUser[], error: null as string | null };

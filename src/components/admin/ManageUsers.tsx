@@ -3,6 +3,9 @@ import type { User, MissionSubmission, PunishmentType } from '../../types';
 import AdminUserEditModal from './AdminUserEditModal';
 import AdminPunishmentModal from './AdminPunishmentModal';
 import ConfirmationModal from './ConfirmationModal';
+import { ModalPortal } from '../ui/overlays/ModalPortal';
+import { toast } from 'react-hot-toast';
+import { getSupabase } from '../../api/supabase/client';
 import { SearchIcon, EditIcon, HistoryIcon, UsersIcon, CrownIcon, ShieldIcon } from '../../constants';
 import AvatarWithFrame from '../AvatarWithFrame';
 import UserListModal from './UserListModal';
@@ -487,10 +490,68 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [punishingUser, setPunishingUser] = useState<User | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isClosingMonthly, setIsClosingMonthly] = useState(false);
+  const [monthlyTop, setMonthlyTop] = useState<any[]>([]);
+  const [award1, setAward1] = useState<number>(5000);
+  const [award2, setAward2] = useState<number>(3000);
+  const [award3, setAward3] = useState<number>(1500);
   const [searchTerm, setSearchTerm] = useState('');
   const [subscriptionFilter, setSubscriptionFilter] = useState('all');
   const [activeTab, setActiveTab] = useState<'list' | 'metrics' | 'leads'>('list');
   const [userToUnban, setUserToUnban] = useState<User | null>(null);
+
+  const loadMonthlyPreview = async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      toast.error('Supabase não disponível.');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc('admin_preview_monthly_ranking', { p_top_n: 3 });
+      if (error) throw error;
+      const top = Array.isArray((data as any)?.top) ? (data as any).top : [];
+      setMonthlyTop(top);
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao carregar Top 3 mensal.');
+      setMonthlyTop([]);
+    }
+  };
+
+  const openMonthlyResetModal = async () => {
+    setIsResetModalOpen(true);
+    setMonthlyTop([]);
+    await loadMonthlyPreview();
+  };
+
+  const confirmCloseMonthly = async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      toast.error('Supabase não disponível.');
+      return;
+    }
+    setIsClosingMonthly(true);
+    try {
+      const awards = [
+        { position: 1, coins: Number(award1) || 0 },
+        { position: 2, coins: Number(award2) || 0 },
+        { position: 3, coins: Number(award3) || 0 },
+      ];
+      const { error } = await supabase.rpc('admin_close_monthly_ranking_and_award', {
+        p_awards: awards,
+        p_ref_id: crypto.randomUUID(),
+      });
+      if (error) throw error;
+
+      toast.success('Ciclo mensal fechado e premiação registrada!');
+      setIsResetModalOpen(false);
+      // ✅ apenas refresh do adminData (não chama lógica antiga)
+      await onResetMonthlyRanking();
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao fechar ranking mensal.');
+    } finally {
+      setIsClosingMonthly(false);
+    }
+  };
 
   const filteredUsers = useMemo(() => {
     return allUsers.filter(user => {
@@ -565,7 +626,7 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
                         </div>
                     }
                     end={
-                        <Button variant="danger" size="sm" onClick={() => setIsResetModalOpen(true)} className="bg-red-900/20 border border-red-500/30 text-red-400 hover:bg-red-900/40">
+                        <Button variant="danger" size="sm" onClick={openMonthlyResetModal} className="bg-red-900/20 border border-red-500/30 text-red-400 hover:bg-red-900/40">
                             Zerar Ranking Mensal
                         </Button>
                     }
@@ -672,13 +733,96 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
             onSave={handleSavePunishment}
         />
       )}
-      <ConfirmationModal
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        onConfirm={() => { onResetMonthlyRanking(); setIsResetModalOpen(false); }}
-        title="Confirmar Reset do Ranking"
-        message="Você tem certeza que deseja zerar a contagem de missões mensais para TODOS os usuários? Esta ação é irreversível."
-      />
+      {isResetModalOpen && (
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            onClick={() => !isClosingMonthly && setIsResetModalOpen(false)}
+          >
+            <div
+              className="bg-[#0E0E0E] rounded-2xl border border-gold-cinematic/30 w-full max-w-2xl p-6 shadow-[0_0_60px_rgba(246,197,96,0.12)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-black text-white uppercase tracking-wide">Fechar Ranking Mensal</h3>
+                <button
+                  onClick={() => !isClosingMonthly && setIsResetModalOpen(false)}
+                  className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-sm text-white/60">
+                Confira o Top 3 do mês e defina a premiação em coins. Ao confirmar, o ciclo mensal é fechado e o mês reinicia.
+              </p>
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[0, 1, 2].map((idx) => {
+                  const t = monthlyTop?.[idx];
+                  const pos = idx + 1;
+                  const fallbackName = t?.display_name || `Top ${pos}`;
+                  const avatar = t?.avatar_url || '';
+                  const xp = Number(t?.monthly_xp ?? 0);
+                  const level = Number(t?.monthly_level ?? 1);
+                  const value = pos === 1 ? award1 : pos === 2 ? award2 : award3;
+                  const setValue = pos === 1 ? setAward1 : pos === 2 ? setAward2 : setAward3;
+
+                  return (
+                    <div key={pos} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                      <p className="text-[10px] text-white/40 uppercase font-black tracking-[0.35em] mb-2">
+                        TOP {pos}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 bg-white/5">
+                          {avatar ? <img src={avatar} className="w-full h-full object-cover" /> : null}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-white font-black truncate">{fallbackName}</p>
+                          <p className="text-xs text-white/50 font-mono">
+                            Lvl {level} • {xp} XP
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Premiar (LC)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={value}
+                          onChange={(e) => setValue(Number(e.target.value))}
+                          className="mt-2 w-full bg-[#0F1115] border border-[#2A2D33] rounded-lg px-3 py-2 text-white outline-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => !isClosingMonthly && setIsResetModalOpen(false)}
+                  className="bg-gray-800 hover:bg-gray-700 text-white"
+                  disabled={isClosingMonthly}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={confirmCloseMonthly}
+                  className="bg-gold-cinematic text-black hover:shadow-[0_0_30px_rgba(246,197,96,0.25)]"
+                  disabled={isClosingMonthly}
+                >
+                  {isClosingMonthly ? 'Processando...' : 'Confirmar e Premiar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
       <ConfirmationModal
         isOpen={!!userToUnban}
         onClose={() => setUserToUnban(null)}
