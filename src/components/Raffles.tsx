@@ -68,7 +68,7 @@ const NoActiveStandardRaffle: React.FC<{ hasUpcoming?: boolean }> = ({ hasUpcomi
   const hints = [
     'Estamos preparando o próximo evento.',
     'Novos prêmios chegam em breve.',
-    'Fique atento — o próximo sorteio pode ser épico.',
+    'Quando um sorteio abre, os primeiros tickets costumam ser os mais disputados.',
   ];
   const hint = hints[Math.floor(Math.random() * hints.length)];
 
@@ -85,9 +85,7 @@ const NoActiveStandardRaffle: React.FC<{ hasUpcoming?: boolean }> = ({ hasUpcomi
 
         <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="max-w-2xl">
-            <p className="text-xs font-black uppercase tracking-[0.35em] text-[#9d4dff] mb-2">
-              Sorteios • Em breve
-            </p>
+            <p className="text-xs font-black uppercase tracking-[0.35em] text-[#9d4dff] mb-2">EVENTOS</p>
             <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase leading-tight">
               Nenhum sorteio ativo agora
             </h3>
@@ -264,14 +262,25 @@ const StandardRaffleHero: React.FC<{
                     {/* Header */}
                     <div className="flex justify-between items-start mb-6">
                         <div>
+                            <p className="text-xs font-black uppercase tracking-[0.35em] text-[#9d4dff] mb-3">EVENTO EM ANDAMENTO</p>
                             <h2 className="text-3xl md:text-5xl font-black text-white font-chakra uppercase leading-none mb-2 drop-shadow-[0_0_10px_rgba(157,77,255,0.5)]">
                                 {raffleTitle}
                             </h2>
-                            <p className="text-[#B3B3B3] text-sm font-medium">Sorteio Standard • ID: {raffle.id.slice(0,6)}</p>
-                            <p className="text-[#B3B3B3] text-sm mt-2">
-                                <span className="text-white/60 font-bold">Prêmio:</span>{' '}
-                                <span className="text-white/90 font-semibold">{prizeText}</span>
-                            </p>
+                            <p className="text-[#B3B3B3] text-sm font-medium">Um evento. Um vencedor. Resultado registrado no sistema.</p>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">🔒 Sistema auditável</span>
+                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">⚡ Resultado automático</span>
+                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">🎁 Prêmio instantâneo</span>
+                            </div>
+
+                            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
+                                <p className="text-[10px] text-white/50 uppercase font-black tracking-[0.35em] mb-2">PRÊMIO DO EVENTO</p>
+                                <p className="text-sm text-white/90 font-semibold">{prizeText}</p>
+                                <p className="text-xs text-white/50 mt-2">
+                                    Se for <span className="text-white/70 font-bold">item</span>, vai direto para o seu <span className="text-white/70 font-bold">Inventário</span>. Se for <span className="text-white/70 font-bold">coins</span>, cai no saldo na hora.
+                                </p>
+                            </div>
                         </div>
                         <div className="text-right hidden md:block">
                             {!hasEnded && <DigitalCountdown targetDate={targetDate} large label={label} />}
@@ -539,10 +548,12 @@ const BuyTicketsModal: React.FC<{ raffle: Raffle; myTicketCount: number; userCoi
 };
 
 const faqData = [
-    { question: "Como funcionam os Sorteios?", answer: "Você usa suas Lummi Coins para comprar tickets. Quanto mais tickets comprar, maiores suas chances de ganhar." },
-    { question: "Posso participar de múltiplos sorteios?", answer: "Sim! Você pode comprar tickets para quantos sorteios ativos desejar, desde que tenha saldo de Coins suficiente." },
-    { question: "Como recebo o prêmio?", answer: "Se você ganhar um item, ele aparecerá no seu Inventário. Se ganhar Coins, o saldo é creditado automaticamente na sua conta." },
-    { question: "Existe limite de tickets?", answer: "Alguns sorteios possuem limites de tickets por usuário para garantir equilíbrio. Verifique o detalhe de cada sorteio." }
+    { question: "Como funcionam os sorteios?", answer: "Você compra tickets usando Lummi Coins. Cada ticket representa uma chance." },
+    { question: "Como o vencedor é escolhido?", answer: "Quando o evento encerra, o sistema define um vencedor de forma determinística e auditável." },
+    { question: "O que eu ganho se vencer?", answer: "Pode ser um item, coins ou ambos. Itens vão para o Inventário e coins caem no saldo automaticamente." },
+    { question: "Existe limite de tickets?", answer: "Alguns eventos possuem limite por usuário para manter o equilíbrio." },
+    { question: "Posso participar de vários eventos ao mesmo tempo?", answer: "Sim. Você escolhe onde quer concentrar seus tickets." },
+    { question: "E se ninguém comprar tickets?", answer: "O evento encerra sem vencedor e um novo sorteio é preparado." }
 ];
 
 // --- MAIN PAGE ---
@@ -652,9 +663,12 @@ const Raffles: React.FC = () => {
             {/* 3. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
             {displayRaffles.length > 0 && (
                 <div className="mb-16">
-                    <div className="flex items-center gap-3 mb-6 pl-2 border-l-4 border-green-500">
-                        <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros Sorteios Ativos</h3>
+                    <div className="flex items-center gap-3 mb-3 pl-2 border-l-4 border-green-500">
+                        <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros eventos em andamento</h3>
                     </div>
+                    <p className="text-xs text-white/50 px-2 mb-6">
+                        Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
+                    </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {displayRaffles.map(raffle => {
                             const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
@@ -670,7 +684,10 @@ const Raffles: React.FC = () => {
                 <div className="mb-12 bg-[#151515] p-6 rounded-2xl border border-white/5">
                     <div className="flex items-center gap-3 mb-6">
                         <div className="p-2 bg-[#FFD447]/10 rounded-lg border border-[#FFD447]/20"><HistoryIcon className="w-5 h-5 text-[#FFD447]" /></div>
-                        <h3 className="text-xl font-bold text-white uppercase tracking-wider font-chakra">Hall da Fama</h3>
+                        <div>
+                          <h3 className="text-xl font-bold text-white uppercase tracking-wider font-chakra">Hall da Fama</h3>
+                          <p className="text-xs text-white/50 mt-1">Vencedores oficiais • prêmio registrado automaticamente</p>
+                        </div>
                     </div>
                     <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
                         {winnerRaffles.map(raffle => {
