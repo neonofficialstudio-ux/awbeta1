@@ -35,13 +35,16 @@ const RiotUpcomingList: React.FC<RiotUpcomingListProps> = ({ raffles }) => {
                 <div className="pl-4">
                     <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide flex items-center gap-3">
                         <TicketIcon className="w-6 h-6 text-[#FFD34E]" />
-                        Próximos Sorteios
+                        Próximos Eventos
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
                          <div className="h-[2px] w-12 bg-[#FFD34E] animate-pulse shadow-[0_0_10px_#FFD34E]"></div>
-                         <span className="text-[10px] font-bold text-[#C8AA6E] uppercase tracking-[0.2em]">Calendário Oficial</span>
+                         <span className="text-[10px] font-bold text-[#C8AA6E] uppercase tracking-[0.2em]">Agenda de Sorteios</span>
                          <div className="h-[1px] flex-grow bg-gradient-to-r from-[#C8AA6E]/50 to-transparent"></div>
                     </div>
+                    <p className="text-xs text-white/50 mt-2 max-w-2xl">
+                        Esses eventos já estão programados. Assim que ativarem, você poderá comprar tickets e participar.
+                    </p>
                 </div>
             </div>
 
