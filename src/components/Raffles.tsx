@@ -63,7 +63,7 @@ const ArcaneStyles = `
   }
 `;
 
-// ✅ Landing Hero (Arena de Sorteios) — fora do card do sorteio
+// ✅ Landing Hero (Arena de Sorteios) — estilo "Assinaturas" (Riot/AAA)
 const ArenaLandingHero: React.FC<{ hasActive: boolean }> = ({ hasActive }) => {
   const scrollToActive = () => {
     const el = document.getElementById('evento-ativo');
@@ -71,59 +71,57 @@ const ArenaLandingHero: React.FC<{ hasActive: boolean }> = ({ hasActive }) => {
   };
 
   return (
-    <section className="w-full mb-10 md:mb-14 px-2 md:px-0">
-      <div className="relative overflow-hidden rounded-[32px] border border-[#9d4dff]/35 bg-gradient-to-br from-[#0c0f14] to-[#050608] shadow-[0_0_60px_rgba(157,77,255,0.18)]">
-        <div
-          className="absolute inset-0 opacity-40 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 20% 30%, rgba(157,77,255,0.30), transparent 55%), radial-gradient(circle at 80% 40%, rgba(255,214,90,0.18), transparent 55%)',
-          }}
-        />
+    <section className="pt-4 md:pt-6 mb-12 md:mb-16 relative">
+      {/* Back Glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-[720px] bg-[#FFD36A]/10 blur-[110px] rounded-full pointer-events-none" />
+      <div className="text-center max-w-5xl mx-auto relative z-10">
+        <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#9d4dff] mb-3">
+          ARENA OFICIAL
+        </p>
 
-        <div className="relative p-8 md:p-12">
-          <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#9d4dff] mb-4">
-            ARENA OFICIAL
+        <h1 className="text-4xl md:text-6xl font-black text-[#FFD36A] font-chakra uppercase tracking-tighter mb-4 drop-shadow-[0_0_15px_rgba(255,211,106,0.5)]">
+          ARENA DE SORTEIOS
+        </h1>
+
+        <div className="flex items-center justify-center mb-6">
+          <div className="h-[2px] w-12 bg-gradient-to-r from-transparent to-[#FF3CE6]" />
+          <div className="mx-4 text-[#FF3CE6] animate-pulse">◆</div>
+          <div className="h-[2px] w-12 bg-gradient-to-l from-transparent to-[#3CFFF8]" />
+        </div>
+
+        <h2 className="text-lg md:text-2xl text-gray-200 max-w-3xl mx-auto leading-relaxed font-bold">
+          Onde talento, estratégia e sorte se encontram.
+        </h2>
+        <p className="text-sm md:text-base text-gray-400 max-w-2xl mx-auto leading-relaxed font-medium mt-3">
+          Eventos oficiais do Artist World com <span className="text-white font-bold">prêmios reais</span>. Um vencedor por evento. Resultado registrado no sistema.
+        </p>
+
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
+            🔒 Sistema auditável
+          </span>
+          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
+            ⚡ Resultado automático
+          </span>
+          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
+            🎁 Prêmio instantâneo
+          </span>
+          <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">
+            🧾 Histórico público
+          </span>
+        </div>
+
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <button
+            type="button"
+            onClick={scrollToActive}
+            className="px-8 py-3 rounded-xl bg-[#FFD36A] text-black font-black uppercase tracking-[0.22em] text-xs hover:shadow-[0_0_30px_rgba(255,211,106,0.35)] transition-all active:scale-[0.99]"
+          >
+            PARTICIPAR AGORA
+          </button>
+          <p className="text-xs text-gray-500">
+            {hasActive ? 'Role para ver o evento ativo.' : 'Sem evento ativo? Veja os próximos e prepare seus LC.'}
           </p>
-
-          <h1 className="text-3xl md:text-5xl font-black text-white font-chakra uppercase tracking-wide leading-none drop-shadow-[0_0_12px_rgba(157,77,255,0.35)]">
-            ARENA DE SORTEIOS
-          </h1>
-          <h2 className="mt-3 text-lg md:text-2xl font-black text-white/90 leading-snug">
-            Onde talento, estratégia e sorte se encontram.
-          </h2>
-
-          <p className="mt-4 text-sm md:text-base text-white/60 max-w-3xl">
-            Eventos oficiais do Artist World com <span className="text-white/80 font-bold">prêmios reais</span>. Um vencedor por evento. Resultado registrado no sistema.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-2">
-            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
-              🔒 Sistema auditável
-            </span>
-            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
-              ⚡ Resultado automático
-            </span>
-            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
-              🎁 Prêmio instantâneo
-            </span>
-            <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/75">
-              🧾 Histórico público
-            </span>
-          </div>
-
-          <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={scrollToActive}
-              className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-[#9d4dff]/15 border border-[#9d4dff]/45 text-[#d7c6ff] hover:bg-[#9d4dff]/25 hover:border-[#9d4dff]/65 transition-all font-black uppercase tracking-[0.22em] text-xs"
-            >
-              PARTICIPAR AGORA ↓
-            </button>
-            <p className="text-xs text-white/45">
-              {hasActive ? 'Entre no evento ativo abaixo.' : 'Sem evento ativo? Veja os próximos e prepare seus LC.'}
-            </p>
-          </div>
         </div>
       </div>
     </section>
@@ -156,29 +154,23 @@ const HowItWorksSection: React.FC = () => {
   ];
 
   return (
-    <section className="w-full mb-10 md:mb-14 px-2 md:px-0">
-      <div className="flex items-end justify-between gap-4 mb-4">
-        <div>
-          <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#FFD65A]">
-            COMO FUNCIONA
-          </p>
-          <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-wide font-chakra">
-            Entenda em 10 segundos
-          </h3>
-          <p className="text-xs md:text-sm text-white/50 mt-1">
-            Simples. Transparente. Competitivo.
-          </p>
-        </div>
+    <section className="mb-12 md:mb-16">
+      <div className="text-center mb-8">
+        <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#C8AA6E]">COMO FUNCIONA</p>
+        <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide mt-2">
+          Entenda em 10 segundos
+        </h3>
+        <p className="text-gray-400 text-sm mt-2">Simples. Transparente. Competitivo.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {steps.map((s) => (
           <div
             key={s.title}
-            className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 to-black/30 p-5 shadow-[0_0_30px_rgba(157,77,255,0.06)]"
+            className="rounded-2xl border border-[#FFD36A]/20 bg-[#121212] p-5 backdrop-blur-sm shadow-2xl"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#9d4dff]/10 border border-[#9d4dff]/25 flex items-center justify-center text-lg">
+              <div className="w-10 h-10 rounded-xl bg-[#FFD36A]/10 border border-[#FFD36A]/25 flex items-center justify-center text-lg">
                 {s.icon}
               </div>
               <p className="text-white font-black uppercase tracking-wide text-sm">
@@ -190,9 +182,7 @@ const HowItWorksSection: React.FC = () => {
         ))}
       </div>
 
-      <p className="mt-4 text-xs text-white/45">
-        Sem manipulação manual. Tudo registrado.
-      </p>
+      <p className="mt-5 text-xs text-gray-500 text-center">Sem manipulação manual. Tudo registrado.</p>
     </section>
   );
 };
@@ -396,25 +386,14 @@ const StandardRaffleHero: React.FC<{
                     {/* Header */}
                     <div className="flex justify-between items-start mb-6">
                         <div>
-                            <p className="text-xs font-black uppercase tracking-[0.35em] text-[#9d4dff] mb-3">EVENTO EM ANDAMENTO</p>
                             <h2 className="text-3xl md:text-5xl font-black text-white font-chakra uppercase leading-none mb-2 drop-shadow-[0_0_10px_rgba(157,77,255,0.5)]">
                                 {raffleTitle}
                             </h2>
-                            <p className="text-[#B3B3B3] text-sm font-medium">Um evento. Um vencedor. Resultado registrado no sistema.</p>
-
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">🔒 Sistema auditável</span>
-                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">⚡ Resultado automático</span>
-                                <span className="px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-white/70">🎁 Prêmio instantâneo</span>
-                            </div>
-
-                            <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-4">
-                                <p className="text-[10px] text-white/50 uppercase font-black tracking-[0.35em] mb-2">PRÊMIO DO EVENTO</p>
-                                <p className="text-sm text-white/90 font-semibold">{prizeText}</p>
-                                <p className="text-xs text-white/50 mt-2">
-                                    Se for <span className="text-white/70 font-bold">item</span>, vai direto para o seu <span className="text-white/70 font-bold">Inventário</span>. Se for <span className="text-white/70 font-bold">coins</span>, cai no saldo na hora.
-                                </p>
-                            </div>
+                            <p className="text-[#B3B3B3] text-sm font-medium">Sorteio Standard • ID: {raffle.id.slice(0,6)}</p>
+                            <p className="text-[#B3B3B3] text-sm mt-2">
+                                <span className="text-white/60 font-bold">Prêmio:</span>{' '}
+                                <span className="text-white/90 font-semibold">{prizeText}</span>
+                            </p>
                         </div>
                         <div className="text-right hidden md:block">
                             {!hasEnded && <DigitalCountdown targetDate={targetDate} large label={label} />}
@@ -775,87 +754,92 @@ const Raffles: React.FC = () => {
             {/* --- STYLE INJECTION --- */}
             <style>{ArcaneStyles}</style>
 
-            {/* 0. LANDING (Arena) */}
-            <ArenaLandingHero hasActive={!!featuredStandardRaffle} />
-            <HowItWorksSection />
+            <div className="max-w-6xl mx-auto px-4 md:px-6">
+                {/* 0. LANDING (Arena) */}
+                <ArenaLandingHero hasActive={!!featuredStandardRaffle} />
+                <HowItWorksSection />
 
-            {/* 1. EVENTO EM DESTAQUE */}
-            <section id="evento-ativo" className="scroll-mt-24">
-                <div className="flex items-center gap-3 mb-4 pl-2 border-l-4 border-[#9d4dff]">
-                    <h3 className="text-xl font-black text-white uppercase tracking-wider font-chakra">🔥 Evento em andamento</h3>
-                </div>
-                <p className="text-xs text-white/50 px-2 mb-6">
-                    Entre agora ou assista de fora — mas só quem tem ticket pode vencer.
-                </p>
+                {/* 1. EVENTO EM DESTAQUE */}
+                <section id="evento-ativo" className="scroll-mt-24">
+                    <div className="text-center mb-6">
+                        <p className="text-[11px] md:text-xs font-black uppercase tracking-[0.45em] text-[#C8AA6E]">EVENTO EM ANDAMENTO</p>
+                        <h3 className="text-2xl md:text-3xl font-black text-white font-chakra uppercase tracking-wide mt-2">
+                            🔥 Participe agora
+                        </h3>
+                        <p className="text-gray-400 text-sm mt-2">
+                            Entre no evento ativo e concorra ao prêmio — só quem tem ticket pode vencer.
+                        </p>
+                    </div>
 
-                {featuredStandardRaffle ? (
-                    <StandardRaffleHero
-                        raffle={featuredStandardRaffle}
-                        myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
-                        totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
-                        userCoins={activeUser.coins}
-                        onBuy={setRaffleToBuy}
-                    />
-                ) : (
-                    <NoActiveStandardRaffle
-                        hasUpcoming={raffles.some(r => r.status === 'scheduled' || (r.startsAt && new Date(r.startsAt) > new Date()))}
-                    />
-                )}
-            </section>
+                    {featuredStandardRaffle ? (
+                        <StandardRaffleHero
+                            raffle={featuredStandardRaffle}
+                            myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
+                            totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
+                            userCoins={activeUser.coins}
+                            onBuy={setRaffleToBuy}
+                        />
+                    ) : (
+                        <NoActiveStandardRaffle
+                            hasUpcoming={raffles.some(r => r.status === 'scheduled' || (r.startsAt && new Date(r.startsAt) > new Date()))}
+                        />
+                    )}
+                </section>
 
-            {/* 2. HALL OF FAME (Winners) */}
-            {winnerRaffles.length > 0 && (
-                <div className="mb-12 bg-[#151515] p-6 rounded-2xl border border-white/5">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-2 bg-[#FFD447]/10 rounded-lg border border-[#FFD447]/20"><HistoryIcon className="w-5 h-5 text-[#FFD447]" /></div>
-                        <div>
-                          <h3 className="text-xl font-bold text-white uppercase tracking-wider font-chakra">Hall da Fama</h3>
-                          <p className="text-xs text-white/50 mt-1">Vencedores oficiais • prêmio registrado automaticamente</p>
+                {/* 2. HALL OF FAME (Winners) */}
+                {winnerRaffles.length > 0 && (
+                    <div className="mb-12 bg-[#151515] p-6 rounded-2xl border border-white/5">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-[#FFD447]/10 rounded-lg border border-[#FFD447]/20"><HistoryIcon className="w-5 h-5 text-[#FFD447]" /></div>
+                            <div>
+                              <h3 className="text-xl font-bold text-white uppercase tracking-wider font-chakra">Hall da Fama</h3>
+                              <p className="text-xs text-white/50 mt-1">Vencedores oficiais • prêmio registrado automaticamente</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                            {winnerRaffles.map(raffle => {
+                                const winner = allUsers.find(u => u.id === raffle.winnerId);
+                                return <WinnerCard key={raffle.id} raffle={raffle} winner={winner} />;
+                            })}
                         </div>
                     </div>
-                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
-                        {winnerRaffles.map(raffle => {
-                            const winner = allUsers.find(u => u.id === raffle.winnerId);
-                            return <WinnerCard key={raffle.id} raffle={raffle} winner={winner} />;
-                        })}
-                    </div>
-                </div>
-            )}
+                )}
 
-            {/* 3. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
-            {/* FIX V1.0: Exclude highlighted raffle to avoid duplication if it is scheduled */}
-            <RiotUpcomingList raffles={raffles.filter(r => r.id !== featuredStandardRaffle?.id)} />
-            
-            {/* 4. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
-            {displayRaffles.length > 0 && (
-                <div className="mb-16">
-                    <div className="flex items-center gap-3 mb-3 pl-2 border-l-4 border-green-500">
-                        <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros eventos em andamento</h3>
+                {/* 3. UPCOMING RAFFLES (Riot Style - Handles Scheduled Filter Internally) */}
+                {/* FIX V1.0: Exclude highlighted raffle to avoid duplication if it is scheduled */}
+                <RiotUpcomingList raffles={raffles.filter(r => r.id !== featuredStandardRaffle?.id)} />
+                
+                {/* 4. OTHER ACTIVE RAFFLES (GRID - V1.0 Spec) */}
+                {displayRaffles.length > 0 && (
+                    <div className="mb-16">
+                        <div className="flex items-center gap-3 mb-3 pl-2 border-l-4 border-green-500">
+                            <h3 className="text-xl font-bold text-white uppercase tracking-wider">Outros eventos em andamento</h3>
+                        </div>
+                        <p className="text-xs text-white/50 px-2 mb-6">
+                            Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {displayRaffles.map(raffle => {
+                                const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
+                                const totalCount = allTickets.filter(t => t.raffleId === raffle.id).length;
+                                return <TicketCard key={raffle.id} raffle={raffle} myTickets={myCount} totalTickets={totalCount} userCoins={activeUser.coins} onBuy={setRaffleToBuy} />;
+                            })}
+                        </div>
                     </div>
-                    <p className="text-xs text-white/50 px-2 mb-6">
-                        Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {displayRaffles.map(raffle => {
-                            const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
-                            const totalCount = allTickets.filter(t => t.raffleId === raffle.id).length;
-                            return <TicketCard key={raffle.id} raffle={raffle} myTickets={myCount} totalTickets={totalCount} userCoins={activeUser.coins} onBuy={setRaffleToBuy} />;
-                        })}
+                )}
+                
+                {/* FAQ Section */}
+                <div className="mt-16 max-w-3xl mx-auto px-4">
+                    <h2 className="text-2xl font-bold text-center text-white mb-8 font-chakra uppercase tracking-wider flex items-center justify-center gap-2">
+                        <ShieldIcon className="w-6 h-6 text-[#FFD65A]" /> Dúvidas Frequentes
+                    </h2>
+                    <div className="space-y-4">
+                        {faqData.map((item, index) => <FaqItem key={index} question={item.question} answer={item.answer} />)}
                     </div>
                 </div>
-            )}
-            
-            {/* FAQ Section */}
-            <div className="mt-16 max-w-3xl mx-auto px-4">
-                <h2 className="text-2xl font-bold text-center text-white mb-8 font-chakra uppercase tracking-wider flex items-center justify-center gap-2">
-                    <ShieldIcon className="w-6 h-6 text-[#FFD65A]" /> Dúvidas Frequentes
-                </h2>
-                <div className="space-y-4">
-                    {faqData.map((item, index) => <FaqItem key={index} question={item.question} answer={item.answer} />)}
-                </div>
+
+                {raffleToBuy && <BuyTicketsModal raffle={raffleToBuy} myTicketCount={myTickets.filter(t => t.raffleId === raffleToBuy.id).length} userCoins={activeUser.coins} onClose={() => setRaffleToBuy(null)} onConfirm={handleBuyTickets} />}
             </div>
-
-            {raffleToBuy && <BuyTicketsModal raffle={raffleToBuy} myTicketCount={myTickets.filter(t => t.raffleId === raffleToBuy.id).length} userCoins={activeUser.coins} onClose={() => setRaffleToBuy(null)} onConfirm={handleBuyTickets} />}
         </div>
     );
 };
