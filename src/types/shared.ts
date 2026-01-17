@@ -3,7 +3,7 @@ import React from 'react';
 
 export type IconComponent = React.FC<React.SVGProps<SVGSVGElement>>;
 
-export type View = 'dashboard' | 'missions' | 'store' | 'inventory' | 'ranking' | 'subscriptions' | 'events' | 'profile' | 'admin' | 'auth' | 'raffles' | 'achievements';
+export type View = 'dashboard' | 'missions' | 'store' | 'inventory' | 'ranking' | 'subscriptions' | 'profile' | 'admin' | 'auth' | 'raffles' | 'achievements';
 
 export type Metadata = Record<string, unknown>;
 

@@ -93,7 +93,7 @@ export const NotificationDispatcher = {
             "event_update",
             title,
             message,
-            { view: 'events' }
+            { view: 'dashboard' }
         );
     },
 

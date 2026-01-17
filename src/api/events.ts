@@ -86,7 +86,7 @@ export const joinEvent = (userId: string, eventId: string, cost: number, isGolde
     db.participationsData.push(newParticipation);
     
     const successMsg = isGolden ? `Você adquiriu o Golden Pass para "${event.title}"! Aproveite os benefícios VIP.` : `Você se inscreveu com sucesso em "${event.title}". Boa sorte!`;
-    notifications.push(createNotification(userId, 'Inscrição Confirmada!', successMsg, { view: 'events' }));
+    notifications.push(createNotification(userId, 'Inscrição Confirmada!', successMsg, { view: 'dashboard' }));
 
     return { success: true, updatedUser, newParticipation, notifications };
     });
@@ -124,7 +124,7 @@ export const submitEventMission = (userId: string, eventMissionId: string, proof
     const notifications: Notification[] = [];
     const admin = db.allUsersData.find(u => u.role === 'admin');
     if (admin) {
-        const adminNotification = createNotification(admin.id, "Nova Missão de Evento", `${user.name} enviou uma comprovação para a missão de evento "${eventMission.title}".`, { view: 'admin', tab: 'events' });
+        const adminNotification = createNotification(admin.id, "Nova Missão de Evento", `${user.name} enviou uma comprovação para a missão de evento "${eventMission.title}".`, { view: 'admin', tab: 'missions' });
         db.notificationsData.unshift(adminNotification);
         notifications.push(adminNotification);
     }

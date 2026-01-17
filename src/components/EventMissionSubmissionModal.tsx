@@ -35,8 +35,8 @@ const EventMissionSubmissionModal: React.FC<EventMissionSubmissionModalProps> = 
         try {
             await onSubmit(trimmedUrl);
             onClose();
-            // Ensure we stay on events or refresh current view context
-            dispatch({ type: 'SET_VIEW', payload: 'events' }); 
+            // Ensure we stay on missions or refresh current view context
+            dispatch({ type: 'SET_VIEW', payload: 'missions' }); 
         } catch (e: any) {
             console.error(e);
             setError(e.message || "Erro ao enviar missão.");

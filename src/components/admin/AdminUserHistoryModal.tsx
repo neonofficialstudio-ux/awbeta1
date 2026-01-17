@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { User, MissionSubmission, CoinTransaction, RedeemedItem, EventScoreLog, SubmissionStatus, RedemptionStatus, SubscriptionEvent, Punishment, PunishmentType } from '../../types';
+import type { User, MissionSubmission, CoinTransaction, RedeemedItem, SubmissionStatus, RedemptionStatus, Punishment, PunishmentType } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { getDisplayName } from '../../api/core/getDisplayName';
 
@@ -9,11 +9,10 @@ interface AdminUserHistoryModalProps {
   missionSubmissions: MissionSubmission[];
   coinTransactions: CoinTransaction[];
   redeemedItems: RedeemedItem[];
-  eventScoreLog: EventScoreLog[];
   punishments: Punishment[];
 }
 
-type HistoryTab = 'missions' | 'transactions' | 'redemptions' | 'events' | 'subscriptions' | 'punishments';
+type HistoryTab = 'missions' | 'transactions' | 'redemptions' | 'subscriptions' | 'punishments';
 
 const SubTabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
     <button
@@ -64,13 +63,12 @@ const PunishmentTypeBadge: React.FC<{ type: PunishmentType }> = ({ type }) => {
     return <span className={`px-2 py-1 text-xs font-semibold rounded-full ${styles[type]}`}>{text[type]}</span>
 };
 
-const AdminUserHistoryModal: React.FC<AdminUserHistoryModalProps> = ({ user, onClose, missionSubmissions, coinTransactions, redeemedItems, eventScoreLog, punishments }) => {
+const AdminUserHistoryModal: React.FC<AdminUserHistoryModalProps> = ({ user, onClose, missionSubmissions, coinTransactions, redeemedItems, punishments }) => {
   const [activeTab, setActiveTab] = useState<HistoryTab>('missions');
 
   const userMissions = useMemo(() => missionSubmissions.filter(s => s.userId === user.id).sort((a,b) => new Date(b.submittedAtISO).getTime() - new Date(a.submittedAtISO).getTime()), [missionSubmissions, user.id]);
   const userTransactions = useMemo(() => coinTransactions.filter(t => t.userId === user.id).sort((a,b) => new Date(b.dateISO).getTime() - new Date(a.dateISO).getTime()), [coinTransactions, user.id]);
   const userRedemptions = useMemo(() => redeemedItems.filter(r => r.userId === user.id).sort((a,b) => new Date(b.redeemedAt).getTime() - new Date(a.redeemedAt).getTime()), [redeemedItems, user.id]);
-  const userEventScores = useMemo(() => eventScoreLog.filter(e => e.userId === user.id).sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()), [eventScoreLog, user.id]);
   const userSubscriptionHistory = useMemo(() => [...(user.subscriptionHistory || [])].sort((a,b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()), [user.subscriptionHistory]);
   const userPunishments = useMemo(() => punishments.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [punishments]);
 
@@ -92,12 +90,6 @@ const AdminUserHistoryModal: React.FC<AdminUserHistoryModalProps> = ({ user, onC
             <table className="w-full text-sm text-left text-gray-400">
                 <thead className="text-xs text-gray-300 uppercase bg-gray-700/50"><tr><th className="px-4 py-2">Item</th><th className="px-4 py-2">Data</th><th className="px-4 py-2">Status</th></tr></thead>
                 <tbody>{userRedemptions.map(r => <tr key={r.id}><td className="px-4 py-2">{r.itemName}</td><td className="px-4 py-2">{r.redeemedAt}</td><td className="px-4 py-2"><StatusBadge status={r.status}/></td></tr>)}</tbody>
-            </table>
-        );
-        case 'events': return (
-            <table className="w-full text-sm text-left text-gray-400">
-                <thead className="text-xs text-gray-300 uppercase bg-gray-700/50"><tr><th className="px-4 py-2">Evento/Missão</th><th className="px-4 py-2">Data</th><th className="px-4 py-2 text-right">Pontos</th></tr></thead>
-                <tbody>{userEventScores.map(e => <tr key={e.id}><td className="px-4 py-2">Missão de Evento Concluída (ID: {e.eventMissionId})</td><td className="px-4 py-2">{new Date(e.timestamp).toLocaleString('pt-BR')}</td><td className="px-4 py-2 text-right font-bold text-goldenYellow-400">+{e.pointsGained}</td></tr>)}</tbody>
             </table>
         );
         case 'subscriptions': return (
@@ -150,7 +142,6 @@ const AdminUserHistoryModal: React.FC<AdminUserHistoryModalProps> = ({ user, onC
                 <SubTabButton active={activeTab === 'missions'} onClick={() => setActiveTab('missions')}>Missões</SubTabButton>
                 <SubTabButton active={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')}>Transações</SubTabButton>
                 <SubTabButton active={activeTab === 'redemptions'} onClick={() => setActiveTab('redemptions')}>Resgates</SubTabButton>
-                <SubTabButton active={activeTab === 'events'} onClick={() => setActiveTab('events')}>Eventos</SubTabButton>
                 <SubTabButton active={activeTab === 'subscriptions'} onClick={() => setActiveTab('subscriptions')}>Assinaturas</SubTabButton>
                 <SubTabButton active={activeTab === 'punishments'} onClick={() => setActiveTab('punishments')}>Punições</SubTabButton>
             </div>
