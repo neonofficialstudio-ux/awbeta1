@@ -17,6 +17,7 @@ import { AdminEngine } from '../../api/admin/AdminEngine';
 import TableResponsiveWrapper from '../ui/patterns/TableResponsiveWrapper';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { ModalPortal } from '../ui/overlays/ModalPortal';
+import { getSupabase } from '../../api/supabase/client';
 import { getDisplayName } from '../../api/core/getDisplayName';
 import { config } from '../../core/config';
 
@@ -568,16 +569,42 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
             await refreshAdminData();
         } catch (e: any) {
             // ✅ Hardening: Supabase/PostgREST pode retornar 409 em retry/double-click/estado já aplicado.
-            const status = Number(e?.status ?? e?.code ?? 0);
+            const status = Number(e?.status ?? 0);
+            const code = String(e?.code ?? '');
             const msg = e?.message || e?.details || e?.hint || 'Falha ao confirmar apuração.';
 
-            if (status === 409) {
-                toast.success('Apuração já foi aplicada (idempotente). Atualizando painel…');
-                setDrawConfirmOpen(false);
-                setDrawConfirmRaffle(null);
-                setDrawPreview(null);
-                await refreshAdminData();
-                setDrawPhase('loading');
+            // 409 / 23505 = conflito (normalmente retry/duplicidade). Não vamos "assumir sucesso":
+            // vamos checar o estado real do raffle no banco.
+            if ((status === 409 || code === '23505') && drawConfirmRaffle?.id) {
+                try {
+                    const supabase = getSupabase();
+                    if (supabase) {
+                        const { data: r, error: readErr } = await supabase
+                            .from('raffles')
+                            .select('id,status,winner_user_id,winner_defined_at')
+                            .eq('id', drawConfirmRaffle.id)
+                            .single();
+
+                        if (!readErr && r && (r.status === 'winner_defined' || r.winner_user_id)) {
+                            const winnerId = (r as any).winner_user_id || null;
+                            const winner = winnerId ? (allUsers || []).find((u) => u.id === winnerId) || null : null;
+
+                            toast.success('Apuração já estava definida. Painel atualizado.');
+                            setDrawConfirmOpen(false);
+                            setDrawConfirmRaffle(null);
+                            setDrawPreview(null);
+                            setLastDraw({ raffle: drawConfirmRaffle, winner });
+                            await refreshAdminData();
+                            setDrawPhase('loading');
+                            return;
+                        }
+                    }
+                } catch {
+                    // se falhar a leitura, cai no erro padrão abaixo
+                }
+
+                toast.error('Conflito ao confirmar apuração (409). Tente novamente.');
+                setDrawPhase('ready');
                 return;
             }
 
@@ -870,11 +897,16 @@ const ManageRaffles: React.FC<ManageRafflesProps> = ({ raffles: initialRaffles, 
                                         
                                         return (
                                             <tr key={raffle.id} className="bg-[#181818] border-b border-gray-800 hover:bg-gray-800/50">
-                                                <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
-                                                    <img src={prize.displayImage} className="w-8 h-8 rounded object-cover border border-gray-700" />
-                                                    <div>
-                                                        <p>{prize.displayTitle}</p>
-                                                        {prize.warning && <span className="text-[9px] text-red-400 uppercase font-bold">{prize.warning}</span>}
+                                                <td className="px-6 py-4 font-medium text-white">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={prize.displayImage} alt={prize.displayTitle} className="w-8 h-8 rounded object-cover border border-gray-700" />
+                                                        <div className="min-w-0">
+                                                            <p className="font-black truncate">{(raffle as any)?.meta?.title || raffle.itemName}</p>
+                                                            <p className="text-xs text-gray-500 truncate">
+                                                                Prêmio: <span className="text-gray-300">{prize.displayTitle}</span>
+                                                            </p>
+                                                            {prize.warning && <span className="text-[9px] text-red-400 uppercase font-bold">{prize.warning}</span>}
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-xs uppercase font-bold text-gray-500">{prize.type}</td>
