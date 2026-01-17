@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry, Notification, LedgerEntry } from '../types';
 import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon, BellIcon, HistoryIcon } from '../constants';
 import { useAppContext } from '../constants';
-import { fetchArtistOfTheDayConfig } from '../api/events/index';
 import CountUp from './CountUp';
 import { xpForLevelStart } from '../api/economy/economy';
 import { formatNumber } from './ui/utils/format';
@@ -118,10 +117,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
                 const data = await api.fetchArtistsOfTheDayFull();
                 setArtists(data);
                 setCurrentIndex(0);
-                const config = fetchArtistOfTheDayConfig();
-                if (config && typeof config.rotationSeconds === "number") {
-                    setRotationSeconds(config.rotationSeconds);
-                }
+                // Events removidos: config vinda de events não é mais carregada aqui
             } catch (e) {
                 console.error(e);
                 if(initialArtists) setArtists(initialArtists);

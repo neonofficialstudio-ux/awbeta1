@@ -88,49 +88,7 @@ export {
     getQueuePosition
 } from "./store";
 
-// Events V7.0 (Restored & Normalized)
-import {
-    fetchEventsData,
-    fetchRankingData as fetchRankingDataLegacy,
-    joinEvent,
-    submitEventMission,
-    artistLinkClick,
-    markArtistOfTheDayAsSeen,
-    fetchRafflesData,
-    EventEngineV7,
-    EventRankingEngine,
-    EventFAQ,
-    // Restored Endpoints
-    getEventMissions,
-    getVipEventMissions,
-    getEventRanking,
-    getEventData,
-    // AoD exports
-    fetchArtistsOfTheDayFull,
-    fetchArtistOfTheDayConfig,
-    claimArtistOfDayReward
-} from "./events/index";
-
-export {
-    fetchEventsData,
-    joinEvent,
-    submitEventMission,
-    artistLinkClick,
-    markArtistOfTheDayAsSeen,
-    fetchRafflesData,
-    EventEngineV7,
-    EventRankingEngine,
-    EventFAQ,
-    getEventMissions,
-    getVipEventMissions,
-    getEventRanking,
-    getEventData,
-    fetchArtistsOfTheDayFull,
-    fetchArtistOfTheDayConfig,
-    claimArtistOfDayReward
-};
-
-export { runEventSelfTest } from "./events/eventSelfTest";
+// Events removidos do produto (UI + Admin + API)
 
 // Games
 export { 
@@ -266,7 +224,7 @@ export {
 } from "./admin/store";
 
 // Diagnostics (Restored & New)
-export { runEventDiagnostic, runStoreDiagnostic } from "./diagnostics/restorationCheck";
+export { runStoreDiagnostic } from "./diagnostics/restorationCheck";
 import { runFullNormalizationDiagnostic } from "./diagnostics/fullNormalization";
 export { runFullNormalizationDiagnostic };
 
