@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Event, Participation, UsableItemQueueEntry, CoinTransaction, FeaturedWinner, Advertisement, SubscriptionPlan, SubscriptionRequest, EventMission, EventMissionSubmission, ManualEventPointsLog, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
+import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
@@ -11,7 +11,6 @@ import { emptyAdminDashboard } from '../../api/supabase/supabase.repositories.ad
 import ManageMissions from './ManageMissions';
 import ManageStore from './ManageStore';
 import ManageUsers from './ManageUsers';
-import ManageEvents from './ManageEvents';
 import EconomicsDashboard from './EconomicsDashboard';
 import ManageAdvertisements from './ManageAdvertisements';
 import ManageSubscriptions from './ManageSubscriptions';
@@ -35,7 +34,6 @@ import {
   MissionIcon, 
   UsersIcon, 
   StoreIcon, 
-  EventIcon, 
   QueueIcon, 
   TrendingUpIcon, 
   TicketIcon, 
@@ -43,7 +41,6 @@ import {
   SettingsIcon,
   ShieldIcon 
 } from '../../constants';
-import { refreshEventSettings } from '../../state/eventSettings';
 
 interface AdminPanelProps {
   activeTab: AdminTab;
@@ -142,7 +139,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         { id: 'missions', label: 'Missões', count: pendingSubmissionsCount, icon: <MissionIcon className="w-4 h-4" /> },
         { id: 'users', label: 'Usuários', icon: <UsersIcon className="w-4 h-4" /> },
         { id: 'store', label: 'Loja', count: pendingCoinPurchases, icon: <StoreIcon className="w-4 h-4" /> },
-        { id: 'events', label: 'Eventos', icon: <EventIcon className="w-4 h-4" /> },
         { id: 'queues', label: 'Filas', count: totalPendingQueues, icon: <QueueIcon className="w-4 h-4" /> },
         { id: 'raffles', label: 'Sorteios', icon: <TicketIcon className="w-4 h-4" /> },
         { id: 'subscriptions', label: 'Planos', count: pendingRequestsCount, icon: <SubscriptionIcon className="w-4 h-4" /> },
@@ -234,25 +230,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))}
                     onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
                     onCreateMissionFromQueue={(id: string, mission: any) => handleAdminAction(api.createMissionFromQueue(id, mission))}
-                /></AntiCrashBoundary>;
-            case 'events':
-                return <AntiCrashBoundary><ManageEvents 
-                    {...adminData} 
-                    onSaveEvent={(e: Event) => handleAdminAction(api.saveEvent(e))} 
-                    onDeleteEvent={(id: string) => handleAdminAction(api.deleteEvent(id))} 
-                    onSaveFeaturedWinner={(w: FeaturedWinner) => handleAdminAction(api.saveFeaturedWinner(w))} 
-                    onDeleteFeaturedWinner={(id: string) => handleAdminAction(api.deleteFeaturedWinner(id))} 
-                    setArtistsOfTheDayIds={(ids: string[]) => handleAdminAction(api.setArtistsOfTheDay(ids))} 
-                    setArtistCarouselDuration={async (d: number) => {
-                        await handleAdminAction(api.setArtistCarouselDuration(d));
-                        await refreshEventSettings(dispatch);
-                    }} 
-                    onSaveEventMission={(m: EventMission) => handleAdminAction(api.saveEventMission(m))} 
-                    onDeleteEventMission={(id: string) => handleAdminAction(api.deleteEventMission(id))} 
-                    onReviewEventMission={(id: string, s: 'approved' | 'rejected') => handleAdminAction(api.reviewEventMission(id, s))} 
-                    onAddManualEventPoints={(userId: string, eventId: string, points: number, reason: string) => handleAdminAction(api.addManualEventPoints(userId, eventId, points, reason))} 
-                    onBatchApproveEventMissions={() => handleAdminAction(api.approveAllPendingEventSubmissions())}
-                    unifiedAwards={adminData.unifiedAwards}
                 /></AntiCrashBoundary>;
             case 'queues':
                 // ✅ Atalho enterprise: Filas = Loja → Operação → Filas (fonte única)

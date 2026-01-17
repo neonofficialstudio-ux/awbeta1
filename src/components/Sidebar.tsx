@@ -1,7 +1,7 @@
 
 import React, { useCallback } from 'react';
 import type { View, StoreTab } from '../types';
-import { DashboardIcon, MissionIcon, StoreIcon, RankingIcon, SubscriptionIcon, EventIcon, AdminIcon, ProfileIcon, InventoryIcon, TicketIcon, StarIcon } from '../constants';
+import { DashboardIcon, MissionIcon, StoreIcon, RankingIcon, SubscriptionIcon, AdminIcon, ProfileIcon, InventoryIcon, TicketIcon, StarIcon } from '../constants';
 import { useAppContext } from '../constants';
 
 // Logout Icon
@@ -67,7 +67,6 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ isMobileMenuOpen, setIsMob
     { id: 'achievements', label: 'Conquistas', icon: StarIcon },
     { id: 'raffles', label: 'Sorteios', icon: TicketIcon },
     { id: 'subscriptions', label: 'Assinaturas', icon: SubscriptionIcon },
-    { id: 'events', label: 'Eventos', icon: EventIcon },
     { id: 'profile', label: 'Perfil', icon: ProfileIcon },
   ];
 

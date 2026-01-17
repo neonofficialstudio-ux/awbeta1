@@ -32,7 +32,6 @@ const Ranking = React.lazy(() => import('../components/Ranking'));
 const Achievements = React.lazy(() => import('../components/Achievements'));
 const Raffles = React.lazy(() => import('../components/Raffles'));
 const Subscriptions = React.lazy(() => import('../components/Subscriptions'));
-const Events = React.lazy(() => import('../components/Events'));
 const Profile = React.lazy(() => import('../components/Profile'));
 const AdminPanel = React.lazy(() => import('../components/admin/AdminPanel'));
 
@@ -58,7 +57,6 @@ export const MainLayout: React.FC = () => {
         'achievements': 'Conquistas',
         'raffles': 'Sorteios',
         'subscriptions': 'Assinaturas',
-        'events': 'Eventos',
         'profile': 'Perfil',
         'admin': 'Admin'
     };
@@ -220,7 +218,6 @@ export const MainLayout: React.FC = () => {
             case 'achievements': return <Achievements />;
             case 'raffles': return <Raffles />;
             case 'subscriptions': return <Subscriptions />;
-            case 'events': return <Events />;
             case 'profile': return <Profile />;
             case 'admin':
                 if (isAdmin === null) return <PageSkeleton />;
