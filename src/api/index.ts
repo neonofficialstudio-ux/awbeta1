@@ -167,7 +167,6 @@ export {
     reviewSubmission,
     editSubmissionStatus,
     approveAllPendingSubmissions,
-    approveAllPendingEventSubmissions,
     resetMonthlyRanking,
     manualRefund,
     completeVisualReward,
