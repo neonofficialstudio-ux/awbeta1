@@ -180,7 +180,8 @@ export const fetchLeaderboard = async (limit = 50, offset = 0) => {
     if (!supabase) return { success: false as const, leaderboard: [] as RankingUser[], error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit, p_offset: offset });
+        // ✅ Ranking "GERAL" (por missões all-time)
+        const { data, error } = await supabase.rpc('get_general_missions_leaderboard', { p_limit: limit, p_offset: offset });
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
@@ -229,6 +230,26 @@ export const fetchLatestMonthlyWinners = async () => {
     } catch (err) {
         console.warn('[SupabaseEconomy] fetchLatestMonthlyWinners failed', err);
         return { success: true as const, cycle: null, winners: [] as any[] };
+    }
+};
+
+export const fetchRankingCycles = async (limit = 5) => {
+    const supabase = ensureClient();
+    if (!supabase) return { success: false as const, cycles: [] as any[], error: 'Supabase client not available' };
+
+    try {
+        const { data, error } = await supabase
+            .from('ranking_cycles')
+            .select('id,label,starts_at,ends_at,status,created_at')
+            .order('starts_at', { ascending: false })
+            .limit(limit);
+
+        if (error) throw error;
+
+        return { success: true as const, cycles: data || [] };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] fetchRankingCycles failed', err);
+        return { success: false as const, cycles: [] as any[], error: err?.message || 'Falha ao carregar ciclos de ranking' };
     }
 };
 

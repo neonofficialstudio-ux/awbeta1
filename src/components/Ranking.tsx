@@ -184,21 +184,30 @@ const Ranking: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<'mensal' | 'geral'>('mensal');
     const [latestCycle, setLatestCycle] = useState<any | null>(null);
+    const [currentOpenCycle, setCurrentOpenCycle] = useState<any | null>(null);
+    const [lastClosedCycle, setLastClosedCycle] = useState<any | null>(null);
     const [latestWinners, setLatestWinners] = useState<any[]>([]);
-    const getMonthLabel = () => {
-        const d = new Date();
-        const month = d.toLocaleString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
-        const year = d.getFullYear();
-        return `${month}/${year}`;
-    };
-
-    const getMonthRange = () => {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        const fmt = (x: Date) => x.toLocaleDateString('pt-BR');
+    const formatDateRange = (start?: string, end?: string) => {
+        if (!start || !end) return '';
+        const fmt = (value: string) => new Date(value).toLocaleDateString('pt-BR');
         return `${fmt(start)} → ${fmt(end)}`;
     };
+
+    useEffect(() => {
+        const fetchCycles = async () => {
+            try {
+                const cycles = await api.fetchRankingCycles?.(5);
+                const currentOpen = cycles?.find((cycle: any) => cycle.status === 'open') ?? null;
+                const lastClosed = cycles?.find((cycle: any) => cycle.status === 'closed') ?? null;
+                setCurrentOpenCycle(currentOpen);
+                setLastClosedCycle(lastClosed);
+            } catch (err) {
+                console.warn('Failed to fetch ranking cycles:', err);
+            }
+        };
+
+        fetchCycles();
+    }, []);
 
     useEffect(() => {
         const fetchRanking = async () => {
@@ -289,20 +298,36 @@ const Ranking: React.FC = () => {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-black/25 border border-white/10 rounded-2xl px-5 py-4">
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.35em] text-[#C8AA6E]">
-                                    Temporada Mensal • {getMonthLabel()}
+                                    Temporada Mensal • {currentOpenCycle?.label || 'CICLO MENSAL'}
                                 </p>
                                 <p className="text-sm text-white/60 mt-1">
-                                    Período: <span className="text-white/80 font-semibold">{getMonthRange()}</span>
+                                    {currentOpenCycle
+                                        ? (
+                                            <>
+                                                Período: <span className="text-white/80 font-semibold">{formatDateRange(currentOpenCycle?.starts_at, currentOpenCycle?.ends_at)}</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-white/70 font-semibold">Ciclo aguardando abertura</span>
+                                        )}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-black">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                    CICLO EM ANDAMENTO
-                                </span>
-                                <span className="hidden md:inline text-xs text-white/45">
-                                    Fechamento pelo admin no fim do mês
-                                </span>
+                                {currentOpenCycle ? (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-black">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                        CICLO EM ANDAMENTO
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-200 text-xs font-black">
+                                        <ClockIcon className="w-3 h-3" />
+                                        AGUARDANDO ABERTURA
+                                    </span>
+                                )}
+                                {currentOpenCycle && (
+                                    <span className="hidden md:inline text-xs text-white/45">
+                                        Fechamento pelo admin no fim do mês
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -330,7 +355,10 @@ const Ranking: React.FC = () => {
                                 </span>
                             </div>
                             <p className="text-sm text-white/60 mt-2">
-                                {latestCycle?.label ? latestCycle.label : 'Ciclo fechado'} • {latestCycle?.ends_at ? new Date(latestCycle.ends_at).toLocaleDateString('pt-BR') : ''}
+                                {(latestCycle?.label || lastClosedCycle?.label) ? (latestCycle?.label || lastClosedCycle?.label) : 'Ciclo fechado'}
+                                {(latestCycle?.ends_at || lastClosedCycle?.ends_at)
+                                    ? ` • ${new Date(latestCycle?.ends_at || lastClosedCycle?.ends_at).toLocaleDateString('pt-BR')}`
+                                    : ''}
                             </p>
                             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {latestWinners.slice(0, 3).map((w: any) => (

@@ -33,8 +33,8 @@ export const mapProfileToUser = (profile: any, extendedData: any = {}): User => 
         plan: normalizePlan(profile.plan),
         
         // Stats
-        monthlyMissionsCompleted: 0, // Precisa de query agregada
-        totalMissionsCompleted: 0,   // Precisa de query agregada
+        monthlyMissionsCompleted: profile.monthly_missions_completed ?? 0,
+        totalMissionsCompleted: profile.total_missions_completed ?? 0,
         weeklyProgress: 0,
         
         // Arrays (Populated via extendedData from joins)
