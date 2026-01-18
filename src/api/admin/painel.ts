@@ -10,7 +10,7 @@ export async function adminPainelData() {
   // Get core data from V7 Engine to ensure consistency
   const dashboardData = await Promise.resolve(AdminEngineV7.getDashboardData());
 
-  const analytics = adminAnalyticsAPI();
+  const analytics = await adminAnalyticsAPI();
   const insights = adminInsightsAPI();
   const heatmap = generateHeatmap(); 
   const telemetry = telemetryAnalytics();
