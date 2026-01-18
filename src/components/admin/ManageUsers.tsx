@@ -541,7 +541,7 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
         { position: 2, coins: Number(award2) || 0 },
         { position: 3, coins: Number(award3) || 0 },
       ];
-      const { error } = await supabase.rpc(
+      const { data, error } = await supabase.rpc(
         'admin_close_monthly_ranking_and_award',
         {
           p_awards: awards,
@@ -553,14 +553,23 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
           },
         },
       );
-      if (error) throw error;
+      if (error) {
+        console.error('[admin_close_monthly_ranking_and_award] error:', error);
+        throw error;
+      }
 
       toast.success('Ciclo mensal fechado e premiação registrada!');
       setIsResetModalOpen(false);
       // ✅ apenas refresh do adminData (não chama lógica antiga)
       await onResetMonthlyRanking();
     } catch (e: any) {
-      toast.error(e?.message || 'Falha ao fechar ranking mensal.');
+      // Mostra erro completo do PostgREST/Supabase
+      const msg = e?.message ?? 'Falha ao fechar ranking mensal.';
+      const details = e?.details ? ` • ${e.details}` : '';
+      const hint = e?.hint ? ` • hint: ${e.hint}` : '';
+      const code = e?.code ? ` • code: ${e.code}` : '';
+      toast.error(`${msg}${details}${hint}${code}`);
+      console.error('[confirmCloseMonthly] full error:', e);
     } finally {
       setIsClosingMonthly(false);
     }
