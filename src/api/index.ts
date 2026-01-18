@@ -15,6 +15,7 @@ import {
     fetchMonthlyLeaderboard,
     fetchLatestMonthlyWinners as fetchLatestMonthlyWinnersSupabase,
     fetchHallOfFame as fetchHallOfFameSupabase,
+    fetchRankingCycles as fetchRankingCyclesSupabase,
 } from "./supabase/economy";
 
 // Auth & Session (V4.0)
@@ -160,6 +161,16 @@ export const fetchLatestMonthlyWinnersHistory = async () => {
     if (config.backendProvider !== 'supabase') return { cycle: null, winners: [] as any[] };
     const res = await fetchLatestMonthlyWinnersSupabase();
     return res || { cycle: null, winners: [] as any[] };
+};
+
+export const fetchRankingCycles = async (limit = 5) => {
+    if (config.backendProvider !== 'supabase') return [];
+    const res = await fetchRankingCyclesSupabase(limit);
+    if (!res.success) {
+        console.error('[API] fetchRankingCycles failed', res.error);
+        return [];
+    }
+    return res.cycles || [];
 };
 
 export const fetchHallOfFame = async (limit = 50, offset = 0) => {
