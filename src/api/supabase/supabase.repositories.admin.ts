@@ -1,5 +1,6 @@
 import { config } from '../../core/config';
 import { supabaseClient } from './client';
+import { isAdminCached } from './admin';
 import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStoreItemToApp } from './mappings';
 import { missionsAdminRepository } from './repositories/admin/missions';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
@@ -10,14 +11,7 @@ const ensureAdminClient = async () => {
   if (config.backendProvider !== 'supabase') return null;
   if (!supabaseClient) throw new Error('[SupabaseAdminRepo] Supabase client not initialized');
 
-  const { data, error } = await supabaseClient.rpc('is_admin');
-  if (error) throw error;
-
-  const result = Array.isArray(data) ? data[0] ?? data : data;
-  const isAdmin = typeof result === 'object' && result !== null && 'is_admin' in result
-    ? Boolean((result as any).is_admin)
-    : Boolean(result);
-
+  const isAdmin = await isAdminCached();
   if (!isAdmin) {
     throw new Error('[SupabaseAdminRepo] Admin access denied by backend policy');
   }

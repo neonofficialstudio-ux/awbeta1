@@ -8,7 +8,7 @@ import BootScreen from '../components/BootScreen';
 import { MainLayout } from './MainLayout';
 import { config } from './config';
 import { getSupabase } from '../api/supabase/client';
-import { isAdmin as checkIsAdmin } from '../api/supabase/admin';
+import { isAdminCached as checkIsAdmin } from '../api/supabase/admin';
 import { ProfileSupabase } from '../api/supabase/profile';
 
 export const AuthGate = (): React.ReactElement => {

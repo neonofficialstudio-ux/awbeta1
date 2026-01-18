@@ -34,6 +34,21 @@ const sanitizeMeta = (meta: any) => {
     return clone;
 };
 
+// ---------------------------------------------------------------------------
+// ✅ Cache leve para evitar múltiplos SELECTs do mesmo perfil em sequência
+// (reduz egress e reduz spam de rede em re-render)
+// ---------------------------------------------------------------------------
+const PROFILE_CACHE_TTL_MS = 15_000; // 15s (curto para manter UI atualizada)
+let profileCache: {
+    userId: string;
+    fetchedAt: number;
+    user?: User;
+    inFlight?: Promise<{ success: boolean; user?: User; error?: string }>;
+} = {
+    userId: '',
+    fetchedAt: 0,
+};
+
 export const ProfileSupabase = {
     async fetchMyProfile(userId?: string): Promise<{ success: boolean; user?: User; error?: string }> {
         if (config.backendProvider !== 'supabase') {
@@ -54,13 +69,69 @@ export const ProfileSupabase = {
             targetUserId = authData.user.id;
         }
 
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', targetUserId).single();
-        if (error || !data) {
-            return { success: false, error: error?.message || 'Perfil não encontrado' };
+        const now = Date.now();
+        if (profileCache.user && profileCache.userId === targetUserId && now - profileCache.fetchedAt < PROFILE_CACHE_TTL_MS) {
+            return { success: true, user: profileCache.user };
         }
 
-        const mapped = mapProfileToUser(data);
-        return { success: true, user: SanityGuard.user(mapped) };
+        if (profileCache.inFlight && profileCache.userId === targetUserId) {
+            return profileCache.inFlight;
+        }
+
+        const promise = (async () => {
+            const selectFields = [
+                'id',
+                'display_name',
+                'artistic_name',
+                'name',
+                'avatar_url',
+                'coins',
+                'xp',
+                'level',
+                'plan',
+                'monthly_missions_completed',
+                'monthly_xp',
+                'monthly_level',
+                'meta',
+                'created_at',
+                'updated_at',
+            ].join(',');
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .select(selectFields)
+                .eq('id', targetUserId)
+                .single();
+
+            if (error || !data) {
+                return { success: false, error: error?.message || 'Perfil não encontrado' };
+            }
+
+            const mapped = mapProfileToUser(data);
+            const user = SanityGuard.user(mapped);
+
+            profileCache = {
+                userId: targetUserId!,
+                fetchedAt: Date.now(),
+                user,
+            };
+
+            return { success: true, user };
+        })();
+
+        profileCache = {
+            ...profileCache,
+            userId: targetUserId,
+            inFlight: promise,
+        };
+
+        try {
+            return await promise;
+        } finally {
+            if (profileCache.userId === targetUserId) {
+                profileCache.inFlight = undefined;
+            }
+        }
     },
     async updateMyProfile(user: User): Promise<{ success: boolean; updatedUser?: User; error?: string }> {
         if (config.backendProvider !== 'supabase') {
@@ -109,7 +180,16 @@ export const ProfileSupabase = {
         };
 
         const mapped = mapProfileToUser(hydratedProfile);
+        const updatedUser = SanityGuard.user(mapped);
 
-        return { success: true, updatedUser: SanityGuard.user(mapped) };
+        if (profileCache.userId === updatedUser.id) {
+            profileCache = {
+                userId: updatedUser.id,
+                fetchedAt: Date.now(),
+                user: updatedUser,
+            };
+        }
+
+        return { success: true, updatedUser };
     }
 };
