@@ -3,6 +3,7 @@ import { supabaseClient } from './client';
 import { isAdminCached } from './admin';
 import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStoreItemToApp } from './mappings';
 import { missionsAdminRepository } from './repositories/admin/missions';
+import { MISSION_SUBMISSION_LIGHT_SELECT } from './selects';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
 export type AdminMissionFilter = 'active' | 'expired' | 'all';
@@ -165,7 +166,11 @@ export const supabaseAdminRepository = {
         supabase.from('missions').select('*'),
         supabase
           .from('mission_submissions')
-          .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+          .select(`
+            ${MISSION_SUBMISSION_LIGHT_SELECT},
+            missions(title),
+            profiles(display_name, name, avatar_url, id, artistic_name)
+          `)
           .order('created_at', { ascending: false })
           .limit(50),
         supabase
@@ -365,7 +370,11 @@ export const supabaseAdminRepository = {
 
       const submissionsRes = await supabase
         .from('mission_submissions')
-        .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+        .select(`
+          ${MISSION_SUBMISSION_LIGHT_SELECT},
+          missions(title),
+          profiles(display_name, name, avatar_url, id, artistic_name)
+        `)
         .order('created_at', { ascending: false })
         .limit(50);
 

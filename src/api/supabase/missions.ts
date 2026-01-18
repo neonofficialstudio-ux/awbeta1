@@ -4,6 +4,7 @@ import type { Mission, MissionSubmission } from '../../types';
 import { mapMissionToApp } from './mappings';
 import { normalizePlan } from '../subscriptions/normalizePlan';
 import { SubscriptionEngineV5 } from '../subscriptions';
+import { MISSION_SUBMISSION_LIGHT_SELECT } from './selects';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -63,10 +64,14 @@ export const fetchMissionsSupabase = async (userId: string) => {
             fetchActiveMissions(),
             supabase
                 .from('mission_submissions')
-            .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(50),
+                .select(`
+                    ${MISSION_SUBMISSION_LIGHT_SELECT},
+                    missions(title),
+                    profiles(display_name, name, avatar_url, id, artistic_name)
+                `)
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(50),
             supabase.from('profiles').select('plan, role').eq('id', userId).limit(1).single(),
         ]);
 

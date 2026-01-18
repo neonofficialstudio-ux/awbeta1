@@ -3,6 +3,7 @@ import { config } from '../../../core/config';
 import { EconomyEngine } from '../../economy';
 import { supabaseClient } from '../client';
 import { mapSubmission } from '../missions';
+import { MISSION_SUBMISSION_LIGHT_SELECT } from '../selects';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -195,7 +196,11 @@ export const listSubmissionsSupabase = async (options: { limit?: number; offset?
     try {
         let query = supabase
             .from('mission_submissions')
-            .select('*, missions(*), profiles(display_name, name, avatar_url, id)')
+            .select(`
+                ${MISSION_SUBMISSION_LIGHT_SELECT},
+                missions(title),
+                profiles(display_name, name, avatar_url, id, artistic_name)
+            `)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
