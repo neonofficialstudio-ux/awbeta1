@@ -2,6 +2,7 @@ import { supabaseClient } from './client';
 import { config } from '../../core/config';
 import type { LedgerEntry, TransactionSource, TransactionType, AWNotification, RankingUser, NotificationType } from '../../types';
 import { normalizePlan } from '../subscriptions/normalizePlan';
+import { cached } from '../../lib/sessionCache';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -111,7 +112,11 @@ export const fetchMyLedger = async (limit = 20, offset = 0) => {
     if (!supabase) return { success: false as const, ledger: [] as LedgerEntry[], error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase.rpc('get_my_ledger', { p_limit: limit, p_offset: offset });
+        const { data, error } = await cached(
+            `my_ledger:${limit}:${offset}`,
+            () => supabase.rpc('get_my_ledger', { p_limit: limit, p_offset: offset }),
+            30_000,
+        );
         if (error) throw error;
 
         const ledgerRows = Array.isArray(data) ? data : [];
@@ -130,7 +135,11 @@ export const fetchMyNotifications = async (limit = 20) => {
     if (!supabase) return { success: false as const, notifications: [] as AWNotification[], error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await supabase.rpc('get_my_notifications', { p_limit: limit });
+        const { data, error } = await cached(
+            `my_notifications:${limit}`,
+            () => supabase.rpc('get_my_notifications', { p_limit: limit }),
+            30_000,
+        );
         if (error) throw error;
 
         // Compat: algumas versões do backend retornam array direto,
