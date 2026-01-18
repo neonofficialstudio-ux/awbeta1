@@ -49,7 +49,10 @@ const approveSubmissionFallback = async (submissionId: string) => {
 
     const { data: submission, error: submissionError } = await supabase
         .from('mission_submissions')
-        .select('*, missions(*)')
+        .select(`
+            ${MISSION_SUBMISSION_LIGHT_SELECT},
+            missions(id, title, xp_reward, coins_reward)
+        `)
         .eq('id', submissionId)
         .single();
 
@@ -98,7 +101,10 @@ const approveSubmissionFallback = async (submissionId: string) => {
             reviewed_by: reviewerId,
         })
         .eq('id', submissionId)
-        .select('*, missions(*)')
+        .select(`
+            ${MISSION_SUBMISSION_LIGHT_SELECT},
+            missions(id, title, xp_reward, coins_reward)
+        `)
         .single();
 
     if (updateError) {
@@ -137,7 +143,10 @@ const rejectSubmissionFallback = async (submissionId: string) => {
 
     const { data: submission, error: submissionError } = await supabase
         .from('mission_submissions')
-        .select('*, missions(*)')
+        .select(`
+            ${MISSION_SUBMISSION_LIGHT_SELECT},
+            missions(id, title, xp_reward, coins_reward)
+        `)
         .eq('id', submissionId)
         .single();
 
@@ -158,7 +167,10 @@ const rejectSubmissionFallback = async (submissionId: string) => {
             reviewed_by: reviewerId,
         })
         .eq('id', submissionId)
-        .select('*, missions(*)')
+        .select(`
+            ${MISSION_SUBMISSION_LIGHT_SELECT},
+            missions(id, title, xp_reward, coins_reward)
+        `)
         .single();
 
     if (updateError) {
