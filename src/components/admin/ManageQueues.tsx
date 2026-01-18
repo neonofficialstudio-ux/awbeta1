@@ -334,8 +334,6 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           store_item_id,
           category,
           status,
-          briefing,
-          result,
           created_at,
           profiles:profiles(id,name,display_name,artistic_name,avatar_url),
           store_items:store_items(id,name,rarity,image_url)
@@ -373,8 +371,6 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
           store_item_id,
           category,
           status,
-          briefing,
-          result,
           created_at,
           updated_at,
           profiles:profiles(id,name,display_name,artistic_name,avatar_url),
