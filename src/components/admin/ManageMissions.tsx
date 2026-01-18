@@ -12,6 +12,7 @@ import { AdminMissionReviewEngine } from '../../services/admin/adminMissionRevie
 import { safeString } from '../../api/helpers';
 import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
+import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
 import { supabaseAdminRepository, type AdminMissionFilter } from '../../api/supabase/supabase.repositories.admin';
 
 // UI Lib
@@ -86,6 +87,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   const [missionToDelete, setMissionToDelete] = useState<string | null>(null);
   const [viewingDetailsFor, setViewingDetailsFor] = useState<Mission | null>(null);
   const [proofModalUrl, setProofModalUrl] = useState<string | null>(null);
+  const [isProofLoading, setIsProofLoading] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -298,6 +300,26 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
   const handleSaveAndClose = (m: Mission) => { onSaveMission(m); handleCloseModal(); };
   const requestDeleteMission = (id: string) => { setMissionToDelete(id); setShowConfirmModal(true); };
   const handleConfirmDelete = () => { if (missionToDelete) { onDeleteMission(missionToDelete); setMissionToDelete(null); setShowConfirmModal(false); } };
+  const handleShowProof = async (submission: MissionSubmission) => {
+      if (config.backendProvider !== 'supabase') {
+          setProofModalUrl(submission.proofUrl);
+          return;
+      }
+
+      setIsProofLoading(true);
+      try {
+          const proofUrl = await fetchMissionSubmissionProofUrl(submission.id);
+          if (proofUrl) {
+              setProofModalUrl(proofUrl);
+          } else {
+              console.warn('[ManageMissions] Proof URL not found for submission', submission.id);
+          }
+      } catch (err) {
+          console.error('[ManageMissions] Failed to fetch proof URL', err);
+      } finally {
+          setIsProofLoading(false);
+      }
+  };
 
   return (
     <div>
@@ -470,7 +492,13 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
                                         </td>
                                         <td className="px-4 py-4 max-w-[200px] truncate">{sub.missionTitle}</td>
                                         <td className="px-4 py-4">
-                                            <button onClick={() => setProofModalUrl(sub.proofUrl)} className="text-xs font-bold text-neon-cyan hover:underline border border-neon-cyan/30 px-2 py-1 rounded">Ver Prova</button>
+                                            <button
+                                                onClick={() => handleShowProof(sub)}
+                                                disabled={isProofLoading}
+                                                className="text-xs font-bold text-neon-cyan hover:underline border border-neon-cyan/30 px-2 py-1 rounded disabled:opacity-60"
+                                            >
+                                                {isProofLoading ? 'Carregando...' : 'Ver Prova'}
+                                            </button>
                                         </td>
                                         <td className="px-4 py-4">
                                             {risk.isRisk ? (

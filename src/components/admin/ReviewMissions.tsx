@@ -4,7 +4,8 @@ import type { MissionSubmission, SubmissionStatus, User } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { CheckIcon, DeleteIcon } from '../../constants';
 import ConfirmationModal from './ConfirmationModal';
-import { safeString } from '../../api/helpers';
+import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
+import { config } from '../../core/config';
 
 
 interface ReviewMissionsProps {
@@ -109,6 +110,7 @@ const ReviewMissions: React.FC<ReviewMissionsProps> = ({ missionSubmissions, onR
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [isBatchApproving, setIsBatchApproving] = useState(false);
     const [isConfirmBatchOpen, setIsConfirmBatchOpen] = useState(false);
+    const [isProofLoading, setIsProofLoading] = useState(false);
 
     const [pendingPage, setPendingPage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
@@ -131,6 +133,27 @@ const ReviewMissions: React.FC<ReviewMissionsProps> = ({ missionSubmissions, onR
         setIsBatchApproving(true);
         await onBatchApprove();
         setIsBatchApproving(false);
+    };
+
+    const handleShowProof = async (submission: MissionSubmission) => {
+        if (config.backendProvider !== 'supabase') {
+            setProofModalUrl(submission.proofUrl);
+            return;
+        }
+
+        setIsProofLoading(true);
+        try {
+            const proofUrl = await fetchMissionSubmissionProofUrl(submission.id);
+            if (proofUrl) {
+                setProofModalUrl(proofUrl);
+            } else {
+                console.warn('[ReviewMissions] Proof URL not found for submission', submission.id);
+            }
+        } catch (err) {
+            console.error('[ReviewMissions] Failed to fetch proof URL', err);
+        } finally {
+            setIsProofLoading(false);
+        }
     };
 
     const pendingSubmissions = missionSubmissions.filter(s => s.status === 'pending');
@@ -162,7 +185,13 @@ const ReviewMissions: React.FC<ReviewMissionsProps> = ({ missionSubmissions, onR
                 <td className="px-6 py-4">{submission.missionTitle}</td>
                 <td className="px-6 py-4">{submission.submittedAt}</td>
                 <td className="px-6 py-4">
-                    <button onClick={() => setProofModalUrl(submission.proofUrl)} className="text-goldenYellow-400 hover:underline">Ver Prova</button>
+                    <button
+                        onClick={() => handleShowProof(submission)}
+                        disabled={isProofLoading}
+                        className="text-goldenYellow-400 hover:underline disabled:opacity-60"
+                    >
+                        {isProofLoading ? 'Carregando...' : 'Ver Prova'}
+                    </button>
                 </td>
                 <td className="px-6 py-4">
                     <StatusBadge status={submission.status} />
