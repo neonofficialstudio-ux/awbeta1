@@ -531,15 +531,28 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
     }
     setIsClosingMonthly(true);
     try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!sessionData?.session?.access_token) {
+        throw new Error('Admin não autenticado');
+      }
       const awards = [
         { position: 1, coins: Number(award1) || 0 },
         { position: 2, coins: Number(award2) || 0 },
         { position: 3, coins: Number(award3) || 0 },
       ];
-      const { error } = await supabase.rpc('admin_close_monthly_ranking_and_award', {
-        p_awards: awards,
-        p_ref_id: crypto.randomUUID(),
-      });
+      const { error } = await supabase.rpc(
+        'admin_close_monthly_ranking_and_award',
+        {
+          p_awards: awards,
+          p_ref_id: crypto.randomUUID(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        },
+      );
       if (error) throw error;
 
       toast.success('Ciclo mensal fechado e premiação registrada!');
