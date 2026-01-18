@@ -36,3 +36,40 @@ export const isAdmin = async (): Promise<boolean> => {
         return false;
     }
 };
+
+// ---------------------------------------------------------------------------
+// ✅ Cache leve para reduzir egress / chamadas repetidas de is_admin
+// - Segurança: ainda valida no backend (rpc is_admin)
+// - Performance: evita N chamadas por render/refresh no painel
+// ---------------------------------------------------------------------------
+const IS_ADMIN_CACHE_TTL_MS = 60_000; // 60s
+let isAdminCache: {
+    value?: boolean;
+    fetchedAt?: number;
+    inFlight?: Promise<boolean>;
+} = {};
+
+export const isAdminCached = async (): Promise<boolean> => {
+    const now = Date.now();
+    if (typeof isAdminCache.value === 'boolean' && isAdminCache.fetchedAt && now - isAdminCache.fetchedAt < IS_ADMIN_CACHE_TTL_MS) {
+        return isAdminCache.value;
+    }
+
+    if (isAdminCache.inFlight) {
+        return isAdminCache.inFlight;
+    }
+
+    const promise = (async () => {
+        const value = await isAdmin();
+        isAdminCache = { value, fetchedAt: Date.now() };
+        return value;
+    })();
+
+    isAdminCache = { ...isAdminCache, inFlight: promise };
+
+    try {
+        return await promise;
+    } finally {
+        isAdminCache.inFlight = undefined;
+    }
+};
