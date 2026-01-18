@@ -161,7 +161,7 @@ export const supabaseAdminRepository = {
         ticketsRes,
         statsRes,
       ] = await Promise.all([
-        supabase.from('profiles').select('*'),
+        supabase.from('profiles').select('id, display_name, avatar_url, level, coins'),
         supabase.from('missions').select('*'),
         supabase
           .from('mission_submissions')

@@ -15,10 +15,12 @@ const coerceString = (value: any): string => {
 export const mapProfileToUser = (profile: any, extendedData: any = {}): User => {
     const meta = profile?.meta || profile?.metadata || profile?.profile_meta || {};
 
+    const displayName = profile.display_name || profile.name || "Sem Nome";
+
     return {
         id: profile.id,
-        name: profile.name || "Sem Nome",
-        artisticName: profile.artistic_name || profile.name || "Artista",
+        name: displayName,
+        artisticName: profile.artistic_name || profile.display_name || profile.name || "Artista",
         email: coerceString(profile.email || meta.email),
         avatarUrl: profile.avatar_url || "https://i.pravatar.cc/150?u=default",
         role: profile.role || 'user',
