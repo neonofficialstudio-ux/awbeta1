@@ -142,7 +142,11 @@ export const submitMissionSupabase = async (_userId: string, missionId: string, 
 
         const { data: row, error: fetchErr } = await supabase
             .from('mission_submissions')
-            .select('*, missions(title), profiles(display_name, name, avatar_url, id)')
+            .select(`
+                ${MISSION_SUBMISSION_LIGHT_SELECT},
+                missions(title),
+                profiles(display_name, name, avatar_url, id)
+            `)
             .eq('id', submissionId)
             .limit(1)
             .single();
@@ -157,9 +161,11 @@ export const submitMissionSupabase = async (_userId: string, missionId: string, 
             };
         }
 
+        const mappedSubmission = row ? mapSubmission({ ...row, proof_url: row?.proof_url ?? proof }) : undefined;
+
         return {
             success: true as const,
-            newSubmission: row ? mapSubmission(row) : undefined,
+            newSubmission: mappedSubmission,
             updatedUser: undefined,
             message: 'Missão enviada com sucesso.',
         };
