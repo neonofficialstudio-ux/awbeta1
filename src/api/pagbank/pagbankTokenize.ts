@@ -37,6 +37,12 @@ const waitForSdk = async (timeoutMs = 6000) => {
   throw new Error('SDK PagBank carregou script mas não expôs objeto global.');
 };
 
+const createSdkBlockedError = (message: string) => {
+  const error = new Error(message) as Error & { code?: string };
+  error.code = 'SDK_BLOCKED';
+  return error;
+};
+
 const loadScript = (src: string, timeoutMs = 6000) =>
   new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
@@ -54,7 +60,7 @@ const loadScript = (src: string, timeoutMs = 6000) =>
 
     const timer = window.setTimeout(() => {
       cleanup();
-      reject(new Error(`Timeout ao carregar SDK PagBank (${src}). Verifique AdBlock/CSP.`));
+      reject(createSdkBlockedError(`Timeout ao carregar SDK PagBank (${src}). Verifique AdBlock/Privacy/CSP.`));
     }, timeoutMs);
 
     const cleanup = () => {
@@ -71,7 +77,7 @@ const loadScript = (src: string, timeoutMs = 6000) =>
 
     const onError = () => {
       cleanup();
-      reject(new Error(`Falha ao carregar SDK PagBank (${src}).`));
+      reject(createSdkBlockedError(`Falha ao carregar SDK PagBank (${src}). Verifique AdBlock/Privacy.`));
     };
 
     script.addEventListener('load', onLoad, { once: true });
@@ -88,6 +94,7 @@ export const loadPagbankSdk = async (): Promise<void> => {
   }
 
   sdkLoadPromise = (async () => {
+    let lastError: unknown = null;
     for (const src of SDK_SCRIPT_URLS) {
       try {
         await loadScript(src);
@@ -95,12 +102,16 @@ export const loadPagbankSdk = async (): Promise<void> => {
         if (getGlobalSdk()) {
           return;
         }
-      } catch {
+      } catch (error) {
+        lastError = error;
         // Try next fallback URL
       }
     }
 
     if (!getGlobalSdk()) {
+      if (lastError && typeof lastError === 'object' && (lastError as { code?: string }).code === 'SDK_BLOCKED') {
+        throw lastError;
+      }
       throw new Error('SDK PagBank não carregou.');
     }
   })();
