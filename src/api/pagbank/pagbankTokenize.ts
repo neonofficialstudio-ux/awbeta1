@@ -1,3 +1,5 @@
+import { getPagbankPublicKey } from './getPagbankPublicKey';
+
 type CardTokenInput = {
   number: string;
   expMonth: string;
@@ -140,10 +142,7 @@ const getSdkToken = async (input: CardTokenInput): Promise<string> => {
     throw new Error('SDK PagBank não carregou.');
   }
 
-  const publicKey = import.meta.env.VITE_PAGBANK_PUBLIC_KEY;
-  if (!publicKey) {
-    throw new Error('Chave pública do PagBank não configurada.');
-  }
+  const publicKey = await getPagbankPublicKey();
 
   if (sdk.key === 'PagSeguroEncryptedCard') {
     const encryptedCard = new sdk.value({
