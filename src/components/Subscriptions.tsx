@@ -402,7 +402,9 @@ const Subscriptions: React.FC = () => {
     setIsCheckoutSubmitting(true);
     try {
       setCheckoutStatus('Tokenizando cartão...');
+      console.info('[checkout] step=load_sdk');
       await loadPagbankSdk();
+      console.info('[checkout] step=tokenize');
       const cardToken = await createCardToken({
         number: cardForm.number,
         expMonth: cardForm.expMonth,
@@ -419,6 +421,7 @@ const Subscriptions: React.FC = () => {
       });
 
       setCheckoutStatus('Criando assinatura...');
+      console.info('[checkout] step=invoke_create_subscription');
       await createSubscriptionWithCardToken({
         userId: currentUser.id,
         planName: checkoutPlan.name,
@@ -426,6 +429,7 @@ const Subscriptions: React.FC = () => {
       });
 
       setCheckoutStatus('Processando pagamento...');
+      console.info('[checkout] step=poll_status');
       const isActive = await pollSubscriptionStatus(checkoutPlan.name);
       if (!isActive) {
         setCheckoutStatus('Pagamento em processamento, atualize em instantes.');
@@ -433,6 +437,7 @@ const Subscriptions: React.FC = () => {
         setCheckoutStatus('Assinatura ativa!');
       }
     } catch (error) {
+      console.error('[checkout] failed', error);
       setCheckoutError(getCheckoutErrorMessage(error));
     } finally {
       setIsCheckoutSubmitting(false);

@@ -31,14 +31,13 @@ const getGlobalSdk = (): { key: PagbankGlobalKey; value: any } | null => {
 const waitForSdk = async (timeoutMs = 6000) => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    if (getGlobalSdk()) {
-      return;
-    }
+    if (getGlobalSdk()) return;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
+  throw new Error('SDK PagBank carregou script mas não expôs objeto global.');
 };
 
-const loadScript = (src: string) =>
+const loadScript = (src: string, timeoutMs = 6000) =>
   new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
     if (existing) {
@@ -46,32 +45,39 @@ const loadScript = (src: string) =>
         resolve();
         return;
       }
-      existing.addEventListener(
-        'load',
-        () => {
-          existing.dataset.loaded = 'true';
-          resolve();
-        },
-        { once: true },
-      );
-      existing.addEventListener(
-        'error',
-        () => reject(new Error(`Falha ao carregar SDK PagBank (${src}).`)),
-        { once: true },
-      );
-      return;
     }
 
-    const script = document.createElement('script');
+    const script = existing ?? document.createElement('script');
     script.src = src;
     script.async = true;
     script.dataset.pagbankSdk = 'true';
-    script.addEventListener('load', () => {
+
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timeout ao carregar SDK PagBank (${src}). Verifique AdBlock/CSP.`));
+    }, timeoutMs);
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+    };
+
+    const onLoad = () => {
+      cleanup();
       script.dataset.loaded = 'true';
       resolve();
-    });
-    script.addEventListener('error', () => reject(new Error(`Falha ao carregar SDK PagBank (${src}).`)));
-    document.head.appendChild(script);
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error(`Falha ao carregar SDK PagBank (${src}).`));
+    };
+
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+
+    if (!existing) document.head.appendChild(script);
   });
 
 export const loadPagbankSdk = async (): Promise<void> => {
@@ -178,7 +184,10 @@ const getSdkToken = async (input: CardTokenInput): Promise<string> => {
 export const createCardToken = async (input: CardTokenInput): Promise<string> => {
   const sanitizedNumber = normalizeCardNumber(input.number);
   const expMonth = input.expMonth.trim();
-  const expYear = input.expYear.trim();
+  let expYear = input.expYear.trim();
+  if (/^\d{2}$/.test(expYear)) {
+    expYear = `20${expYear}`;
+  }
   const cvv = input.cvv.trim();
   const holderName = input.holderName.trim();
 
