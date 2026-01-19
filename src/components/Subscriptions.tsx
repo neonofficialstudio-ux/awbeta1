@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { toast } from 'react-hot-toast';
 import type { SubscriptionPlan, User, IconComponent } from '../types';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
@@ -8,9 +9,7 @@ import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, TrendingUpIcon, CoinIcon, X
 import { PLANS } from '../api/subscriptions/constants';
 import { normalizePlanId } from '../api/subscriptions/normalizePlan';
 import FaqItem from './ui/patterns/FaqItem';
-import { createCardToken, loadPagbankSdk } from '../api/pagbank/pagbankTokenize';
-import { createSubscriptionWithCardToken, getMySubscription } from '../api/subscriptions/billingBridge';
-import { openPagbankCheckout } from '../api/subscriptions/openPagbankCheckout';
+import { createPagbankCheckout, verifyPagbankCheckout } from '../api/subscriptions/pagbankCheckout';
 import { ProfileSupabase } from '../api/supabase/profile';
 
 // --- THEME CONFIGURATION ---
@@ -249,18 +248,14 @@ const Subscriptions: React.FC = () => {
   const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<{ message: string; code?: string } | null>(null);
-  const [cardForm, setCardForm] = useState({
-    holderName: '',
-    number: '',
-    expMonth: '',
-    expYear: '',
-    cvv: '',
-  });
+  const [verificationState, setVerificationState] = useState<'idle' | 'verifying' | 'success' | 'timeout'>('idle');
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<{ checkoutId: string; referenceId: string } | null>(null);
 
   const faqItems = [
     {
         question: "Como funcionam os pagamentos?",
-        answer: "Os pagamentos são processados externamente através do link de pagamento fornecido. Após o pagamento, você deve enviar o comprovante na plataforma para que nossa equipe aprove o seu novo plano."
+        answer: "Os pagamentos são realizados no checkout externo PagBank. Ao retornar para a plataforma, confirmamos automaticamente e liberamos o seu plano."
     },
     {
         question: "Posso cancelar a qualquer momento?",
@@ -337,13 +332,6 @@ const Subscriptions: React.FC = () => {
     setCheckoutStatus(null);
     setCheckoutError(null);
     setIsCheckoutSubmitting(false);
-    setCardForm({
-      holderName: '',
-      number: '',
-      expMonth: '',
-      expYear: '',
-      cvv: '',
-    });
   };
 
   const handleStartCheckout = (plan: SubscriptionPlan) => {
@@ -351,43 +339,11 @@ const Subscriptions: React.FC = () => {
     setIsCheckoutOpen(true);
     setCheckoutStatus(null);
     setCheckoutError(null);
-    setCardForm({
-      holderName: '',
-      number: '',
-      expMonth: '',
-      expYear: '',
-      cvv: '',
-    });
   };
 
-  const handleCardFieldChange =
-    (field: keyof typeof cardForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      const { value } = event.target;
-      setCardForm((prev) => ({ ...prev, [field]: value }));
-    };
-
-  const pollSubscriptionStatus = async (targetPlan: string) => {
-    if (!currentUser) return false;
-    const delays = [2000, 4000, 8000, 8000, 8000];
-
-    for (const delay of delays) {
-      const [subscriptionResult, profileResult] = await Promise.all([
-        getMySubscription().catch(() => null),
-        ProfileSupabase.fetchMyProfile(currentUser.id),
-      ]);
-
-      const isActive = subscriptionResult?.status === 'active';
-      const profilePlan = profileResult.success ? profileResult.user?.plan : null;
-
-      if (isActive && profilePlan === targetPlan && profileResult.user) {
-        dispatch({ type: 'UPDATE_USER', payload: profileResult.user });
-        return true;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-
-    return false;
+  const clearCheckoutSession = () => {
+    sessionStorage.removeItem('aw_checkout_id');
+    sessionStorage.removeItem('aw_reference_id');
   };
 
   const getCheckoutErrorMessage = (error: unknown) => {
@@ -401,65 +357,16 @@ const Subscriptions: React.FC = () => {
     return { message: 'Falha ao processar o pagamento.' };
   };
 
-  const handleConfirmCheckout = async () => {
-    if (!currentUser || !checkoutPlan) return;
-    setCheckoutError(null);
-    setIsCheckoutSubmitting(true);
-    try {
-      setCheckoutStatus('Tokenizando cartão...');
-      console.info('[checkout] step=load_sdk');
-      await loadPagbankSdk();
-      console.info('[checkout] step=tokenize');
-      const cardToken = await createCardToken({
-        number: cardForm.number,
-        expMonth: cardForm.expMonth,
-        expYear: cardForm.expYear,
-        cvv: cardForm.cvv,
-        holderName: cardForm.holderName,
-      });
-      setCardForm({
-        holderName: '',
-        number: '',
-        expMonth: '',
-        expYear: '',
-        cvv: '',
-      });
-
-      setCheckoutStatus('Criando assinatura...');
-      console.info('[checkout] step=invoke_create_subscription');
-      await createSubscriptionWithCardToken({
-        userId: currentUser.id,
-        planName: checkoutPlan.name,
-        cardToken,
-      });
-
-      setCheckoutStatus('Processando pagamento...');
-      console.info('[checkout] step=poll_status');
-      const isActive = await pollSubscriptionStatus(checkoutPlan.name);
-      if (!isActive) {
-        setCheckoutStatus('Pagamento em processamento, atualize em instantes.');
-      } else {
-        setCheckoutStatus('Assinatura ativa!');
-      }
-    } catch (error) {
-      console.error('[checkout] failed', error);
-      setCheckoutStatus(null);
-      setCheckoutError(getCheckoutErrorMessage(error));
-    } finally {
-      setIsCheckoutSubmitting(false);
-    }
-  };
-
   const handleOpenPagbankCheckout = async () => {
     if (!currentUser || !checkoutPlan) return;
     try {
       setCheckoutError(null);
-      setCheckoutStatus('Redirecionando para o PagBank...');
+      setCheckoutStatus('Preparando checkout PagBank...');
       setIsCheckoutSubmitting(true);
-      await openPagbankCheckout({
-        user_id: currentUser.id,
-        plan_name: checkoutPlan.name,
-      });
+      const checkout = await createPagbankCheckout(checkoutPlan.name, currentUser.id);
+      sessionStorage.setItem('aw_checkout_id', checkout.checkout_id);
+      sessionStorage.setItem('aw_reference_id', checkout.reference_id);
+      window.location.href = checkout.checkout_url;
     } catch (error) {
       console.error('[checkout] pagbank_checkout_failed', error);
       setCheckoutStatus(null);
@@ -468,6 +375,60 @@ const Subscriptions: React.FC = () => {
       setIsCheckoutSubmitting(false);
     }
   };
+
+  const runCheckoutVerification = useCallback(
+    async (checkoutId: string, referenceId: string) => {
+      if (!currentUser) return false;
+      setVerificationState('verifying');
+      setVerificationMessage('Confirmando pagamento...');
+      const delays = [2000, 4000, 8000, 8000, 8000];
+
+      for (const delay of delays) {
+        try {
+          const result = await verifyPagbankCheckout(checkoutId, referenceId);
+          if (result?.active) {
+            clearCheckoutSession();
+            setPendingCheckout(null);
+            const profileResult = await ProfileSupabase.fetchMyProfile(currentUser.id);
+            if (profileResult.success && profileResult.user) {
+              dispatch({ type: 'UPDATE_USER', payload: profileResult.user });
+            }
+            toast.success('Plano ativado!');
+            setVerificationState('success');
+            setVerificationMessage('Pagamento confirmado. Seu plano está ativo.');
+            setTimeout(() => {
+              setVerificationState('idle');
+              setVerificationMessage(null);
+            }, 2000);
+            return true;
+          }
+        } catch (error) {
+          console.error('[checkout] pagbank_verify_failed', error);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
+      setVerificationState('timeout');
+      setVerificationMessage("Pagamento em processamento. Clique em 'Verificar novamente'.");
+      return false;
+    },
+    [currentUser, dispatch],
+  );
+
+  const checkoutSearchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  useEffect(() => {
+    if (!currentUser) return;
+    const checkoutId =
+      checkoutSearchParams.get('checkout_id') ?? sessionStorage.getItem('aw_checkout_id');
+    const referenceId =
+      checkoutSearchParams.get('reference_id') ?? sessionStorage.getItem('aw_reference_id');
+
+    if (checkoutId && referenceId) {
+      setPendingCheckout({ checkoutId, referenceId });
+      runCheckoutVerification(checkoutId, referenceId);
+    }
+  }, [checkoutSearchParams, currentUser, runCheckoutVerification]);
 
   const handleCancelSubscription = async () => {
     if (!currentUser) return;
@@ -491,13 +452,9 @@ const Subscriptions: React.FC = () => {
     );
   }
 
-  const isCheckoutFormIncomplete =
-    !cardForm.holderName.trim() ||
-    !cardForm.number.trim() ||
-    !cardForm.expMonth.trim() ||
-    !cardForm.expYear.trim() ||
-    !cardForm.cvv.trim();
-  const isSdkBlocked = checkoutError?.code === 'SDK_BLOCKED';
+  const isCheckoutVerifying = verificationState === 'verifying';
+  const isCheckoutSuccess = verificationState === 'success';
+  const isCheckoutTimeout = verificationState === 'timeout';
 
   return (
       <div className="animate-fade-in-up pb-32 relative">
@@ -596,6 +553,71 @@ const Subscriptions: React.FC = () => {
             </div>
         </div>
 
+        {/* CHECKOUT VERIFICATION */}
+        {verificationState !== 'idle' && (
+            <div
+                className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+                style={{ zIndex: 10000 }}
+            >
+                <div className="w-full max-w-md bg-[#0F1116] border border-[#FFD36A]/40 rounded-2xl p-8 shadow-[0_0_40px_rgba(255,211,106,0.25)] relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/hexellence.png')] pointer-events-none"></div>
+                    <div className="relative z-10 space-y-4">
+                        <div className="flex items-center gap-3">
+                            {isCheckoutVerifying && (
+                                <div className="w-5 h-5 border-2 border-t-transparent border-[#FFD36A] rounded-full animate-spin"></div>
+                            )}
+                            {isCheckoutSuccess && (
+                                <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-500/15 text-green-300 text-xs font-black uppercase tracking-[0.2em]">
+                                    Ativo
+                                </span>
+                            )}
+                            {isCheckoutTimeout && (
+                                <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-500/15 text-yellow-200 text-xs font-black uppercase tracking-[0.2em]">
+                                    Em processamento
+                                </span>
+                            )}
+                            <h3 className="text-xl font-black text-white uppercase tracking-wide">
+                                {isCheckoutVerifying && 'Confirmando pagamento'}
+                                {isCheckoutSuccess && 'Pagamento aprovado'}
+                                {isCheckoutTimeout && 'Pagamento em análise'}
+                            </h3>
+                        </div>
+                        <p className="text-sm text-gray-300 leading-relaxed">
+                            {verificationMessage}
+                        </p>
+                        {isCheckoutTimeout && (
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (pendingCheckout) {
+                                        runCheckoutVerification(
+                                          pendingCheckout.checkoutId,
+                                          pendingCheckout.referenceId,
+                                        );
+                                      }
+                                    }}
+                                    className="w-full py-3 rounded-lg bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(255,211,106,0.4)]"
+                                >
+                                    Verificar novamente
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                      setVerificationState('idle');
+                                      setVerificationMessage(null);
+                                    }}
+                                    className="w-full py-3 rounded-lg border border-gray-700 text-gray-300 uppercase text-xs font-bold tracking-widest hover:border-gray-500 hover:text-white transition-colors"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* MODALS */}
         {isCheckoutOpen && checkoutPlan && (
             <div
@@ -616,124 +638,17 @@ const Subscriptions: React.FC = () => {
                         Assinar {checkoutPlan.name}
                     </h3>
                     <p className="text-sm text-gray-400 mb-6">
-                        Se preferir tokenização inline (opcional), insira os dados do cartão para gerar o token e processar sua assinatura.
+                        Você será redirecionado para o checkout seguro do PagBank para concluir sua assinatura.
                     </p>
-
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
-                                Nome do Titular
-                            </label>
-                            <input
-                                type="text"
-                                value={cardForm.holderName}
-                                onChange={handleCardFieldChange('holderName')}
-                                disabled={isCheckoutSubmitting}
-                                className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
-                                placeholder="Como no cartão"
-                                autoComplete="cc-name"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
-                                Número do Cartão
-                            </label>
-                            <input
-                                type="text"
-                                value={cardForm.number}
-                                onChange={handleCardFieldChange('number')}
-                                disabled={isCheckoutSubmitting}
-                                className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
-                                placeholder="0000 0000 0000 0000"
-                                inputMode="numeric"
-                                autoComplete="cc-number"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3">
-                            <div>
-                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
-                                    Mês
-                                </label>
-                                <input
-                                    type="text"
-                                    value={cardForm.expMonth}
-                                    onChange={handleCardFieldChange('expMonth')}
-                                    disabled={isCheckoutSubmitting}
-                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
-                                    placeholder="MM"
-                                    inputMode="numeric"
-                                    autoComplete="cc-exp-month"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
-                                    Ano
-                                </label>
-                                <input
-                                    type="text"
-                                    value={cardForm.expYear}
-                                    onChange={handleCardFieldChange('expYear')}
-                                    disabled={isCheckoutSubmitting}
-                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
-                                    placeholder="AAAA"
-                                    inputMode="numeric"
-                                    autoComplete="cc-exp-year"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
-                                    CVV
-                                </label>
-                                <input
-                                    type="password"
-                                    value={cardForm.cvv}
-                                    onChange={handleCardFieldChange('cvv')}
-                                    disabled={isCheckoutSubmitting}
-                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
-                                    placeholder="123"
-                                    inputMode="numeric"
-                                    autoComplete="cc-csc"
-                                />
-                            </div>
-                        </div>
-                    </div>
 
                     {checkoutError && (
                         <div className="mt-4 text-sm text-red-400 font-semibold">
                             {checkoutError.message}
                         </div>
                     )}
-                    {isSdkBlocked && (
-                        <div className="mt-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
-                            Parece que um bloqueador (AdBlock/Privacy) impediu o carregamento do módulo de pagamento.
-                        </div>
-                    )}
                     {checkoutStatus && (
                         <div className="mt-4 text-sm text-[#FFD36A] font-semibold">
                             {checkoutStatus}
-                        </div>
-                    )}
-
-                    {isSdkBlocked && (
-                        <div className="mt-6 flex flex-col gap-3">
-                            <button
-                                type="button"
-                                onClick={handleConfirmCheckout}
-                                disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
-                                className="w-full py-3 rounded-lg border border-yellow-500/60 text-yellow-100 uppercase text-xs font-bold tracking-widest hover:border-yellow-400 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                Tentar novamente
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleOpenPagbankCheckout}
-                                disabled={isCheckoutSubmitting}
-                                className="w-full py-3 rounded-lg bg-[#0D0F12] border border-[#FFD36A]/50 text-[#FFD36A] font-black uppercase text-xs tracking-widest hover:bg-[#FFD36A]/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {isCheckoutSubmitting ? 'Gerando link...' : 'Abrir Checkout PagBank'}
-                            </button>
                         </div>
                     )}
 
@@ -752,17 +667,7 @@ const Subscriptions: React.FC = () => {
                             disabled={isCheckoutSubmitting}
                             className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(255,211,106,0.4)] disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            {isCheckoutSubmitting ? 'Processando...' : 'Confirmar Assinatura'}
-                        </button>
-                    </div>
-                    <div className="mt-4">
-                        <button
-                            type="button"
-                            onClick={handleConfirmCheckout}
-                            disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
-                            className="w-full py-3 rounded-lg border border-[#FFD36A]/50 text-[#FFD36A] font-black uppercase text-xs tracking-widest hover:bg-[#FFD36A]/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            Usar cartão (fallback)
+                            {isCheckoutSubmitting ? 'Redirecionando...' : 'Prosseguir para PagBank'}
                         </button>
                     </div>
                 </div>
