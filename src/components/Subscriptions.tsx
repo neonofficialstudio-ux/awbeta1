@@ -11,6 +11,8 @@ import FaqItem from './ui/patterns/FaqItem';
 import { createCardToken, loadPagbankSdk } from '../api/pagbank/pagbankTokenize';
 import { createSubscriptionWithCardToken, getMySubscription } from '../api/subscriptions/billingBridge';
 import { ProfileSupabase } from '../api/supabase/profile';
+import { getSupabase } from '../api/supabase/client';
+import { config } from '../core/config';
 
 // --- THEME CONFIGURATION ---
 
@@ -247,7 +249,8 @@ const Subscriptions: React.FC = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<{ message: string; code?: string } | null>(null);
+  const [isCheckoutFallbackLoading, setIsCheckoutFallbackLoading] = useState(false);
   const [cardForm, setCardForm] = useState({
     holderName: '',
     number: '',
@@ -336,6 +339,7 @@ const Subscriptions: React.FC = () => {
     setCheckoutStatus(null);
     setCheckoutError(null);
     setIsCheckoutSubmitting(false);
+    setIsCheckoutFallbackLoading(false);
     setCardForm({
       holderName: '',
       number: '',
@@ -350,6 +354,7 @@ const Subscriptions: React.FC = () => {
     setIsCheckoutOpen(true);
     setCheckoutStatus(null);
     setCheckoutError(null);
+    setIsCheckoutFallbackLoading(false);
     setCardForm({
       holderName: '',
       number: '',
@@ -391,9 +396,13 @@ const Subscriptions: React.FC = () => {
 
   const getCheckoutErrorMessage = (error: unknown) => {
     if (error instanceof Error) {
-      return error.message || 'Falha ao processar o pagamento.';
+      const typedError = error as Error & { code?: string };
+      return {
+        message: typedError.message || 'Falha ao processar o pagamento.',
+        code: typedError.code,
+      };
     }
-    return 'Falha ao processar o pagamento.';
+    return { message: 'Falha ao processar o pagamento.' };
   };
 
   const handleConfirmCheckout = async () => {
@@ -438,9 +447,50 @@ const Subscriptions: React.FC = () => {
       }
     } catch (error) {
       console.error('[checkout] failed', error);
+      setCheckoutStatus(null);
       setCheckoutError(getCheckoutErrorMessage(error));
     } finally {
       setIsCheckoutSubmitting(false);
+    }
+  };
+
+  const handleOpenCheckoutFallback = async () => {
+    if (!currentUser || !checkoutPlan) return;
+    setIsCheckoutFallbackLoading(true);
+    setCheckoutError(null);
+    setCheckoutStatus(null);
+    try {
+      if (config.backendProvider !== 'supabase') {
+        throw new Error('Supabase provider is not enabled.');
+      }
+
+      const supabase = getSupabase();
+      if (!supabase) {
+        throw new Error('Supabase client not initialized.');
+      }
+
+      const { data, error } = await supabase.functions.invoke('pagbank-create-checkout-link', {
+        body: {
+          user_id: currentUser.id,
+          plan_name: checkoutPlan.name,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Falha ao gerar link de pagamento.');
+      }
+
+      const checkoutUrl = data?.url ?? data?.checkout_url;
+      if (!checkoutUrl) {
+        throw new Error('Link de pagamento indisponível.');
+      }
+
+      window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      console.error('[checkout] fallback_link_failed', error);
+      setCheckoutError(getCheckoutErrorMessage(error));
+    } finally {
+      setIsCheckoutFallbackLoading(false);
     }
   };
 
@@ -472,6 +522,7 @@ const Subscriptions: React.FC = () => {
     !cardForm.expMonth.trim() ||
     !cardForm.expYear.trim() ||
     !cardForm.cvv.trim();
+  const isSdkBlocked = checkoutError?.code === 'SDK_BLOCKED';
 
   return (
       <div className="animate-fade-in-up pb-32 relative">
@@ -676,12 +727,38 @@ const Subscriptions: React.FC = () => {
 
                     {checkoutError && (
                         <div className="mt-4 text-sm text-red-400 font-semibold">
-                            {checkoutError}
+                            {checkoutError.message}
+                        </div>
+                    )}
+                    {isSdkBlocked && (
+                        <div className="mt-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
+                            Parece que um bloqueador (AdBlock/Privacy) impediu o carregamento do módulo de pagamento.
                         </div>
                     )}
                     {checkoutStatus && (
                         <div className="mt-4 text-sm text-[#FFD36A] font-semibold">
                             {checkoutStatus}
+                        </div>
+                    )}
+
+                    {isSdkBlocked && (
+                        <div className="mt-6 flex flex-col gap-3">
+                            <button
+                                type="button"
+                                onClick={handleConfirmCheckout}
+                                disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
+                                className="w-full py-3 rounded-lg border border-yellow-500/60 text-yellow-100 uppercase text-xs font-bold tracking-widest hover:border-yellow-400 hover:text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Tentar novamente
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleOpenCheckoutFallback}
+                                disabled={isCheckoutSubmitting || isCheckoutFallbackLoading}
+                                className="w-full py-3 rounded-lg bg-[#0D0F12] border border-[#FFD36A]/50 text-[#FFD36A] font-black uppercase text-xs tracking-widest hover:bg-[#FFD36A]/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isCheckoutFallbackLoading ? 'Gerando link...' : 'Abrir Checkout PagBank'}
+                            </button>
                         </div>
                     )}
 
