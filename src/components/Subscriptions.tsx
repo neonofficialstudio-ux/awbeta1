@@ -1,13 +1,16 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import type { SubscriptionPlan, User, SubscriptionRequest, SubscriptionEventType, SubscriptionRequestStatus, IconComponent } from '../types';
+import React, { useState, useEffect } from 'react';
+import type { SubscriptionPlan, User, IconComponent } from '../types';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import ConfirmationModal from './admin/ConfirmationModal';
-import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, SoundWaveIcon, TrendingUpIcon, MicIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
-import { PLANS, PLAN_ALIASES } from '../api/subscriptions/constants';
+import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, TrendingUpIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
+import { PLANS } from '../api/subscriptions/constants';
 import { normalizePlanId } from '../api/subscriptions/normalizePlan';
 import FaqItem from './ui/patterns/FaqItem';
+import { createCardToken, loadPagbankSdk } from '../api/pagbank/pagbankTokenize';
+import { createSubscriptionWithCardToken, getMySubscription } from '../api/subscriptions/billingBridge';
+import { ProfileSupabase } from '../api/supabase/profile';
 
 // --- THEME CONFIGURATION ---
 
@@ -79,34 +82,15 @@ const PlanFeatureItem: React.FC<{ text: string; icon: IconComponent | undefined,
 const PlanCard: React.FC<{ 
     plan: SubscriptionPlan; 
     currentUser: User; 
-    pendingRequest: SubscriptionRequest | null;
-    requestingPlan: string | null;
-    onRequestUpgrade: (planName: User['plan'], paymentLink?: string) => void;
-    onPay: (request: SubscriptionRequest) => void;
-    onSubmitProof: (proofDataUrl: string) => void;
-    isSubmittingProof: boolean;
-    onCancelRequest: (request: SubscriptionRequest) => void;
-}> = ({ plan, currentUser, pendingRequest, requestingPlan, onRequestUpgrade, onPay, onSubmitProof, isSubmittingProof, onCancelRequest }) => {
+    isCheckoutDisabled: boolean;
+    isCheckoutLoading: boolean;
+    onStartCheckout: (plan: SubscriptionPlan) => void;
+}> = ({ plan, currentUser, isCheckoutDisabled, isCheckoutLoading, onStartCheckout }) => {
     const { icon: Icon } = plan;
     const PlanIcon = Icon || StarIcon; // Safe fallback
     
     const isCurrentPlan = plan.name === currentUser.plan;
     const theme = PLAN_THEMES[plan.name] || DEFAULT_THEME;
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files[0]) {
-            const file = event.target.files[0];
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                if (reader.result) {
-                    onSubmitProof(reader.result as string);
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
     // Dynamic Border Logic
     const borderClass = isCurrentPlan 
         ? 'border-[#FFD36A] shadow-[0_0_30px_rgba(255,211,106,0.4)] scale-[1.02] z-20 ring-1 ring-[#FFD36A]/50' 
@@ -131,62 +115,6 @@ const PlanCard: React.FC<{
             );
         }
 
-        const isUpgradePendingForThisPlan = pendingRequest && pendingRequest.requestedPlan === plan.name;
-        const isUpgradePendingForAnotherPlan = pendingRequest && pendingRequest.requestedPlan !== plan.name;
-
-        if (isUpgradePendingForAnotherPlan) {
-             return (
-                <button disabled className={`${buttonBase} bg-[#151515] border-gray-800 text-gray-500 cursor-not-allowed`}>
-                    Indisponível
-                </button>
-            );
-        }
-
-        if (isUpgradePendingForThisPlan) {
-            switch (pendingRequest.status) {
-                case 'pending_payment':
-                    return (
-                         <button onClick={() => onPay(pendingRequest)} className={`${buttonBase} bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-black border-[#FFD36A] hover:shadow-[0_0_25px_rgba(255,211,106,0.5)]`}>
-                            Pagar Agora
-                            <div className="absolute inset-0 bg-white/30 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 skew-y-12"></div>
-                        </button>
-                    );
-                case 'awaiting_proof':
-                     return (
-                        <div className="space-y-3 w-full">
-                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-                            <button 
-                                onClick={() => pendingRequest.paymentLink && window.open(pendingRequest.paymentLink, '_blank')}
-                                className="w-full py-3 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1A1A1A] text-[#FFD36A] border border-[#FFD36A]/30 hover:bg-[#FFD36A]/10 transition-colors flex items-center justify-center gap-2"
-                            >
-                                <span>Link de Pagamento</span> ↗
-                            </button>
-                            <button 
-                                onClick={() => fileInputRef.current?.click()} 
-                                disabled={isSubmittingProof} 
-                                className={`${buttonBase} bg-gradient-to-r from-[#3498DB] to-[#2980B9] text-white border-blue-400/50 hover:shadow-[0_0_20px_rgba(52,152,219,0.4)]`}
-                            >
-                                {isSubmittingProof ? <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin mx-auto"></div> : 'Enviar Comprovante'}
-                            </button>
-                            <button 
-                                onClick={() => onCancelRequest(pendingRequest)}
-                                className="w-full text-[10px] text-center text-gray-500 hover:text-red-400 uppercase font-bold tracking-widest pt-1 hover:underline"
-                            >
-                                Cancelar Pedido
-                            </button>
-                        </div>
-                    );
-                case 'pending_approval':
-                    return (
-                        <button disabled className={`${buttonBase} bg-[#1A1A1A] border border-yellow-500/50 text-yellow-500 cursor-not-allowed animate-pulse`}>
-                            Analisando...
-                        </button>
-                    );
-                default:
-                    return null;
-            }
-        }
-        
         if (plan.name === 'Free Flow') {
              return (
                  <div className="w-full py-4 text-center text-xs text-gray-600 font-mono uppercase tracking-widest border border-transparent">
@@ -195,17 +123,16 @@ const PlanCard: React.FC<{
              );
         }
         
-        const isRequestingThisPlan = requestingPlan === plan.name;
-        const isDisabled = !!requestingPlan;
+        const isDisabled = isCheckoutDisabled;
 
         return (
              <button 
-                onClick={() => onRequestUpgrade(plan.name as User['plan'], plan.paymentLink)}
+                onClick={() => onStartCheckout(plan)}
                 disabled={isDisabled}
                 className={`${buttonBase} ${isDisabled ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] border-[#FFD36A] hover:shadow-[0_0_30px_rgba(255,211,106,0.6)] hover:brightness-110'}`}
             >
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                    {isRequestingThisPlan ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : 'FAZER UPGRADE'}
+                    {isCheckoutLoading ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : 'ASSINAR'}
                 </span>
                 {!isDisabled && <div className="absolute inset-0 bg-white/40 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 skew-y-12 ease-out"></div>}
             </button>
@@ -313,14 +240,21 @@ const Subscriptions: React.FC = () => {
   const { state, dispatch } = useAppContext();
   const { activeUser: currentUser } = state;
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [pendingRequest, setPendingRequest] = useState<SubscriptionRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [requestingPlan, setRequestingPlan] = useState<string | null>(null);
-  const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [requestToCancel, setRequestToCancel] = useState<SubscriptionRequest | null>(null);
-  const [isCancellingRequest, setIsCancellingRequest] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [cardForm, setCardForm] = useState({
+    holderName: '',
+    number: '',
+    expMonth: '',
+    expYear: '',
+    cvv: '',
+  });
 
   const faqItems = [
     {
@@ -348,7 +282,7 @@ const Subscriptions: React.FC = () => {
   const fetchData = async () => {
     if (!currentUser) return;
     try {
-      const { plans: plansData, pendingRequest: pendingRequestData } = await api.fetchSubscriptionsPageData(currentUser.id);
+      const { plans: plansData } = await api.fetchSubscriptionsPageData(currentUser.id);
       
       // PATCH: SUBSCRIPTIONS_FIX_V1
       const enrichedPlans = plansData.map(p => {
@@ -373,7 +307,6 @@ const Subscriptions: React.FC = () => {
       });
       
       setPlans(enrichedPlans);
-      setPendingRequest(pendingRequestData);
     } catch (error) {
       console.error("Failed to fetch subscription data:", error);
     } finally {
@@ -386,7 +319,7 @@ const Subscriptions: React.FC = () => {
         setIsLoading(true);
         fetchData();
     }
-  }, []);
+  }, [currentUser]);
   
   const processApiResponse = (response: any) => {
     if (response.updatedUser) {
@@ -397,45 +330,112 @@ const Subscriptions: React.FC = () => {
     }
   };
 
-  const handleRequestUpgrade = async (planName: User['plan'], paymentLink?: string) => {
-    if (!currentUser || pendingRequest || requestingPlan) return;
-    setRequestingPlan(planName);
+  const resetCheckoutState = () => {
+    setIsCheckoutOpen(false);
+    setCheckoutPlan(null);
+    setCheckoutStatus(null);
+    setCheckoutError(null);
+    setIsCheckoutSubmitting(false);
+    setCardForm({
+      holderName: '',
+      number: '',
+      expMonth: '',
+      expYear: '',
+      cvv: '',
+    });
+  };
+
+  const handleStartCheckout = (plan: SubscriptionPlan) => {
+    setCheckoutPlan(plan);
+    setIsCheckoutOpen(true);
+    setCheckoutStatus(null);
+    setCheckoutError(null);
+    setCardForm({
+      holderName: '',
+      number: '',
+      expMonth: '',
+      expYear: '',
+      cvv: '',
+    });
+  };
+
+  const handleCardFieldChange =
+    (field: keyof typeof cardForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
+      const { value } = event.target;
+      setCardForm((prev) => ({ ...prev, [field]: value }));
+    };
+
+  const pollSubscriptionStatus = async (targetPlan: string) => {
+    if (!currentUser) return false;
+    const delays = [2000, 4000, 8000, 8000, 8000];
+
+    for (const delay of delays) {
+      const [subscriptionResult, profileResult] = await Promise.all([
+        getMySubscription().catch(() => null),
+        ProfileSupabase.fetchMyProfile(currentUser.id),
+      ]);
+
+      const isActive = subscriptionResult?.status === 'active';
+      const profilePlan = profileResult.success ? profileResult.user?.plan : null;
+
+      if (isActive && profilePlan === targetPlan && profileResult.user) {
+        dispatch({ type: 'UPDATE_USER', payload: profileResult.user });
+        return true;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    return false;
+  };
+
+  const getCheckoutErrorMessage = (error: unknown) => {
+    if (error instanceof Error) {
+      return error.message || 'Falha ao processar o pagamento.';
+    }
+    return 'Falha ao processar o pagamento.';
+  };
+
+  const handleConfirmCheckout = async () => {
+    if (!currentUser || !checkoutPlan) return;
+    setCheckoutError(null);
+    setIsCheckoutSubmitting(true);
     try {
-        const response = await api.requestSubscriptionUpgrade(currentUser.id, planName, paymentLink);
-        processApiResponse(response);
-        if (response.newRequest) {
-            setPendingRequest(response.newRequest);
-        }
+      setCheckoutStatus('Tokenizando cartão...');
+      await loadPagbankSdk();
+      const cardToken = await createCardToken({
+        number: cardForm.number,
+        expMonth: cardForm.expMonth,
+        expYear: cardForm.expYear,
+        cvv: cardForm.cvv,
+        holderName: cardForm.holderName,
+      });
+      setCardForm({
+        holderName: '',
+        number: '',
+        expMonth: '',
+        expYear: '',
+        cvv: '',
+      });
+
+      setCheckoutStatus('Criando assinatura...');
+      await createSubscriptionWithCardToken({
+        userId: currentUser.id,
+        planName: checkoutPlan.name,
+        cardToken,
+      });
+
+      setCheckoutStatus('Processando pagamento...');
+      const isActive = await pollSubscriptionStatus(checkoutPlan.name);
+      if (!isActive) {
+        setCheckoutStatus('Pagamento em processamento, atualize em instantes.');
+      } else {
+        setCheckoutStatus('Assinatura ativa!');
+      }
     } catch (error) {
-        console.error("Failed to request upgrade:", error);
+      setCheckoutError(getCheckoutErrorMessage(error));
     } finally {
-        setRequestingPlan(null);
-    }
-  };
-  
-  const handlePay = async (request: SubscriptionRequest) => {
-    if (request.paymentLink) {
-        window.open(request.paymentLink, '_blank');
-    }
-    const response = await api.markSubscriptionAsAwaitingProof(request.id);
-    if(response.updatedRequest) {
-        setPendingRequest(response.updatedRequest);
-    }
-  };
-  
-  const handleSubmitProof = async (proofDataUrl: string) => {
-    if (!currentUser || !pendingRequest) return;
-    setIsSubmittingProof(true);
-    try {
-        const response = await api.submitSubscriptionProof(currentUser.id, pendingRequest.id, proofDataUrl);
-        processApiResponse(response);
-        if (response.updatedRequest) {
-            setPendingRequest(response.updatedRequest);
-        }
-    } catch(error) {
-        console.error("Failed to submit proof:", error);
-    } finally {
-        setIsSubmittingProof(false);
+      setIsCheckoutSubmitting(false);
     }
   };
 
@@ -453,23 +453,6 @@ const Subscriptions: React.FC = () => {
     }
   };
 
-  const handleConfirmCancelRequest = async () => {
-    if (!requestToCancel) return;
-    setIsCancellingRequest(true);
-    try {
-        const response = await api.cancelSubscriptionRequest(requestToCancel.id);
-        processApiResponse(response);
-        if (response.updatedRequest) {
-            await fetchData();
-        }
-    } catch (error) {
-        console.error("Failed to cancel subscription request:", error);
-    } finally {
-        setIsCancellingRequest(false);
-        setRequestToCancel(null);
-    }
-  };
-
   if (isLoading || !currentUser) {
     return (
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -477,6 +460,13 @@ const Subscriptions: React.FC = () => {
         </div>
     );
   }
+
+  const isCheckoutFormIncomplete =
+    !cardForm.holderName.trim() ||
+    !cardForm.number.trim() ||
+    !cardForm.expMonth.trim() ||
+    !cardForm.expYear.trim() ||
+    !cardForm.cvv.trim();
 
   return (
       <div className="animate-fade-in-up pb-32 relative">
@@ -521,13 +511,9 @@ const Subscriptions: React.FC = () => {
                     key={plan.name} 
                     plan={plan} 
                     currentUser={currentUser} 
-                    pendingRequest={pendingRequest}
-                    requestingPlan={requestingPlan}
-                    onRequestUpgrade={handleRequestUpgrade}
-                    onPay={handlePay}
-                    onSubmitProof={handleSubmitProof}
-                    isSubmittingProof={isSubmittingProof}
-                    onCancelRequest={setRequestToCancel}
+                    isCheckoutDisabled={isCheckoutOpen || isCheckoutSubmitting}
+                    isCheckoutLoading={isCheckoutSubmitting && checkoutPlan?.name === plan.name}
+                    onStartCheckout={handleStartCheckout}
                 />
             ))}
         </div>
@@ -580,6 +566,142 @@ const Subscriptions: React.FC = () => {
         </div>
 
         {/* MODALS */}
+        {isCheckoutOpen && checkoutPlan && (
+            <div
+                className="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+                style={{ zIndex: 10000 }}
+            >
+                <div className="w-full max-w-lg bg-[#121212] border border-[#FFD36A]/30 rounded-2xl p-8 shadow-2xl relative">
+                    <button
+                        type="button"
+                        onClick={resetCheckoutState}
+                        disabled={isCheckoutSubmitting}
+                        className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors disabled:cursor-not-allowed"
+                        aria-label="Fechar"
+                    >
+                        ✕
+                    </button>
+                    <h3 className="text-2xl font-bold text-white font-chakra uppercase tracking-wide mb-2">
+                        Assinar {checkoutPlan.name}
+                    </h3>
+                    <p className="text-sm text-gray-400 mb-6">
+                        Insira os dados do cartão para gerar o token e processar sua assinatura com segurança.
+                    </p>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                                Nome do Titular
+                            </label>
+                            <input
+                                type="text"
+                                value={cardForm.holderName}
+                                onChange={handleCardFieldChange('holderName')}
+                                disabled={isCheckoutSubmitting}
+                                className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
+                                placeholder="Como no cartão"
+                                autoComplete="cc-name"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                                Número do Cartão
+                            </label>
+                            <input
+                                type="text"
+                                value={cardForm.number}
+                                onChange={handleCardFieldChange('number')}
+                                disabled={isCheckoutSubmitting}
+                                className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
+                                placeholder="0000 0000 0000 0000"
+                                inputMode="numeric"
+                                autoComplete="cc-number"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                                    Mês
+                                </label>
+                                <input
+                                    type="text"
+                                    value={cardForm.expMonth}
+                                    onChange={handleCardFieldChange('expMonth')}
+                                    disabled={isCheckoutSubmitting}
+                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
+                                    placeholder="MM"
+                                    inputMode="numeric"
+                                    autoComplete="cc-exp-month"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                                    Ano
+                                </label>
+                                <input
+                                    type="text"
+                                    value={cardForm.expYear}
+                                    onChange={handleCardFieldChange('expYear')}
+                                    disabled={isCheckoutSubmitting}
+                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
+                                    placeholder="AAAA"
+                                    inputMode="numeric"
+                                    autoComplete="cc-exp-year"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs uppercase tracking-widest text-gray-400 mb-2">
+                                    CVV
+                                </label>
+                                <input
+                                    type="password"
+                                    value={cardForm.cvv}
+                                    onChange={handleCardFieldChange('cvv')}
+                                    disabled={isCheckoutSubmitting}
+                                    className="w-full rounded-lg bg-[#0D0F12] border border-[#2A2D33] px-4 py-3 text-white focus:border-[#FFD36A] focus:outline-none"
+                                    placeholder="123"
+                                    inputMode="numeric"
+                                    autoComplete="cc-csc"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {checkoutError && (
+                        <div className="mt-4 text-sm text-red-400 font-semibold">
+                            {checkoutError}
+                        </div>
+                    )}
+                    {checkoutStatus && (
+                        <div className="mt-4 text-sm text-[#FFD36A] font-semibold">
+                            {checkoutStatus}
+                        </div>
+                    )}
+
+                    <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                        <button
+                            type="button"
+                            onClick={resetCheckoutState}
+                            disabled={isCheckoutSubmitting}
+                            className="flex-1 py-3 rounded-lg border border-gray-700 text-gray-300 uppercase text-xs font-bold tracking-widest hover:border-gray-500 hover:text-white transition-colors disabled:cursor-not-allowed"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirmCheckout}
+                            disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
+                            className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(255,211,106,0.4)] disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isCheckoutSubmitting ? 'Processando...' : 'Confirmar Assinatura'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <ConfirmationModal
             isOpen={isCancelModalOpen}
             onClose={() => setIsCancelModalOpen(false)}
@@ -595,15 +717,6 @@ const Subscriptions: React.FC = () => {
             confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
         />
 
-        <ConfirmationModal
-            isOpen={!!requestToCancel}
-            onClose={() => setRequestToCancel(null)}
-            onConfirm={handleConfirmCancelRequest}
-            title="Cancelar Pedido"
-            message="Tem certeza que deseja cancelar este processo de upgrade em andamento?"
-            confirmButtonText={isCancellingRequest ? 'Cancelando...' : 'Sim, Cancelar Pedido'}
-            confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
-        />
     </div>
   );
 };

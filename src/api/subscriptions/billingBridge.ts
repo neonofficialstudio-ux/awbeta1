@@ -1,32 +1,75 @@
+import { config } from '../../core/config';
+import { getSupabase } from '../supabase/client';
 
-import type { User } from '../../types';
-import { normalizePlanId } from './normalizePlan';
-import { TelemetryPRO } from '../../services/telemetry.pro';
+type CreateSubscriptionPayload = {
+  userId: string;
+  planName: string;
+  cardToken: string;
+};
+
+export const createSubscriptionWithCardToken = async ({
+  userId,
+  planName,
+  cardToken,
+}: CreateSubscriptionPayload) => {
+  if (config.backendProvider !== 'supabase') {
+    throw new Error('Supabase provider is not enabled.');
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase client not initialized.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('pagbank-create-subscription', {
+    body: {
+      user_id: userId,
+      plan_name: planName,
+      card_token: cardToken,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Falha ao criar assinatura.');
+  }
+
+  return data;
+};
+
+export const getMySubscription = async (): Promise<{
+  status: string;
+  plan: string;
+  current_period_end?: string | null;
+  updated_at?: string | null;
+} | null> => {
+  if (config.backendProvider !== 'supabase') {
+    throw new Error('Supabase provider is not enabled.');
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase client not initialized.');
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) {
+    throw new Error('Usuário não autenticado.');
+  }
+
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('status,plan,current_period_end,updated_at')
+    .eq('user_id', authData.user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || 'Falha ao buscar assinatura.');
+  }
+
+  return data ?? null;
+};
 
 export const BillingBridge = {
-    /**
-     * Gera link de pagamento para upgrade.
-     * Em produção, isso chamaria Stripe/PagSeguro/Supabase Edge Function.
-     */
-    generatePaymentLink: async (user: User, targetPlan: string): Promise<string> => {
-        const planId = normalizePlanId(targetPlan);
-        
-        TelemetryPRO.event("billing_link_generated", { userId: user.id, targetPlan: planId });
-        
-        // Mock: Retorna links estáticos por enquanto, ou dinâmicos simulados
-        // Isso facilita a substituição futura sem quebrar a UI
-        if (planId === 'hitmaker') return "https://pay.artistworld.com/hitmaker";
-        if (planId === 'profissional') return "https://pay.artistworld.com/pro";
-        if (planId === 'ascensao') return "https://pay.artistworld.com/ascensao";
-        
-        return "#";
-    },
-
-    /**
-     * Simula a verificação de status de assinatura externa.
-     */
-    syncStatus: async (userId: string) => {
-        // Placeholder para Webhook receiver
-        return { status: 'active', provider: 'mock' };
-    }
+  createSubscriptionWithCardToken,
+  getMySubscription,
 };
