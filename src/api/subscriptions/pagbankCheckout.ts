@@ -12,18 +12,33 @@ type VerifyCheckoutResponse = {
   status: string;
 };
 
+function getAnonKeyOrThrow() {
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  if (!anon) throw new Error('VITE_SUPABASE_ANON_KEY ausente.');
+  return anon;
+}
+
 async function getAccessTokenOrThrow() {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase não disponível.');
 
   const { data, error } = await supabase.auth.getSession();
   if (error) throw new Error(error.message || 'Falha ao obter sessão.');
-  const token = data?.session?.access_token;
 
-  if (!token) {
-    throw new Error('Você precisa estar logado para assinar um plano.');
-  }
+  const token = data?.session?.access_token;
+  if (!token) throw new Error('Você precisa estar logado para assinar um plano.');
   return token;
+}
+
+function buildInvokeHeaders(accessToken: string) {
+  const apikey = getAnonKeyOrThrow();
+  return {
+    // ✅ necessário para Edge + Verify JWT
+    Authorization: `Bearer ${accessToken}`,
+    // ✅ em alguns casos o SDK perde esse header ao sobrescrever
+    apikey,
+    'Content-Type': 'application/json',
+  };
 }
 
 export async function createPagbankCheckout(
@@ -41,12 +56,9 @@ export async function createPagbankCheckout(
 
   const { data, error } = await supabase.functions.invoke('pagbank-create-checkout-link', {
     body: { user_id: userId, plan_name: planName },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: buildInvokeHeaders(accessToken),
   });
 
-  // Diagnóstico: quando der 400/401, isso ajuda MUITO
   if (error) {
     console.error('[PagBank] create checkout invoke error:', error, 'data:', data);
     throw new Error(error.message || 'Não foi possível iniciar o checkout PagBank.');
@@ -58,14 +70,10 @@ export async function createPagbankCheckout(
 
   if (!checkoutUrl || !checkoutId || !referenceId) {
     console.error('[PagBank] create checkout incomplete payload:', data);
-    throw new Error('Checkout PagBank incompleto. Tente novamente em instantes.');
+    throw new Error('Checkout PagBank capitalizou incompleto. Tente novamente.');
   }
 
-  return {
-    checkout_id: checkoutId,
-    checkout_url: checkoutUrl,
-    reference_id: referenceId,
-  };
+  return { checkout_id: checkoutId, checkout_url: checkoutUrl, reference_id: referenceId };
 }
 
 export async function verifyPagbankCheckout(
@@ -83,9 +91,7 @@ export async function verifyPagbankCheckout(
 
   const { data, error } = await supabase.functions.invoke('pagbank-verify-checkout', {
     body: { checkout_id: checkoutId, reference_id: referenceId },
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: buildInvokeHeaders(accessToken),
   });
 
   if (error) {
