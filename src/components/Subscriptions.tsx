@@ -10,9 +10,8 @@ import { normalizePlanId } from '../api/subscriptions/normalizePlan';
 import FaqItem from './ui/patterns/FaqItem';
 import { createCardToken, loadPagbankSdk } from '../api/pagbank/pagbankTokenize';
 import { createSubscriptionWithCardToken, getMySubscription } from '../api/subscriptions/billingBridge';
+import { openPagbankCheckout } from '../api/subscriptions/openPagbankCheckout';
 import { ProfileSupabase } from '../api/supabase/profile';
-import { getSupabase } from '../api/supabase/client';
-import { config } from '../core/config';
 
 // --- THEME CONFIGURATION ---
 
@@ -250,7 +249,6 @@ const Subscriptions: React.FC = () => {
   const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<{ message: string; code?: string } | null>(null);
-  const [isCheckoutFallbackLoading, setIsCheckoutFallbackLoading] = useState(false);
   const [cardForm, setCardForm] = useState({
     holderName: '',
     number: '',
@@ -339,7 +337,6 @@ const Subscriptions: React.FC = () => {
     setCheckoutStatus(null);
     setCheckoutError(null);
     setIsCheckoutSubmitting(false);
-    setIsCheckoutFallbackLoading(false);
     setCardForm({
       holderName: '',
       number: '',
@@ -354,7 +351,6 @@ const Subscriptions: React.FC = () => {
     setIsCheckoutOpen(true);
     setCheckoutStatus(null);
     setCheckoutError(null);
-    setIsCheckoutFallbackLoading(false);
     setCardForm({
       holderName: '',
       number: '',
@@ -454,43 +450,22 @@ const Subscriptions: React.FC = () => {
     }
   };
 
-  const handleOpenCheckoutFallback = async () => {
+  const handleOpenPagbankCheckout = async () => {
     if (!currentUser || !checkoutPlan) return;
-    setIsCheckoutFallbackLoading(true);
-    setCheckoutError(null);
-    setCheckoutStatus(null);
     try {
-      if (config.backendProvider !== 'supabase') {
-        throw new Error('Supabase provider is not enabled.');
-      }
-
-      const supabase = getSupabase();
-      if (!supabase) {
-        throw new Error('Supabase client not initialized.');
-      }
-
-      const { data, error } = await supabase.functions.invoke('pagbank-create-checkout-link', {
-        body: {
-          user_id: currentUser.id,
-          plan_name: checkoutPlan.name,
-        },
+      setCheckoutError(null);
+      setCheckoutStatus('Redirecionando para o PagBank...');
+      setIsCheckoutSubmitting(true);
+      await openPagbankCheckout({
+        user_id: currentUser.id,
+        plan_name: checkoutPlan.name,
       });
-
-      if (error) {
-        throw new Error(error.message || 'Falha ao gerar link de pagamento.');
-      }
-
-      const checkoutUrl = data?.url ?? data?.checkout_url;
-      if (!checkoutUrl) {
-        throw new Error('Link de pagamento indisponível.');
-      }
-
-      window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      console.error('[checkout] fallback_link_failed', error);
+      console.error('[checkout] pagbank_checkout_failed', error);
+      setCheckoutStatus(null);
       setCheckoutError(getCheckoutErrorMessage(error));
     } finally {
-      setIsCheckoutFallbackLoading(false);
+      setIsCheckoutSubmitting(false);
     }
   };
 
@@ -641,7 +616,7 @@ const Subscriptions: React.FC = () => {
                         Assinar {checkoutPlan.name}
                     </h3>
                     <p className="text-sm text-gray-400 mb-6">
-                        Insira os dados do cartão para gerar o token e processar sua assinatura com segurança.
+                        Se preferir tokenização inline (opcional), insira os dados do cartão para gerar o token e processar sua assinatura.
                     </p>
 
                     <div className="space-y-4">
@@ -753,11 +728,11 @@ const Subscriptions: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                onClick={handleOpenCheckoutFallback}
-                                disabled={isCheckoutSubmitting || isCheckoutFallbackLoading}
+                                onClick={handleOpenPagbankCheckout}
+                                disabled={isCheckoutSubmitting}
                                 className="w-full py-3 rounded-lg bg-[#0D0F12] border border-[#FFD36A]/50 text-[#FFD36A] font-black uppercase text-xs tracking-widest hover:bg-[#FFD36A]/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                {isCheckoutFallbackLoading ? 'Gerando link...' : 'Abrir Checkout PagBank'}
+                                {isCheckoutSubmitting ? 'Gerando link...' : 'Abrir Checkout PagBank'}
                             </button>
                         </div>
                     )}
@@ -773,11 +748,21 @@ const Subscriptions: React.FC = () => {
                         </button>
                         <button
                             type="button"
-                            onClick={handleConfirmCheckout}
-                            disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
+                            onClick={handleOpenPagbankCheckout}
+                            disabled={isCheckoutSubmitting}
                             className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] font-black uppercase text-xs tracking-widest shadow-[0_0_20px_rgba(255,211,106,0.4)] disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             {isCheckoutSubmitting ? 'Processando...' : 'Confirmar Assinatura'}
+                        </button>
+                    </div>
+                    <div className="mt-4">
+                        <button
+                            type="button"
+                            onClick={handleConfirmCheckout}
+                            disabled={isCheckoutSubmitting || isCheckoutFormIncomplete}
+                            className="w-full py-3 rounded-lg border border-[#FFD36A]/50 text-[#FFD36A] font-black uppercase text-xs tracking-widest hover:bg-[#FFD36A]/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            Usar cartão (fallback)
                         </button>
                     </div>
                 </div>

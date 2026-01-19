@@ -5,6 +5,7 @@ import { QueueProvider } from './providers/QueueProvider';
 import { AuthGate } from './core/AuthGate';
 import { GlobalErrorBoundary } from './core/errors/globalErrorBoundary';
 import { ToastProvider } from './components/ui/providers/ToastProvider';
+import { Toaster } from 'react-hot-toast';
 import { ModalProvider } from './components/ui/providers/ModalProvider';
 import { SanityGuard } from './services/sanity.guard'; 
 import { DataConsistency } from './services/data.consistency'; 
@@ -95,6 +96,7 @@ const App: React.FC = () => {
         <GlobalErrorBoundary>
             <AppProvider>
                 <ToastProvider>
+                    <Toaster position="top-right" />
                     <ModalProvider>
                         <QueueProvider>
                              <AppContent />
