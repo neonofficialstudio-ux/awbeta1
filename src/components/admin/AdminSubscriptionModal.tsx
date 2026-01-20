@@ -111,7 +111,7 @@ const AdminSubscriptionModal: React.FC<AdminSubscriptionModalProps> = ({ plan, o
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-                <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-1">Preço (Ex: R$49/mês)</label>
+                <label htmlFor="price" className="block text-sm font-medium text-gray-300 mb-1">Preço (Ex: R$39/mês)</label>
                 <input type="text" name="price" id="price" value={formData.price} onChange={handleChange} required className="w-full bg-gray-800 rounded-md border-gray-700 text-white p-2 focus:border-goldenYellow-500 outline-none transition-colors"/>
             </div>
             
