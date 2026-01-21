@@ -16,9 +16,9 @@ export function getPlanDetailsAPI() {
         
         const prices: Record<string, string> = {
             "Free Flow": "Gratuito",
-            "Artista em Ascensão": "R$39/mês",
-            "Artista Profissional": "R$79/mês",
-            "Hitmaker": "R$119/mês"
+            "Artista em Ascensão": "R$ 39,00/mês",
+            "Artista Profissional": "R$ 79,00/mês",
+            "Hitmaker": "R$ 119,00/mês"
         };
         
         return {
