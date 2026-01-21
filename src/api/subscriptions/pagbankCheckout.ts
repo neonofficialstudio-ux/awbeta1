@@ -54,8 +54,13 @@ export async function createPagbankCheckout(
 
   const accessToken = await getAccessTokenOrThrow();
 
+  const payload = { user_id: userId, plan_name: planName };
+
+  // ⚠️ NÃO stringify aqui.
+  // O invoke já serializa para JSON internamente.
+  // Se você stringify, vira string JSON dentro de JSON → Edge recebe inválido e retorna invalid_json.
   const { data, error } = await supabase.functions.invoke('pagbank-create-checkout-link', {
-    body: { user_id: userId, plan_name: planName },
+    body: payload,
     headers: buildInvokeHeaders(accessToken),
   });
 
