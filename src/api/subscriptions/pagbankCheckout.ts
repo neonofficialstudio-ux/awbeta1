@@ -12,12 +12,6 @@ type VerifyCheckoutResponse = {
   status: string;
 };
 
-function getAnonKeyOrThrow() {
-  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-  if (!anon) throw new Error('VITE_SUPABASE_ANON_KEY ausente.');
-  return anon;
-}
-
 async function getAccessTokenOrThrow() {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase não disponível.');
@@ -31,13 +25,18 @@ async function getAccessTokenOrThrow() {
 }
 
 function buildInvokeHeaders(accessToken: string) {
-  const apikey = getAnonKeyOrThrow();
+  /**
+   * ✅ FIX DEFINITIVO (invalid_json / "[object Object]")
+   *
+   * NÃO setar "Content-Type" aqui.
+   * Quando você força Content-Type no invoke, em alguns fluxos o supabase-js não serializa o body
+   * e o fetch recebe um objeto cru -> vira "[object Object]" (15 bytes) -> Edge Function retorna invalid_json.
+   *
+   * Também NÃO setar apikey manualmente: o supabase-js já injeta apikey automaticamente no request.
+   */
   return {
-    // ✅ necessário para Edge + Verify JWT
     Authorization: `Bearer ${accessToken}`,
-    // ✅ em alguns casos o SDK perde esse header ao sobrescrever
-    apikey,
-    'Content-Type': 'application/json',
+    'x-client-info': 'aw-web',
   };
 }
 
