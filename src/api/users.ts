@@ -287,10 +287,42 @@ export const updateUser = (user: User) => withLatency(async () => {
     return { updatedUser: SanityGuard.user(updatedUser) };
 });
 
-export const fetchSubscriptionsPageData = (userId: string) => withLatency(() => {
-    const pendingRequest = db.subscriptionRequestsData.find(r => r.userId === userId && (r.status === 'pending_payment' || r.status === 'awaiting_proof' || r.status === 'pending_approval')) || null;
-    return { plans: db.subscriptionPlansData, pendingRequest };
-});
+export const fetchSubscriptionsPageData = (userId: string) =>
+    withLatency(async () => {
+        const applyRealPrices = (plans: typeof db.subscriptionPlansData) => {
+            const priceByName: Record<string, string> = {
+                'Artista em Ascensão': 'R$39/mês',
+                'Artista Profissional': 'R$79/mês',
+                'Hitmaker': 'R$119/mês',
+            };
+
+            return (plans ?? []).map((plan) => {
+                const name = String(plan?.name ?? '').trim();
+                if (!name) return plan;
+                if (name === 'Free Flow') return { ...plan, price: 'Gratuito' };
+                if (priceByName[name]) return { ...plan, price: priceByName[name] };
+                return plan;
+            });
+        };
+
+        if (isSupabaseProvider()) {
+            return {
+                plans: applyRealPrices(db.subscriptionPlansData),
+                pendingRequest: null,
+            };
+        }
+
+        const pendingRequest =
+            db.subscriptionRequestsData.find(
+                (r) =>
+                    r.userId === userId &&
+                    (r.status === 'pending_payment' ||
+                        r.status === 'awaiting_proof' ||
+                        r.status === 'pending_approval'),
+            ) || null;
+
+        return { plans: applyRealPrices(db.subscriptionPlansData), pendingRequest };
+    });
 
 export const requestSubscriptionUpgrade = (userId: string, planName: User['plan'], paymentLink?: string) => withLatency(() => {
     const user = db.allUsersData.find(u => u.id === userId);

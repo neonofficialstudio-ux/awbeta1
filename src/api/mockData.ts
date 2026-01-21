@@ -247,8 +247,8 @@ export var subscriptionPlansData: SubscriptionPlan[] = [
   // ... unchanged content
     { name: 'Free Flow', price: 'Gratuito', dailyMissions: 'Para começar sua jornada', icon: null as any, features: [] },
     { name: 'Artista em Ascensão', price: 'R$39/mês', dailyMissions: 'Ideal para artistas em ascensão', icon: null as any, features: [], paymentLink: '#' },
-    { name: 'Artista Profissional', price: 'R$89/mês', dailyMissions: 'Para artistas que buscam o topo', icon: null as any, features: [], highlight: true, paymentLink: '#' },
-    { name: 'Hitmaker', price: 'R$149/mês', dailyMissions: 'A experiência definitiva', icon: null as any, features: [], paymentLink: '#' },
+    { name: 'Artista Profissional', price: 'R$79/mês', dailyMissions: 'Para artistas que buscam o topo', icon: null as any, features: [], highlight: true, paymentLink: '#' },
+    { name: 'Hitmaker', price: 'R$119/mês', dailyMissions: 'A experiência definitiva', icon: null as any, features: [], paymentLink: '#' },
 ];
 
 export var eventsData: Event[] = [
