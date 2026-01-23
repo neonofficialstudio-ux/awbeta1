@@ -1,11 +1,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { Mission, User, MissionSubmission } from '../types';
+import type { Mission, MissionSubmission } from '../types';
 import { CoinIcon, XPIcon, InstagramIcon, TikTokIcon, StarIcon, VipIcon, HistoryIcon as ClockIcon, TrendingUpIcon, CheckIcon, YoutubeIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import SubmissionSuccessModal from './SubmissionSuccessModal';
-import { PLAN_MULTIPLIERS } from '../api/economy/economy-constants';
 import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
 import { MissionTimerEngine } from '../services/missions/mission.timer';
 import { safeString } from '../api/helpers';
@@ -167,9 +166,9 @@ const MissionCard: React.FC<{
     status: 'available' | 'pending' | 'completed' | 'rejected',
     onSubmit: (missionId: string, proof: string) => Promise<void>,
     hasReachedDailyLimit: boolean;
-    userPlan: User['plan'];
+    coinsMultiplier: number;
     cooldown?: string | null;
-}> = React.memo(({ mission, status, onSubmit, hasReachedDailyLimit, userPlan, cooldown }) => {
+}> = React.memo(({ mission, status, onSubmit, hasReachedDailyLimit, coinsMultiplier, cooldown }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -304,7 +303,11 @@ const MissionCard: React.FC<{
     }
 
     const isEventMission = !!(mission as any).eventId;
-    const multiplier = PLAN_MULTIPLIERS[userPlan] || 1;
+    // IMPORTANT:
+    // - Backend (Supabase) is the source of truth
+    // - Trigger trg_apply_plan_coin_multiplier applies the real multiplier in the ledger
+    // - This is display-only for preview
+    const multiplier = Number(coinsMultiplier || 1);
     const finalXp = mission.xp; 
     const finalCoins = isEventMission ? mission.coins : Math.floor(mission.coins * multiplier);
     const showMultiplier = !isEventMission && multiplier > 1;
@@ -553,6 +556,7 @@ const Missions: React.FC = () => {
     const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
     const [hasReachedDailyLimit, setHasReachedDailyLimit] = useState(false);
     const [dailyLimit, setDailyLimit] = useState<number | null>(null);
+    const [planBenefits, setPlanBenefits] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
@@ -576,8 +580,10 @@ const Missions: React.FC = () => {
                 const b = await getMyPlanBenefits();
                 limit = b.daily_mission_limit;
                 setDailyLimit(limit);
+                setPlanBenefits(b);
             } catch {
                 setDailyLimit(null);
+                setPlanBenefits(null);
             }
             setMissions(data.missions);
             setMissionSubmissions(data.submissions);
@@ -647,6 +653,8 @@ const Missions: React.FC = () => {
     
     const getCooldown = (missionId: string) => MissionTimerEngine.getCooldownDisplay(user.id, missionId);
 
+    const coinsMultiplier = Number(planBenefits?.coins_multiplier ?? 1);
+
     return (
         <div className="space-y-10 md:space-y-14 pb-12 animate-fade-in-up">
             <div className="text-center max-w-3xl mx-auto mb-10 md:mb-16">
@@ -658,7 +666,7 @@ const Missions: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {missions.map(mission => (
-                    <MissionCard key={mission.id} mission={mission} status={getMissionStatus(mission.id)} onSubmit={handleSubmitMission} hasReachedDailyLimit={hasReachedDailyLimit} userPlan={user.plan} cooldown={getCooldown(mission.id)} />
+                    <MissionCard key={mission.id} mission={mission} status={getMissionStatus(mission.id)} onSubmit={handleSubmitMission} hasReachedDailyLimit={hasReachedDailyLimit} coinsMultiplier={coinsMultiplier} cooldown={getCooldown(mission.id)} />
                 ))}
             </div>
             
