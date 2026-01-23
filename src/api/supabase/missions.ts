@@ -2,8 +2,7 @@ import { supabaseClient } from './client';
 import { config } from '../../core/config';
 import type { Mission, MissionSubmission } from '../../types';
 import { mapMissionToApp } from './mappings';
-import { normalizePlan } from '../subscriptions/normalizePlan';
-import { SubscriptionEngineV5 } from '../subscriptions';
+// NOTE: Supabase é a fonte da verdade para limite diário (RPC get_my_mission_quota)
 import { MISSION_SUBMISSION_LIGHT_SELECT } from './selects';
 
 const ensureClient = () => {
@@ -60,7 +59,7 @@ export const fetchMissionsSupabase = async (userId: string) => {
     if (!supabase) return { missions: [] as Mission[], submissions: [] as MissionSubmission[], hasReachedDailyLimit: false };
 
     try {
-        const [missionsRes, submissionsRes, profileRes] = await Promise.all([
+        const [missionsRes, submissionsRes, quotaRes] = await Promise.all([
             fetchActiveMissions(),
             supabase
                 .from('mission_submissions')
@@ -72,26 +71,17 @@ export const fetchMissionsSupabase = async (userId: string) => {
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(50),
-            supabase.from('profiles').select('plan, role').eq('id', userId).limit(1).single(),
+            supabase.rpc('get_my_mission_quota'),
         ]);
 
         const missions = missionsRes.error || !missionsRes.data ? [] : missionsRes.data.map(mapMissionToApp);
         const submissions = submissionsRes.error || !submissionsRes.data ? [] : submissionsRes.data.map(mapSubmission);
 
+        // Fonte da verdade (backend): remaining === 0 => atingiu limite
         let hasReachedDailyLimit = false;
-        const userContext = {
-            id: userId,
-            role: (profileRes.data as any)?.role || ('user' as const),
-            plan: normalizePlan((profileRes.data as any)?.plan) || null,
-        };
-        const rawLimit = SubscriptionEngineV5.getDailyMissionLimit(userContext);
-        const dailyLimit = Number.isFinite(rawLimit) ? rawLimit : null;
-
-        if (dailyLimit !== null && submissions.length) {
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
-            const todayCount = submissions.filter(sub => new Date(sub.submittedAtISO) >= startOfDay).length;
-            hasReachedDailyLimit = todayCount >= dailyLimit;
+        const quota = (quotaRes as any)?.data;
+        if (quota && typeof quota === 'object') {
+            hasReachedDailyLimit = quota.remaining === 0;
         }
 
         return { missions, submissions, hasReachedDailyLimit };
