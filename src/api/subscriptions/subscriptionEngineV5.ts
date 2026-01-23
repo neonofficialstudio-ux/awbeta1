@@ -4,32 +4,10 @@ import { AccessControl } from './accessControl';
 import { DiscountEngine } from './discountEngine';
 import { BillingBridge } from './billingBridge';
 import type { User } from '../../types';
-import { getRepository } from '../database/repository.factory';
 
-// ================================
-// TEMPORARY UNLIMITED MISSIONS BYPASS
-// ================================
-// ⚠️ TEMPORÁRIO – remover quando assinaturas entrarem
-export const UNLIMITED_MISSION_USERS = [
-  // coloque aqui SEU user_id (uuid)
-  'PUT_YOUR_USER_ID_HERE'
-];
-
-export const hasUnlimitedMissionAccess = (user: { id: string; role?: string; plan?: string | null }) => {
-  const role = (user.role || '').trim().toLowerCase();
-  const plan = (user.plan || '').trim().toLowerCase();
-
-  // admin/owner sempre ilimitado
-  if (role === 'admin' || role === 'owner') return true;
-
-  // Hitmaker ilimitado (por role OU por plan)
-  if (role === 'hitmaker') return true;
-  if (plan === 'hitmaker') return true;
-
-  return false;
-};
-
-const repo = getRepository();
+// ✅ AW Contract:
+// Limite diário é aplicado no SUPABASE (submit_mission + plan_benefits).
+// O front pode exibir quota via RPC get_my_mission_quota, mas não decide.
 
 export const SubscriptionEngineV5 = {
     /**
@@ -52,42 +30,19 @@ export const SubscriptionEngineV5 = {
      * Retorna o limite diário de missões.
      * Null ou Infinity significa ilimitado.
      */
+    // UI-only fallback (não autoridade)
     getDailyMissionLimit: (user: User): number => {
-        const config = SubscriptionEngineV5.getPlanConfig(user);
-        return config.missionLimit;
+        if (user?.plan === 'Hitmaker') return Infinity;
+        if (user?.plan === 'Artista Profissional') return 3;
+        if (user?.plan === 'Artista em Ascensão') return 2;
+        return 1; // Free Flow
     },
 
     /**
      * Verifica se o usuário atingiu o limite diário.
      */
-    checkDailyLimit: (user: User): { allowed: boolean; limit: number; current: number } => {
-        // 🔓 Hitmaker bypass – always allow submissions for this plan
-        if (user?.plan === 'Hitmaker') {
-            return { allowed: true, limit: 9999, current: 0 };
-        }
-
-        if (hasUnlimitedMissionAccess(user)) {
-            return { allowed: true, limit: 9999, current: 0 };
-        }
-
-        const limit = SubscriptionEngineV5.getDailyMissionLimit(user);
-        
-        if (limit === Infinity) return { allowed: true, limit: 9999, current: 0 };
-
-        const today = new Date().toISOString().split('T')[0];
-        const submissions = repo.select("submissions");
-        
-        const count = submissions.filter((s: any) => 
-            s.userId === user.id && 
-            s.submittedAtISO.startsWith(today)
-        ).length;
-
-        return {
-            allowed: count < limit,
-            limit,
-            current: count
-        };
-    },
+    // UI-only: backend decide (submit_mission bloqueia com daily_mission_limit_reached)
+    checkDailyLimit: (_user: User) => ({ allowed: true, limit: 9999, current: 0 }),
 
     // Sub-Modules Access
     access: AccessControl,

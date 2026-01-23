@@ -19,10 +19,8 @@ import {
   detectExpiredAttempt
 } from "./telemetry/userBehavior";
 import { validateEconomyTransaction } from './consistency/consistencyEngine';
-import { checkDailyLimitsRespected } from './economy/economySanityCheck';
 import { applyUserHeals } from './economy/economyAutoHeal';
 import { addPerformanceLog } from './logs/performance';
-import { hasUnlimitedMissionAccess } from './subscriptions/subscriptionEngineV5';
 
 export const fetchDashboardData = () => withLatency(() => {
     const now = new Date();
@@ -58,6 +56,7 @@ export const fetchMissions = (userId: string) => withLatency(() => {
     if (!user) throw new Error("User not found");
 
     const dailyLimit = getDailyMissionLimit(user.plan);
+    const isUnlimited = user?.plan === 'Hitmaker';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const submissionsTodayCount = db.missionSubmissionsData
@@ -66,7 +65,7 @@ export const fetchMissions = (userId: string) => withLatency(() => {
     const hasReachedDailyLimit =
         dailyLimit === null
             ? false
-            : (!hasUnlimitedMissionAccess(user) && submissionsTodayCount >= dailyLimit);
+            : (!isUnlimited && submissionsTodayCount >= dailyLimit);
 
     // Filter logic: Only show missions that are NOT scheduled for the future
     // If scheduledFor is undefined/null, it is shown immediately.
@@ -143,22 +142,11 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
     
     const notifications: Notification[] = [];
     const dailyLimit = getDailyMissionLimit(user.plan);
-    const hasUnlimitedAccess = hasUnlimitedMissionAccess(user);
+    const isUnlimited = user?.plan === 'Hitmaker';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const submissionsToday = db.missionSubmissionsData
         .filter(s => s.userId === user.id && new Date(s.submittedAtISO) >= today).length;
-
-    if (dailyLimit !== null && !hasUnlimitedAccess) {
-      // --- ECONOMY SANITY CHECK ---
-      const limitCheck = checkDailyLimitsRespected(user, submissionsToday + 1);
-      if (!limitCheck.ok) console.warn("[ECONOMY SANITY WARNING]", limitCheck.reason);
-      // ----------------------------
-
-      if (submissionsToday >= dailyLimit) {
-        throw new Error(`Você já enviou o máximo de ${dailyLimit} ${dailyLimit > 1 ? 'missões' : 'missão'} hoje.`);
-      }
-    }
 
     // --- NEW CENTRALIZED VALIDATION LOGIC ---
     const desc = mission.description.toLowerCase();
@@ -218,7 +206,7 @@ export const submitMission = (userId: string, missionId: string, proof: string) 
     const hasReachedDailyLimit =
         dailyLimit === null
             ? false
-            : (!hasUnlimitedAccess && submissionsTodayAfter >= dailyLimit);
+            : (!isUnlimited && submissionsTodayAfter >= dailyLimit);
 
     return { updatedUser, newSubmission, notifications, hasReachedDailyLimit };
 });
