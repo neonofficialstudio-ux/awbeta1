@@ -288,42 +288,110 @@ const Subscriptions: React.FC = () => {
         getAllPlanOffers(),
       ]);
       
-      // PATCH: SUBSCRIPTIONS_FIX_V1
-      const enrichedPlans = plansData.map(p => {
-          const offer = offers.find(o => o.plan === p.name);
-          const planId = normalizePlanId(p.name);
-          const config = PLANS[planId];
-          const feats = p.features && p.features.length > 0 ? [...p.features] : [];
-          
-          // Default features based on constants if missing
-          if (feats.length === 0) {
-              if (config.features.visualRewards) feats.push({ text: "Acesso a Recompensas Visuais", icon: StoreIcon });
-              if (config.features.queuePriority) feats.push({ text: "Fila Prioritária", icon: QueueIcon });
-              if (config.features.eventsAccess === 'vip') feats.push({ text: "Acesso VIP a Eventos", icon: CrownIcon });
-              if (offer?.coins_multiplier && offer.coins_multiplier > 1) {
-                feats.push({ text: `Coins x${offer.coins_multiplier}`, icon: TrendingUpIcon });
-              }
-              if (offer?.daily_mission_limit !== undefined && offer?.daily_mission_limit !== null) {
-                feats.push({ text: `Até ${offer.daily_mission_limit} missões/dia`, icon: MissionIcon });
-              } else if (offer?.daily_mission_limit === null && p.name !== "Free Flow") {
-                feats.push({ text: "Missões ilimitadas", icon: MissionIcon });
-              }
-              if ((offer?.store_discount_percent ?? 0) > 0) {
-                feats.push({ text: `Desconto na Loja ${offer.store_discount_percent}%`, icon: DiscountIcon });
-              }
-              
-              // Fallback feature if empty
-              if (feats.length === 0) feats.push({ text: "Acesso Básico", icon: StarIcon });
-          }
-          if (offer?.bullets?.length) {
-            for (const b of offer.bullets) {
-              const exists = feats.some((f: any) => String(f?.text ?? "").toLowerCase() === b.toLowerCase());
-              if (!exists) {
-                feats.push({ text: b, icon: StarIcon });
-              }
-            }
-          }
-          return { ...p, features: feats };
+      // PATCH: SUBSCRIPTIONS_FIX_V2 (normalize + dedupe + ensure Free Flow has complete info)
+      const normalizeFeature = (s: string) => {
+        const raw = String(s ?? '').trim();
+        const k = raw
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .replace(/[^\w\s%/x]/g, '')
+          .trim();
+
+        // Coins multiplier
+        const mCoins = raw.match(/(?:coins|multiplicador de coins)\s*x?\s*(\d+)/i);
+        if (mCoins?.[1]) {
+          const n = Number(mCoins[1]);
+          return { key: `coins_x_${n}`, text: `Coins x${n}`, icon: TrendingUpIcon };
+        }
+
+        // Mission limit
+        if (k.includes('miss') && k.includes('ilimit')) {
+          return { key: 'missions_unlimited', text: 'Missões ilimitadas', icon: MissionIcon };
+        }
+        const mMiss = raw.match(/(?:ate|até)\s*(\d+)\s*miss/i);
+        if (mMiss?.[1]) {
+          const n = Number(mMiss[1]);
+          return { key: `missions_day_${n}`, text: `Até ${n} missões/dia`, icon: MissionIcon };
+        }
+
+        // Store discount
+        const mDisc = raw.match(/(\d+)\s*%.*(loja)/i) || raw.match(/desconto.*?(\d+)\s*%/i);
+        if (mDisc?.[1]) {
+          const p = Number(mDisc[1]);
+          return { key: `store_discount_${p}`, text: `Desconto na Loja ${p}%`, icon: DiscountIcon };
+        }
+
+        // Common perks
+        if (k.includes('recompens') && k.includes('visual')) {
+          return { key: 'visual_rewards', text: 'Acesso a Recompensas Visuais', icon: StoreIcon };
+        }
+        if (k.includes('fila') && k.includes('prior')) {
+          return { key: 'queue_priority', text: 'Fila Prioritária', icon: QueueIcon };
+        }
+        if (k.includes('vip') && k.includes('evento')) {
+          return { key: 'events_vip', text: 'Acesso VIP a Eventos', icon: CrownIcon };
+        }
+        if (k.includes('acesso') && k.includes('loja')) {
+          return { key: 'store_access', text: 'Acesso total à Loja', icon: StoreIcon };
+        }
+        if (k.includes('acesso') && k.includes('bas')) {
+          return { key: 'basic_access', text: 'Acesso Básico', icon: StarIcon };
+        }
+
+        // Fallback: keep text but stable key
+        return { key: `txt_${k}`, text: raw, icon: StarIcon };
+      };
+
+      const mergeFeatures = (items: Array<{ text: string; icon: any }>) => {
+        const map = new Map<string, { text: string; icon: any }>();
+        for (const it of items) {
+          const nf = normalizeFeature(it.text);
+          if (!map.has(nf.key)) map.set(nf.key, { text: nf.text, icon: nf.icon });
+        }
+        return Array.from(map.values());
+      };
+
+      const enrichedPlans = plansData.map((p) => {
+        const offer = offers.find((o) => o.plan === p.name);
+        const planId = normalizePlanId(p.name);
+        const config = PLANS[planId];
+
+        const base: Array<{ text: string; icon: any }> = [];
+
+        // 1) Legacy frontend features (if present)
+        if (p.features?.length) base.push(...p.features);
+
+        // 2) Backend offer bullets
+        if (offer?.bullets?.length) {
+          for (const b of offer.bullets) base.push({ text: b, icon: StarIcon });
+        }
+
+        // 3) Deterministic perks from offer/config (source of truth)
+        if (config.features.visualRewards) base.push({ text: 'Acesso a Recompensas Visuais', icon: StoreIcon });
+        if (config.features.queuePriority) base.push({ text: 'Fila Prioritária', icon: QueueIcon });
+        if (config.features.eventsAccess === 'vip') base.push({ text: 'Acesso VIP a Eventos', icon: CrownIcon });
+
+        if (offer?.coins_multiplier) base.push({ text: `Coins x${offer.coins_multiplier}`, icon: TrendingUpIcon });
+        if (offer?.daily_mission_limit === null && p.name !== 'Free Flow') {
+          base.push({ text: 'Missões ilimitadas', icon: MissionIcon });
+        } else if (offer?.daily_mission_limit !== undefined && offer?.daily_mission_limit !== null) {
+          base.push({ text: `Até ${offer.daily_mission_limit} missões/dia`, icon: MissionIcon });
+        }
+        if ((offer?.store_discount_percent ?? 0) > 0) {
+          base.push({ text: `Desconto na Loja ${offer.store_discount_percent}%`, icon: DiscountIcon });
+        }
+
+        // Always show access messaging
+        if (p.name === 'Free Flow') {
+          base.push({ text: 'Acesso Básico', icon: StarIcon });
+        } else {
+          base.push({ text: 'Acesso total à Loja', icon: StoreIcon });
+        }
+
+        const feats = mergeFeatures(base);
+        return { ...p, features: feats };
       });
       
       setMyBenefits(myB);
