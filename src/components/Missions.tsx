@@ -6,6 +6,7 @@ import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import SubmissionSuccessModal from './SubmissionSuccessModal';
 import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
+import { getMyMissionQuota, type MissionQuota } from '../api/subscriptions/missionQuota';
 import { MissionTimerEngine } from '../services/missions/mission.timer';
 import { safeString } from '../api/helpers';
 import { Perf } from '../services/perf.engine';
@@ -495,42 +496,32 @@ const MissionCard: React.FC<{
 
 // ... Rest of the file (DailyMissionTracker, FaqData, Missions Component) remains similar but uses MissionCard ...
 
-const DailyMissionTracker: React.FC<{ user: User; submissions: MissionSubmission[]; dailyLimit: number | null }> = ({ user, submissions, dailyLimit }) => {
-    const limit = dailyLimit;
+const DailyMissionTracker: React.FC<{ quota: MissionQuota | null }> = ({ quota }) => {
+    const limit = quota?.daily_mission_limit ?? null;
+    const used = quota?.used_today ?? 0;
     const isUnlimited = limit === null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const submissionsToday = submissions.filter(s => s.userId === user.id && new Date(s.submittedAtISO).getTime() >= today.getTime()).length;
-    const percentage = !isUnlimited && limit > 0 ? (submissionsToday / limit) * 100 : 0;
-    const limitReached = !isUnlimited && submissionsToday >= limit;
+    const remaining = isUnlimited ? null : Math.max(0, (limit ?? 0) - used);
+
+    const percent = isUnlimited || !limit ? 0 : Math.min(100, Math.round((used / limit) * 100));
 
     return (
-        <div className={`bg-gradient-to-r from-[#151515] to-[#0B0B0C] p-8 rounded-2xl border border-[#FFD86B]/10 mb-10 transition-all shadow-lg relative overflow-hidden group ${limitReached ? 'border-red-500/30' : 'hover:border-[#FFD86B]/20'}`}>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#FFD86B]/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-            <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center gap-8">
-                <div>
-                    <h3 className="text-2xl md:text-3xl font-bold text-white font-chakra tracking-tight">Limite Diário</h3>
-                    <p className="text-gray-400 mt-2 text-sm md:text-base max-w-xl leading-relaxed">Plano Atual: <span className="font-bold text-[#FFD86B] uppercase tracking-wide">{user.plan}</span>. {isUnlimited ? ' Você tem envios ilimitados!' : ` Você pode enviar até ${limit} missões por dia.`}</p>
-                </div>
-                <div className="flex items-center gap-6 bg-[#0a0a0a] px-8 py-5 rounded-xl border border-white/5 min-w-[240px] justify-between md:justify-end shadow-inner">
-                    <div className="text-right">
-                        <p className="text-4xl font-black text-white font-chakra leading-none">{isUnlimited ? '∞' : `${submissionsToday} / ${limit}`}</p>
-                        <p className="text--[10px] font-bold text-gray-500 uppercase tracking-widest mt-1.5">Envios Hoje</p>
-                    </div>
-                    <div className="h-12 w-px bg-white/10"></div>
-                     <div className={`p-4 rounded-full ${limitReached ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-[#FFD86B]/10 text-[#FFD86B] border border-[#FFD86B]/20'}`}>
-                        {limitReached ? <ClockIcon className="w-8 h-8" /> : <TrendingUpIcon className="w-8 h-8" />}
-                    </div>
+        <div className="w-full bg-[#0B0B0B]/50 border border-white/10 rounded-2xl p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-bold text-white/90">Limite diário</div>
+                <div className="text-xs text-white/70">
+                    {isUnlimited ? 'Ilimitado' : `${remaining} restantes`}
                 </div>
             </div>
+
             {!isUnlimited && (
-                <div className="mt-8 relative">
-                    <div className="w-full bg-[#0a0a0a] rounded-full h-3 overflow-hidden border border-white/5">
-                        <div className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${limitReached ? 'bg-red-500' : 'bg-gradient-to-r from-[#F5B544] to-[#FFD86B]'}`} style={{ width: `${percentage}%` }}><div className="absolute inset-0 bg-white/20 animate-[shine-sweep_2s_infinite]"></div></div>
-                    </div>
-                     {limitReached && <p className="text-center text-xs text-red-400 mt-3 font-bold uppercase tracking-wide flex items-center justify-center gap-2"><ClockIcon className="w-3.5 h-3.5" /> Limite atingido. Volte amanhã!</p>}
+                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/10">
+                    <div className="h-full bg-[#FFD86B] transition-all" style={{ width: `${percent}%` }} />
                 </div>
             )}
+
+            <div className="mt-2 text-xs text-white/60">
+                {isUnlimited ? 'Seu plano não possui limite diário.' : `Usadas hoje: ${used} / ${limit}`}
+            </div>
         </div>
     );
 };
@@ -554,8 +545,8 @@ const Missions: React.FC = () => {
     const { activeUser: user } = state;
     const [missions, setMissions] = useState<Mission[]>([]);
     const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
+    const [missionQuota, setMissionQuota] = useState<MissionQuota | null>(null);
     const [hasReachedDailyLimit, setHasReachedDailyLimit] = useState(false);
-    const [dailyLimit, setDailyLimit] = useState<number | null>(null);
     const [planBenefits, setPlanBenefits] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -575,25 +566,17 @@ const Missions: React.FC = () => {
         Perf.mark('missions_data_fetch');
         try {
             const data = await api.fetchMissions(user.id);
-            let limit: number | null = null;
             try {
                 const b = await getMyPlanBenefits();
-                limit = b.daily_mission_limit;
-                setDailyLimit(limit);
                 setPlanBenefits(b);
             } catch {
-                setDailyLimit(null);
                 setPlanBenefits(null);
             }
+            const quota = await getMyMissionQuota();
+            setMissionQuota(quota);
+            setHasReachedDailyLimit(quota.remaining === 0);
             setMissions(data.missions);
             setMissionSubmissions(data.submissions);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const submissionsToday = data.submissions.filter(
-                (s: any) => s.userId === user.id && new Date(s.submittedAtISO).getTime() >= today.getTime()
-            ).length;
-            const reached = limit !== null && submissionsToday >= limit;
-            setHasReachedDailyLimit(reached);
         } catch (error) {
             console.error("Failed to fetch missions data:", error);
             setError("Não foi possível carregar as missões. Por favor, tente novamente mais tarde.");
@@ -662,7 +645,7 @@ const Missions: React.FC = () => {
                 <p className="text-base md:text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">Complete tarefas para ganhar XP, subir de nível e acumular Coins para a loja.</p>
             </div>
 
-            <DailyMissionTracker user={user} submissions={missionSubmissions} dailyLimit={dailyLimit} />
+            <DailyMissionTracker quota={missionQuota} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {missions.map(mission => (
