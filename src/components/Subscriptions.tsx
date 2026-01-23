@@ -303,7 +303,7 @@ const Subscriptions: React.FC = () => {
         const mCoins = raw.match(/(?:coins|multiplicador de coins)\s*x?\s*(\d+)/i);
         if (mCoins?.[1]) {
           const n = Number(mCoins[1]);
-          return { key: `coins_x_${n}`, text: `Coins x${n}`, icon: TrendingUpIcon };
+          return { key: `coins_x_${n}`, text: `Multiplicador de Coins x${n}`, icon: TrendingUpIcon };
         }
 
         // Mission limit
@@ -325,13 +325,14 @@ const Subscriptions: React.FC = () => {
 
         // Common perks
         if (k.includes('recompens') && k.includes('visual')) {
-          return { key: 'visual_rewards', text: 'Acesso a Recompensas Visuais', icon: StoreIcon };
+          return { key: 'visual_rewards', text: 'Acesso a Itens Utilizáveis', icon: StoreIcon };
         }
         if (k.includes('fila') && k.includes('prior')) {
           return { key: 'queue_priority', text: 'Fila Prioritária', icon: QueueIcon };
         }
-        if (k.includes('vip') && k.includes('evento')) {
-          return { key: 'events_vip', text: 'Acesso VIP a Eventos', icon: CrownIcon };
+        // Removido do produto: não renderizar mesmo que venha do backend
+        if ((k.includes('vip') && k.includes('event')) || (k.includes('vip') && k.includes('evento'))) {
+          return { key: 'vip_events', text: '', icon: StarIcon };
         }
         if (k.includes('acesso') && k.includes('loja')) {
           return { key: 'store_access', text: 'Acesso total à Loja', icon: StoreIcon };
@@ -348,7 +349,7 @@ const Subscriptions: React.FC = () => {
         const map = new Map<string, { text: string; icon: any }>();
         for (const it of items) {
           const nf = normalizeFeature(it.text);
-          if (!map.has(nf.key)) map.set(nf.key, { text: nf.text, icon: nf.icon });
+          if (nf.text && !map.has(nf.key)) map.set(nf.key, { text: nf.text, icon: nf.icon });
         }
         return Array.from(map.values());
       };
@@ -369,11 +370,12 @@ const Subscriptions: React.FC = () => {
         }
 
         // 3) Deterministic perks from offer/config (source of truth)
-        if (config.features.visualRewards) base.push({ text: 'Acesso a Recompensas Visuais', icon: StoreIcon });
+        if (config.features.visualRewards) base.push({ text: 'Acesso a Itens Utilizáveis', icon: StoreIcon });
         if (config.features.queuePriority) base.push({ text: 'Fila Prioritária', icon: QueueIcon });
-        if (config.features.eventsAccess === 'vip') base.push({ text: 'Acesso VIP a Eventos', icon: CrownIcon });
+        // Removido do produto
+        // if (config.features.eventsAccess === 'vip') base.push({ text: 'Acesso VIP a Eventos', icon: CrownIcon });
 
-        if (offer?.coins_multiplier) base.push({ text: `Coins x${offer.coins_multiplier}`, icon: TrendingUpIcon });
+        if (offer?.coins_multiplier) base.push({ text: `Multiplicador de Coins x${offer.coins_multiplier}`, icon: TrendingUpIcon });
         if (offer?.daily_mission_limit === null && p.name !== 'Free Flow') {
           base.push({ text: 'Missões ilimitadas', icon: MissionIcon });
         } else if (offer?.daily_mission_limit !== undefined && offer?.daily_mission_limit !== null) {
