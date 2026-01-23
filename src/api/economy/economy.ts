@@ -37,20 +37,20 @@ export const xpForLevelStart = (level: number): number => {
 // --- ACTION PROCESSORS (Now using V6 Engine) ---
 
 export const calculateMissionRewards = async (user: User, mission: Mission) => {
-    const multiplier = SubscriptionEngineV5.getMultiplier(user);
-    const xpGained = Math.floor(mission.xp * multiplier);
-    const coinsGained = Math.floor(mission.coins * multiplier);
+    // ✅ AW Contract:
+    // Economia real é aplicada no backend (approve_mission_submission/admin_approve_submission_atomic + ledger trigger).
+    // Aqui é somente PREVIEW para UI.
+    const xpGained = Math.floor(mission.xp);
+    const coinsGained = Math.floor(mission.coins);
 
     // Apply XP (Atomic V6)
-    const xpResult = await EconomyEngineV6.addXP(user.id, xpGained, `Missão: ${mission.title}`);
-    let updatedUser = xpResult.updatedUser!;
-    const notifications = [...(xpResult.notifications || [])];
+    // Não aplicar saldo no front
+    const xpResult = { ok: true };
+    const updatedUser = user;
+    const notifications: string[] = [];
 
     // Apply Coins (Atomic V6)
-    if (coinsGained > 0) {
-        const coinResult = await EconomyEngineV6.addCoins(user.id, coinsGained, `Missão: ${mission.title}`);
-        updatedUser = coinResult.updatedUser!;
-    }
+    const coinResult = { ok: true };
     
     return {
         updatedUser,
