@@ -5,7 +5,8 @@ import { CoinIcon, XPIcon, InstagramIcon, TikTokIcon, StarIcon, VipIcon, History
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import SubmissionSuccessModal from './SubmissionSuccessModal';
-import { getDailyMissionLimit, PLAN_MULTIPLIERS } from '../api/economy/economy';
+import { PLAN_MULTIPLIERS } from '../api/economy/economy-constants';
+import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
 import { MissionTimerEngine } from '../services/missions/mission.timer';
 import { safeString } from '../api/helpers';
 import { Perf } from '../services/perf.engine';
@@ -277,18 +278,24 @@ const MissionCard: React.FC<{
             case 'completed': return <button disabled className="w-full bg-[#111111] text-[#FFD86B] font-bold py-4 px-4 rounded-xl cursor-not-allowed border border-[#FFD86B]/20 flex items-center justify-center uppercase text-sm tracking-wide shadow-inner font-chakra opacity-80"><CheckIcon className="w-4 h-4 mr-2"/> Missão Concluída</button>;
             case 'pending': return <button disabled className="w-full bg-white/5 text-white font-bold py-4 px-4 rounded-xl cursor-not-allowed border border-white/10 text-sm uppercase tracking-wide shadow-inner font-chakra animate-pulse">Aguardando Análise</button>;
             case 'available':
-                if (hasReachedDailyLimit) return <button disabled className="w-full bg-[#151515] text-gray-500 font-bold py-4 px-4 rounded-xl cursor-not-allowed border border-gray-800 text-sm uppercase tracking-wide font-chakra">Limite Diário Atingido</button>;
                 return (
-                    <button 
-                        onClick={() => setIsModalOpen(true)} 
-                        className="w-full relative overflow-hidden rounded-xl font-black text-sm uppercase tracking-widest py-4 bg-gradient-to-r from-[#FFD86B] to-[#C79B2C] text-[#050505] border border-[#FFD86B] shadow-[0_0_20px_rgba(255,216,107,0.2)] hover:shadow-[0_0_35px_rgba(255,216,107,0.5)] hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] transition-all duration-300 group font-chakra animate-pulse-slow"
-                    >
-                        <span className="relative z-10 flex items-center justify-center gap-2">
-                            {format === 'confirmation' ? 'Confirmar' : 'Enviar Prova'} 
-                            <span className="group-hover:translate-x-1 transition-transform">➜</span>
-                        </span>
-                        <div className="absolute inset-0 bg-white/30 translate-y-full group-hover:translate-y-0 transition-transform duration-300 skew-y-6"></div>
-                    </button>
+                    <>
+                        {hasReachedDailyLimit && (
+                            <div className="text-xs text-red-400 font-bold uppercase tracking-wide text-center mb-2">
+                                Limite diário atingido (o envio pode falhar).
+                            </div>
+                        )}
+                        <button 
+                            onClick={() => setIsModalOpen(true)} 
+                            className="w-full relative overflow-hidden rounded-xl font-black text-sm uppercase tracking-widest py-4 bg-gradient-to-r from-[#FFD86B] to-[#C79B2C] text-[#050505] border border-[#FFD86B] shadow-[0_0_20px_rgba(255,216,107,0.2)] hover:shadow-[0_0_35px_rgba(255,216,107,0.5)] hover:scale-[1.02] hover:brightness-110 active:scale-[0.98] transition-all duration-300 group font-chakra animate-pulse-slow"
+                        >
+                            <span className="relative z-10 flex items-center justify-center gap-2">
+                                {format === 'confirmation' ? 'Confirmar' : 'Enviar Prova'} 
+                                <span className="group-hover:translate-x-1 transition-transform">➜</span>
+                            </span>
+                            <div className="absolute inset-0 bg-white/30 translate-y-full group-hover:translate-y-0 transition-transform duration-300 skew-y-6"></div>
+                        </button>
+                    </>
                 );
             case 'rejected':
                 return <button onClick={() => setIsModalOpen(true)} className="w-full relative overflow-hidden rounded-xl font-black text-sm uppercase tracking-widest py-4 bg-red-900/20 text-red-400 border border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)] hover:bg-red-900/40 active:scale-[0.98] transition-all duration-300 group font-chakra">Tentar Novamente</button>;
@@ -485,8 +492,8 @@ const MissionCard: React.FC<{
 
 // ... Rest of the file (DailyMissionTracker, FaqData, Missions Component) remains similar but uses MissionCard ...
 
-const DailyMissionTracker: React.FC<{ user: User; submissions: MissionSubmission[] }> = ({ user, submissions }) => {
-    const limit = getDailyMissionLimit(user.plan);
+const DailyMissionTracker: React.FC<{ user: User; submissions: MissionSubmission[]; dailyLimit: number | null }> = ({ user, submissions, dailyLimit }) => {
+    const limit = dailyLimit;
     const isUnlimited = limit === null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -545,6 +552,7 @@ const Missions: React.FC = () => {
     const [missions, setMissions] = useState<Mission[]>([]);
     const [missionSubmissions, setMissionSubmissions] = useState<MissionSubmission[]>([]);
     const [hasReachedDailyLimit, setHasReachedDailyLimit] = useState(false);
+    const [dailyLimit, setDailyLimit] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
@@ -563,9 +571,23 @@ const Missions: React.FC = () => {
         Perf.mark('missions_data_fetch');
         try {
             const data = await api.fetchMissions(user.id);
+            let limit: number | null = null;
+            try {
+                const b = await getMyPlanBenefits();
+                limit = b.daily_mission_limit;
+                setDailyLimit(limit);
+            } catch {
+                setDailyLimit(null);
+            }
             setMissions(data.missions);
             setMissionSubmissions(data.submissions);
-            setHasReachedDailyLimit(data.hasReachedDailyLimit);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const submissionsToday = data.submissions.filter(
+                (s: any) => s.userId === user.id && new Date(s.submittedAtISO).getTime() >= today.getTime()
+            ).length;
+            const reached = limit !== null && submissionsToday >= limit;
+            setHasReachedDailyLimit(reached);
         } catch (error) {
             console.error("Failed to fetch missions data:", error);
             setError("Não foi possível carregar as missões. Por favor, tente novamente mais tarde.");
@@ -597,7 +619,11 @@ const Missions: React.FC = () => {
             if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
         } catch(e: any) {
             console.error("Mission submission failed", e);
-            throw new Error(e.message);
+            const message = String(e?.message || '');
+            if (message.includes('daily_mission_limit_reached')) {
+                throw new Error('Você atingiu seu limite diário de missões para o seu plano. Volte amanhã ou faça upgrade.');
+            }
+            throw new Error(message);
         }
     }, [user, missions, dispatch, fetchData]);
 
@@ -628,7 +654,7 @@ const Missions: React.FC = () => {
                 <p className="text-base md:text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">Complete tarefas para ganhar XP, subir de nível e acumular Coins para a loja.</p>
             </div>
 
-            <DailyMissionTracker user={user} submissions={missionSubmissions} />
+            <DailyMissionTracker user={user} submissions={missionSubmissions} dailyLimit={dailyLimit} />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {missions.map(mission => (

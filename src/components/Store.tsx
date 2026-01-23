@@ -4,7 +4,7 @@ import type { CoinPack, StoreItem, UsableItem, StoreTab, User, CoinPurchaseReque
 import { CoinIcon, LockIcon, CalculatorIcon } from '../constants';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
-import { calculateDiscountedPrice } from '../api/economy/economy';
+import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
 import CoinPurchaseSuccessModal from './CoinPurchaseSuccessModal';
 import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
@@ -90,11 +90,14 @@ const DiscountBadge: React.FC<{ percent: number }> = ({ percent }) => (
 const PurchaseConfirmationModal: React.FC<{
     item: StoreItem | UsableItem;
     user: User;
+    storeDiscountPercent: number;
+    isProcessing: boolean;
     onConfirm: () => void;
     onCancel: () => void;
-}> = ({ item, user, onConfirm, onCancel }) => {
-    const finalPrice = calculateDiscountedPrice(item.price, user.plan);
+}> = ({ item, user, storeDiscountPercent, isProcessing, onConfirm, onCancel }) => {
+    const finalPrice = Math.floor(item.price * (100 - storeDiscountPercent) / 100);
     const canAfford = user.coins >= finalPrice;
+    const isOutOfStock = 'isOutOfStock' in item ? item.isOutOfStock : false;
     const rarity = 'rarity' in item ? item.rarity : 'Especial'; 
 
     // Scroll Lock Effect
@@ -210,14 +213,14 @@ const PurchaseConfirmationModal: React.FC<{
                         <div className="flex flex-col md:flex-row gap-3 w-full">
                             <button 
                                 onClick={onConfirm}
-                                disabled={!canAfford}
+                                disabled={isOutOfStock || isProcessing}
                                 className={`
                                     w-full py-4 rounded-xl font-black text-sm uppercase tracking-[0.15em]
                                     text-black shadow-[0_0_20px_rgba(255,211,105,0.3)] transition-all active:scale-[0.98]
                                     flex items-center justify-center gap-2
                                     ${canAfford 
                                         ? 'bg-gradient-to-r from-[#FFD369] to-[#FFB743] hover:shadow-[0_0_30px_rgba(255,211,105,0.5)] hover:scale-[1.02]' 
-                                        : 'bg-gray-800 text-gray-500 cursor-not-allowed shadow-none border border-gray-700'}
+                                        : 'bg-gray-800 text-gray-500 shadow-none border border-gray-700'}
                                 `}
                             >
                                 {canAfford ? 'Confirmar Compra' : 'Saldo Insuficiente'}
@@ -533,14 +536,13 @@ const CoinPackCard: React.FC<{ pack: CoinPack, onBuy: (pack: CoinPack) => void; 
 });
 
 // StoreItemCard updated to Shop V3 (Premium Dopamine Glow)
-const StoreItemCard: React.FC<{ item: StoreItem; onRedeem: (item: StoreItem) => void; onPreview: (url: string) => void; user: User; }> = React.memo(({ item, onRedeem, onPreview, user }) => {
-    const finalPrice = calculateDiscountedPrice(item.price, user.plan);
-    const canAfford = user.coins >= finalPrice;
+const StoreItemCard: React.FC<{ item: StoreItem; onRedeem: (item: StoreItem) => void; onPreview: (url: string) => void; user: User; storeDiscountPercent: number; isProcessing: boolean; }> = React.memo(({ item, onRedeem, onPreview, user, storeDiscountPercent, isProcessing }) => {
+    const finalPrice = Math.floor(item.price * (100 - storeDiscountPercent) / 100);
     const isOutOfStock = item.isOutOfStock;
     
-    const hasDiscount = item.price > finalPrice;
-    const discountPercent = hasDiscount ? Math.round(((item.price - finalPrice) / item.price) * 100) : 0;
-    const showDiscountBadge = (user.plan === 'Artista Profissional' || user.plan === 'Hitmaker') && hasDiscount;
+    const hasDiscount = storeDiscountPercent > 0 && finalPrice < item.price;
+    const discountPercent = hasDiscount ? storeDiscountPercent : 0;
+    const showDiscountBadge = hasDiscount;
     
     const rarityStyle = getRarityStyle(item.rarity);
 
@@ -621,7 +623,7 @@ const StoreItemCard: React.FC<{ item: StoreItem; onRedeem: (item: StoreItem) => 
 
                    <button 
                         onClick={() => onRedeem(item)}
-                        disabled={!canAfford || isOutOfStock}
+                        disabled={isOutOfStock || isProcessing}
                         className={`
                             w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FFD369] to-[#FFB743] text-black font-black text-sm uppercase tracking-wider 
                             shadow-[0_0_12px_rgba(255,211,105,0.55)] hover:shadow-[0_0_20px_rgba(255,211,105,0.75)] 
@@ -643,15 +645,14 @@ const StoreItemCard: React.FC<{ item: StoreItem; onRedeem: (item: StoreItem) => 
 });
 
 // UsableItemCard updated to Shop V3 (Standardized to Regular/Rare style)
-const UsableItemCard: React.FC<{ item: UsableItem; onRedeem: (item: UsableItem) => void; user: User; onUpgradeClick: () => void; }> = React.memo(({ item, onRedeem, user, onUpgradeClick }) => {
-    const finalPrice = calculateDiscountedPrice(item.price, user.plan);
-    const canAfford = user.coins >= finalPrice;
+const UsableItemCard: React.FC<{ item: UsableItem; onRedeem: (item: UsableItem) => void; user: User; onUpgradeClick: () => void; storeDiscountPercent: number; isProcessing: boolean; }> = React.memo(({ item, onRedeem, user, onUpgradeClick, storeDiscountPercent, isProcessing }) => {
+    const finalPrice = Math.floor(item.price * (100 - storeDiscountPercent) / 100);
     const isLocked = user.plan === 'Free Flow';
     const isOutOfStock = item.isOutOfStock;
     
-    const hasDiscount = item.price > finalPrice;
-    const discountPercent = hasDiscount ? Math.round(((item.price - finalPrice) / item.price) * 100) : 0;
-    const showDiscountBadge = (user.plan === 'Artista Profissional' || user.plan === 'Hitmaker') && hasDiscount;
+    const hasDiscount = storeDiscountPercent > 0 && finalPrice < item.price;
+    const discountPercent = hasDiscount ? storeDiscountPercent : 0;
+    const showDiscountBadge = hasDiscount;
 
     // Default style for Usable items (Silver/Regular)
     const style = getRarityStyle('Regular');
@@ -731,7 +732,7 @@ const UsableItemCard: React.FC<{ item: UsableItem; onRedeem: (item: UsableItem) 
                     ) : (
                         <button 
                             onClick={() => onRedeem(item)}
-                            disabled={!canAfford || isOutOfStock}
+                            disabled={isOutOfStock || isProcessing}
                             className={`
                                 w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FFD369] to-[#FFB743] text-black font-black text-sm uppercase tracking-wider 
                                 shadow-[0_0_12px_rgba(255,211,105,0.55)] hover:shadow-[0_0_20px_rgba(255,211,105,0.75)] 
@@ -844,6 +845,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const [usableItems, setUsableItems] = useState<UsableItem[]>([]);
     const [coinPacks, setCoinPacks] = useState<CoinPack[]>([]);
     const [coinPurchaseRequests, setCoinPurchaseRequests] = useState<CoinPurchaseRequest[]>([]);
+    const [storeDiscountPercent, setStoreDiscountPercent] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const lastLoadRef = useRef<number>(0);
@@ -877,6 +879,12 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
                 setCoinPurchaseRequests(result.data.coinPurchaseRequests);
             } else {
                  setError("Failed to load data");
+            }
+            try {
+                const b = await getMyPlanBenefits();
+                setStoreDiscountPercent(b.store_discount_percent ?? 0);
+            } catch (e) {
+                setStoreDiscountPercent(0);
             }
         } catch (error) {
             console.error("Failed to fetch store data:", error);
@@ -1187,13 +1195,33 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
 
             {activeTab === 'redeem' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 gap-y-8">
-                    {storeItems.map((item) => <StoreItemCard key={item.id} item={item} onRedeem={handleRequestPurchase} user={currentUser} onPreview={setPreviewUrl} />)}
+                    {storeItems.map((item) => (
+                        <StoreItemCard
+                            key={item.id}
+                            item={item}
+                            onRedeem={handleRequestPurchase}
+                            user={currentUser}
+                            onPreview={setPreviewUrl}
+                            storeDiscountPercent={storeDiscountPercent}
+                            isProcessing={isProcessing}
+                        />
+                    ))}
                 </div>
             )}
 
             {activeTab === 'usable' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8 gap-y-8">
-                    {usableItems.map((item) => <UsableItemCard key={item.id} item={item} onRedeem={handleRequestPurchase} user={currentUser} onUpgradeClick={handleNavigateToSubscriptions} />)}
+                    {usableItems.map((item) => (
+                        <UsableItemCard
+                            key={item.id}
+                            item={item}
+                            onRedeem={handleRequestPurchase}
+                            user={currentUser}
+                            onUpgradeClick={handleNavigateToSubscriptions}
+                            storeDiscountPercent={storeDiscountPercent}
+                            isProcessing={isProcessing}
+                        />
+                    ))}
                 </div>
             )}
 
@@ -1273,6 +1301,8 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
                  <PurchaseConfirmationModal 
                     item={itemToConfirm}
                     user={currentUser}
+                    storeDiscountPercent={storeDiscountPercent}
+                    isProcessing={isProcessing}
                     onConfirm={handleConfirmPurchase}
                     onCancel={() => setItemToConfirm(null)}
                  />
