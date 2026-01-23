@@ -8,6 +8,8 @@ import ConfirmationModal from './admin/ConfirmationModal';
 import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, TrendingUpIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
 import { PLANS } from '../api/subscriptions/constants';
 import { normalizePlanId } from '../api/subscriptions/normalizePlan';
+import { getMyPlanBenefits, type MyPlanBenefits } from '../api/subscriptions/planBenefits';
+import { getAllPlanOffers, type PlanOffer } from '../api/subscriptions/planOffers';
 import FaqItem from './ui/patterns/FaqItem';
 import { createPagbankCheckout, verifyPagbankCheckout } from '../api/subscriptions/pagbankCheckout';
 import { ProfileSupabase } from '../api/supabase/profile';
@@ -251,6 +253,8 @@ const Subscriptions: React.FC = () => {
   const [verificationState, setVerificationState] = useState<'idle' | 'verifying' | 'success' | 'timeout'>('idle');
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [pendingCheckout, setPendingCheckout] = useState<{ checkoutId: string; referenceId: string } | null>(null);
+  const [myBenefits, setMyBenefits] = useState<MyPlanBenefits | null>(null);
+  const [planOffers, setPlanOffers] = useState<PlanOffer[]>([]);
 
   const faqItems = [
     {
@@ -278,30 +282,52 @@ const Subscriptions: React.FC = () => {
   const fetchData = async () => {
     if (!currentUser) return;
     try {
-      const { plans: plansData } = await api.fetchSubscriptionsPageData(currentUser.id);
+      const [{ plans: plansData }, myB, offers] = await Promise.all([
+        api.fetchSubscriptionsPageData(currentUser.id),
+        getMyPlanBenefits(),
+        getAllPlanOffers(),
+      ]);
       
       // PATCH: SUBSCRIPTIONS_FIX_V1
       const enrichedPlans = plansData.map(p => {
+          const offer = offers.find(o => o.plan === p.name);
           const planId = normalizePlanId(p.name);
           const config = PLANS[planId];
+          const feats = p.features && p.features.length > 0 ? [...p.features] : [];
           
           // Default features based on constants if missing
-          if (!p.features || p.features.length === 0) {
-              const feats = [];
+          if (feats.length === 0) {
               if (config.features.visualRewards) feats.push({ text: "Acesso a Recompensas Visuais", icon: StoreIcon });
               if (config.features.queuePriority) feats.push({ text: "Fila Prioritária", icon: QueueIcon });
               if (config.features.eventsAccess === 'vip') feats.push({ text: "Acesso VIP a Eventos", icon: CrownIcon });
-              if (config.multiplier > 1) feats.push({ text: `Multiplicador ${config.multiplier}x`, icon: TrendingUpIcon });
-              if (config.storeDiscount > 0) feats.push({ text: `Desconto na Loja ${config.storeDiscount * 100}%`, icon: DiscountIcon });
+              if (offer?.coins_multiplier && offer.coins_multiplier > 1) {
+                feats.push({ text: `Coins x${offer.coins_multiplier}`, icon: TrendingUpIcon });
+              }
+              if (offer?.daily_mission_limit !== undefined && offer?.daily_mission_limit !== null) {
+                feats.push({ text: `Até ${offer.daily_mission_limit} missões/dia`, icon: MissionIcon });
+              } else if (offer?.daily_mission_limit === null && p.name !== "Free Flow") {
+                feats.push({ text: "Missões ilimitadas", icon: MissionIcon });
+              }
+              if ((offer?.store_discount_percent ?? 0) > 0) {
+                feats.push({ text: `Desconto na Loja ${offer.store_discount_percent}%`, icon: DiscountIcon });
+              }
               
               // Fallback feature if empty
               if (feats.length === 0) feats.push({ text: "Acesso Básico", icon: StarIcon });
-              
-              return { ...p, features: feats };
           }
-          return p;
+          if (offer?.bullets?.length) {
+            for (const b of offer.bullets) {
+              const exists = feats.some((f: any) => String(f?.text ?? "").toLowerCase() === b.toLowerCase());
+              if (!exists) {
+                feats.push({ text: b, icon: StarIcon });
+              }
+            }
+          }
+          return { ...p, features: feats };
       });
       
+      setMyBenefits(myB);
+      setPlanOffers(offers);
       setPlans(enrichedPlans);
     } catch (error) {
       console.error("Failed to fetch subscription data:", error);
@@ -491,6 +517,26 @@ const Subscriptions: React.FC = () => {
                 </p>
             </div>
         )}
+
+        {myBenefits ? (
+          <div className="rounded-xl border border-white/10 bg-black/30 p-4 mb-4">
+            <div className="text-sm text-white/60">Seu plano</div>
+            <div className="text-xl font-semibold">{myBenefits.plan}</div>
+
+            <div className="mt-2 text-sm text-white/80">
+              Coins: <b>x{myBenefits.coins_multiplier}</b> •{" "}
+              Missões:{" "}
+              <b>
+                {myBenefits.daily_mission_limit === null
+                  ? "Ilimitadas"
+                  : `${myBenefits.daily_mission_limit}/dia`}
+              </b>
+              {myBenefits.store_discount_percent > 0 ? (
+                <> • Loja: <b>{myBenefits.store_discount_percent}% OFF</b></>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         {/* 2. PLANS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1500px] mx-auto items-stretch px-2 md:px-0 mb-24">
