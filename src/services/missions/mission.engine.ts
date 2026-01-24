@@ -1,10 +1,8 @@
 
 import { getRepository } from "../../api/database/repository.factory";
-import { MissionDB } from "../../api/missions/missions.db";
 import { MissionEventEngine } from "./mission.event";
 import { SubmissionEngine } from "./submission.engine";
 import type { User, Mission } from "../../types";
-import { SubscriptionEngineV5 } from "../../api/subscriptions/subscriptionEngineV5";
 import { SanityGuard } from "../../services/sanity.guard"; // V10
 
 const repo = getRepository();
@@ -62,7 +60,7 @@ export const MissionEngine = {
     },
 
     calculateRewards: (user: User, mission: any) => {
-        const planMultiplier = SubscriptionEngineV5.getMultiplier(user);
+        const planMultiplier = 1;
         
         return {
             xp: Math.floor(SanityGuard.number(mission.xp) * planMultiplier),
@@ -80,13 +78,6 @@ export const MissionEngine = {
         
         if (user.pendingMissions.includes(missionId)) return 'pending';
         if (user.pendingEventMissions && user.pendingEventMissions.includes(missionId)) return 'pending';
-
-        const submission = repo.select("submissions").find((s: any) => s.userId === userId && s.missionId === missionId);
-        if (submission) {
-            if (submission.status === 'approved') return 'completed';
-            if (submission.status === 'pending') return 'pending';
-            if (submission.status === 'rejected') return 'rejected';
-        }
 
         return 'available';
     },

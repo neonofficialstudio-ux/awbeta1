@@ -2,7 +2,7 @@
 import type { User } from '../../types';
 import { LedgerEngine } from './ledgerEngine';
 import { createNotification } from '../helpers';
-import { SubscriptionEngineV5 } from '../subscriptions/index';
+import { SubscriptionEngineV5 } from '../subscriptions/subscriptionEngineV5';
 
 export const CheckinEngineV2 = {
     canCheckIn: (user: User): boolean => {

@@ -1,7 +1,7 @@
 // api/economy/economy.ts
 import type { User, Mission, CoinTransaction } from '../../types';
 import { EconomyEngineV6 } from './economyEngineV6';
-import { SubscriptionEngineV5 } from '../subscriptions/index';
+import { SubscriptionEngineV5 } from '../subscriptions/subscriptionEngineV5';
 import { LedgerEngine } from '../../services/economy/ledger.engine'; // Core Ledger Service
 
 // ✔️ IMPORTA OS MULTIPLICADORES OFICIAIS

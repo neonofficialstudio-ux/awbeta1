@@ -7,8 +7,6 @@ import { FraudScanV3 } from '../../services/fraudscan.v3';
 import { TelemetryPRO } from '../../services/telemetry.pro';
 import { getRepository } from '../database/repository.factory';
 import { EconomyEngineV6 } from '../economy/economyEngineV6';
-import { SubscriptionEngineV5 } from '../subscriptions/index';
-import { SanityGuard } from '../../services/sanity.guard';
 
 const repo = getRepository();
 
@@ -68,7 +66,7 @@ export const reviewSubmissionEnhanced = async (submission: MissionSubmission, mi
                 updatedUser.totalMissionsCompleted++;
 
                 // Calculate Rewards via V6 Engine Logic
-                const multiplier = SubscriptionEngineV5.getMultiplier(updatedUser);
+                const multiplier = 1;
                 const finalXP = Math.floor(mission.xp * multiplier);
                 const finalCoins = Math.floor(mission.coins * multiplier);
 

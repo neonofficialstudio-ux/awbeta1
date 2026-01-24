@@ -14,6 +14,7 @@ import { StoreSupabase } from './supabase/store';
 import { config } from '../core/config';
 import { assertSupabaseProvider, isSupabaseProvider } from './core/backendGuard';
 import { getSupabase } from './supabase/client';
+import { isSupabaseProd } from './core/productionGuards';
 
 const repo = getRepository();
 const requireSupabaseClient = () => {
@@ -42,7 +43,7 @@ const mapRarity = (value: string | null | undefined): StoreItem['rarity'] => {
 };
 
 export const fetchStoreData = (userId: string) => withLatency(async () => {
-    if (config.backendProvider === 'supabase') {
+    if (isSupabaseProd()) {
         const supabase = requireSupabaseClient();
         const { data, error } = await supabase
             .from('store_items')

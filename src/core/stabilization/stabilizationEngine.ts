@@ -1,11 +1,10 @@
 
-import { config } from "../config";
 import { getRepository } from "../../api/database/repository.factory";
 import { LogEngineV4 } from "../../api/admin/logEngineV4";
 import { XPSyncEngine } from "../../api/economy/xpSyncEngine";
 import { QueueEngineV5 } from "../../api/queue/queueEngineV5";
 import { applyUserHeals } from "../../api/economy/economyAutoHeal";
-import { getDailyMissionLimit } from "../../api/economy/economy";
+import { isSupabaseProd } from "../../api/core/productionGuards";
 
 const repo = getRepository();
 
@@ -13,8 +12,8 @@ export const StabilizationEngine = {
     runStartupChecks: async (userId?: string) => {
         // Em Supabase, não executar engine legado (mock-local).
         // A fonte da verdade é o backend.
-        if (config.backendProvider === "supabase") {
-            return;
+        if (isSupabaseProd()) {
+            return { ok: true, skipped: true, reason: "supabase_prod" };
         }
 
         console.log("[StabilizationEngine] Running startup checks...");
@@ -62,6 +61,10 @@ export const StabilizationEngine = {
     },
 
     ensureEconomyConsistency: () => {
+        if (isSupabaseProd()) {
+            return;
+        }
+
         // Check for orphaned transactions or negative balances globally
         const users = repo.select("users");
         users.forEach((u: any) => {
@@ -73,6 +76,10 @@ export const StabilizationEngine = {
     },
 
     ensureQueueConsistency: () => {
+        if (isSupabaseProd()) {
+            return;
+        }
+
         // Clean up queue items referencing processed redemptions that might be stuck
         const queue = QueueEngineV5.getQueue('item');
         const redeemed = repo.select("redeemedItems");
@@ -91,6 +98,10 @@ export const StabilizationEngine = {
     },
 
     ensureMissionStatusIntegrity: (userId: string) => {
+        if (isSupabaseProd()) {
+            return;
+        }
+
         const user = repo.select("users").find((u: any) => u.id === userId);
         if (!user) return;
 
