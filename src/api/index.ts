@@ -270,10 +270,13 @@ export {
     getEconomyAlertsAPI 
 } from "./economy/sentinel";
 
-// Subscriptions V5.0
+// Subscriptions (RPC)
 export {
-    SubscriptionEngineV5,
-    runSubscriptionSelfTest
+    getMyPlanBenefits,
+    getAllPlanOffers,
+    getMyMissionQuota,
+    createPagbankCheckout,
+    verifyPagbankCheckout
 } from "./subscriptions/index";
 
 // Utilities & Diagnostics

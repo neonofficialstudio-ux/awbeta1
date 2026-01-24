@@ -7,7 +7,7 @@ import { MissionEngineUnified } from "../missions/MissionEngineUnified";
 import { QueueEngineV5 } from "../queue/queueEngineV5";
 import { EconomyService } from "../economy/economyEngineV6";
 import { LedgerEngine } from "../economy/ledgerEngine";
-import { approveUpgradeRequest, rejectUpgradeRequest } from "../subscriptions/index";
+import { approveUpgradeRequest, rejectUpgradeRequest } from "../subscriptions/admin";
 import { ManualAwardsEngine } from "./manualAwards.engine";
 import { AdminAwardsEngine } from "./adminAwards.engine";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";

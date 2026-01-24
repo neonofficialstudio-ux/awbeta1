@@ -2,14 +2,15 @@
 import { getRepository } from "../database/repository.factory";
 import { TelemetryPRO } from "../../services/telemetry.pro";
 import { FraudScanV3 } from "../../services/fraudscan.v3";
-import { SubscriptionEngineV5 } from "../subscriptions/index";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";
 import { SanitizeString } from "../../core/sanitizer.core";
-import type { User, Mission, MissionSubmission } from "../../types";
+import type { User, MissionSubmission } from "../../types";
 import { AtomicLock } from "../security/atomicLock";
 import { rateLimit } from "../../api/anticheat/rateLimit";
 import { runAdaptiveShield } from "../../api/anticheat/adaptiveShield";
 import { detectMultiAccount } from "../../api/anticheat/multiAccountDetector";
+import { getMyMissionQuota } from "../subscriptions/missionQuota";
+import { isSupabaseProd } from "../core/productionGuards";
 
 const repo = getRepository();
 
@@ -49,15 +50,20 @@ export const MissionEngineV5 = {
         }
 
         // 3. Check Subscription Limits
-        if (!mission.eventId) {
-            const limitCheck = SubscriptionEngineV5.checkDailyLimit(user);
-            if (!limitCheck.allowed) {
-                TelemetryPRO.event("mission_limit_reached", { userId: user.id, plan: user.plan, limit: limitCheck.limit });
-                return { 
-                    ok: false, 
-                    error: `Limite diário atingido para o plano ${user.plan}. (${limitCheck.limit}/${limitCheck.limit})`, 
-                    code: "LIMIT_REACHED" 
-                };
+        if (!mission.eventId && isSupabaseProd()) {
+            try {
+                const quota = await getMyMissionQuota();
+                if (quota.remaining !== null && quota.remaining <= 0) {
+                    TelemetryPRO.event("mission_limit_reached", { userId: user.id, plan: quota.plan, limit: quota.daily_mission_limit });
+                    const limitDisplay = quota.daily_mission_limit ?? quota.used_today;
+                    return {
+                        ok: false,
+                        error: `Limite diário atingido para o plano ${quota.plan}. (${limitDisplay}/${limitDisplay})`,
+                        code: "LIMIT_REACHED"
+                    };
+                }
+            } catch (error: any) {
+                TelemetryPRO.event("mission_quota_unavailable", { userId: user.id, error: error?.message });
             }
         }
 
@@ -206,23 +212,6 @@ export const MissionEngineV5 = {
         
         if (user.completedEventMissions && user.completedEventMissions.includes(missionId)) return 'completed';
         if (user.pendingEventMissions && user.pendingEventMissions.includes(missionId)) return 'pending';
-
-        const submissions = repo.select("submissions");
-        const recentSub = submissions.find((s: any) => s.userId === userId && s.missionId === missionId);
-        
-        if (recentSub) {
-            if (recentSub.status === 'approved') return 'completed';
-            if (recentSub.status === 'pending') return 'pending';
-            if (recentSub.status === 'rejected') return 'rejected';
-        }
-        
-        const eventSubmissions = repo.select("eventMissionSubmissions");
-        const recentEvtSub = eventSubmissions.find((s: any) => s.userId === userId && s.eventMissionId === missionId);
-        if (recentEvtSub) {
-            if (recentEvtSub.status === 'approved') return 'completed';
-            if (recentEvtSub.status === 'pending') return 'pending';
-            if (recentEvtSub.status === 'rejected') return 'rejected';
-        }
 
         return 'available';
     }
