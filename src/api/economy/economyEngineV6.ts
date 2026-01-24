@@ -5,6 +5,8 @@ import { NotificationDispatcher } from "../../services/notifications/notificatio
 import { SanityGuard } from "../../services/sanity.guard";
 import { safeUserId } from "../utils/safeUser";
 import { rateLimit } from "../../api/anticheat/rateLimit";
+import { getSupabase } from "../supabase/client";
+import { config } from "../../core/config";
 
 const repo = getRepository();
 
@@ -106,34 +108,26 @@ export const EconomyService = {
     },
 
     // Legacy method for compatibility
-    processCheckIn: async (userId: string) => {
-        // Since Checkin has complex logic (streak, bonus), we still do it here for now
-        // But the REWARD part calls addCoins which is now secure.
-        // Ideally, checkin logic should also move to RPC in Phase 2.
-        // For now, we keep the engine logic but use secure addCoins.
-        const { CheckinEngineV2 } = await import("./checkinEngineV2");
-        const user = repo.select("users").find((u: any) => u.id === userId);
-        
-        if (!user) return { success: false, error: "User not found" };
+    processCheckIn: async (_userId?: string) => {
+        // ✅ Produção/Supabase: fonte da verdade é a RPC daily_checkin
+        if (config.backendProvider === "supabase") {
+            const supabase = getSupabase();
+            if (!supabase) throw new Error("Supabase não disponível.");
 
-        const result = CheckinEngineV2.process(SanityGuard.user(user));
-        
-        // Update Streak locally first (non-financial)
-        const partialUpdate = { 
-            ...user, 
-            lastCheckIn: result.lastCheckIn, 
-            weeklyCheckInStreak: result.newStreak 
-        };
-        await repo.updateAsync("users", (u: any) => u.id === userId, (u: any) => partialUpdate);
-        
-        // Securely Add Coins via RPC
-        const ecoRes = await EconomyService.addCoins(userId, result.coinsGained, result.isBonus ? "Check-in + Bônus" : "Check-in Diário");
-        
-        return {
-            success: true,
-            updatedUser: ecoRes.updatedUser,
-            data: result
-        };
+            const { data, error } = await supabase.rpc("daily_checkin");
+            if (error) {
+                console.error("[daily_checkin] rpc error:", error);
+                throw new Error(error.message || "Falha ao realizar check-in.");
+            }
+
+            // daily_checkin retorna json com:
+            // ok, already_checked_in, ref_id, before/after...
+            return data;
+        }
+
+        // DEV/MOCK: mantém engine antiga (se existir)
+        // return CheckinEngineV2.processCheckInMock();
+        throw new Error("Check-in mock não disponível neste ambiente.");
     }
 };
 
