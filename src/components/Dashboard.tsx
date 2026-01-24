@@ -258,7 +258,7 @@ const SkeletonCheckIn = () => (
     <LoadingSkeleton height={360} className="rounded-[32px]" />
 );
 
-const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean, isLoading?: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone, isLoading = false }) => {
+const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean, isSupabase: boolean, isLoading?: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone, isSupabase, isLoading = false }) => {
     if (isLoading) {
         return <SkeletonCheckIn />;
     }
@@ -267,7 +267,9 @@ const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading
     today.setHours(0, 0, 0, 0);
     const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
     if (lastCheckInDate) lastCheckInDate.setHours(0, 0, 0, 0);
-    const hasCheckedInToday = checkInDone || lastCheckInDate?.getTime() === today.getTime();
+    const hasCheckedInToday = isSupabase
+        ? checkInDone
+        : checkInDone || lastCheckInDate?.getTime() === today.getTime();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
     const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : user.weeklyCheckInStreak;
@@ -645,6 +647,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         return;
     }
 
+    if (isSupabase) {
+        lastUserIdRef.current = user.id;
+        return;
+    }
+
     if (lastUserIdRef.current !== user.id) {
         lastCheckInDayRef.current = null;
     }
@@ -665,7 +672,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     }
 
     lastUserIdRef.current = user.id;
-  }, [user?.id, user?.lastCheckIn, getTodayRefId, markCheckInDoneForToday]);
+  }, [user?.id, user?.lastCheckIn, getTodayRefId, markCheckInDoneForToday, isSupabase]);
 
   useEffect(() => {
     if (!isSupabase || !user || checkInDone || checkedIn === null) return;
@@ -879,7 +886,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
-            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} isLoading={isCheckInStatusLoading} />
+            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} isSupabase={isSupabase} isLoading={isCheckInStatusLoading} />
 
             {/* FEATURED MISSION */}
             {data.featuredMission ? (
