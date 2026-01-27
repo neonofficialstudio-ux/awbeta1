@@ -31,6 +31,7 @@ export async function refreshAfterEconomyAction(userId: string, dispatch: Dispat
   try {
     const lRes: any = await fetchMyLedger(20, 0);
     ledger = lRes?.success && Array.isArray(lRes.ledger) ? lRes.ledger : [];
+    dispatch({ type: 'SET_LEDGER', payload: ledger });
   } catch {}
 
   return { user: updatedUser, notifications, ledger };

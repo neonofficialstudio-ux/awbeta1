@@ -22,6 +22,7 @@ export interface AppState {
   activeUser: User | null;
   isAdmin: boolean | null;
   notifications: any[]; // Notification type
+  ledger: any[];
   showWelcomeModal: boolean;
   prevCoins: number | null;
   prevXp: number | null;

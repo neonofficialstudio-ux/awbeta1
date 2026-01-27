@@ -13,6 +13,7 @@ export type Action =
   | { type: 'SET_USER'; payload: User }
   | { type: 'SET_ADMIN_STATUS'; payload: boolean | null }
   | { type: 'ADD_NOTIFICATIONS', payload: any[] }
+  | { type: 'SET_LEDGER'; payload: any[] }
   | { type: 'REMOVE_NOTIFICATION', payload: string }
   | { type: 'MARK_NOTIFICATION_READ', payload: { id: string } }
   | { type: 'MARK_ALL_NOTIFICATIONS_READ' }
