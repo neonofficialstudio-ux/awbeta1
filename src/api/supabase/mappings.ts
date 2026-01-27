@@ -29,7 +29,7 @@ export const mapProfileToUser = (profile: any, extendedData: any = {}): User => 
         coins: profile.coins || 0,
         xp: profile.xp || 0,
         level: profile.level || 1,
-        xpToNextLevel: 1000 * (profile.level || 1), // Simplificação para view
+        xpToNextLevel: 0, // Legacy (Supabase é autoridade)
         
         // Plan
         plan: normalizePlan(profile.plan),

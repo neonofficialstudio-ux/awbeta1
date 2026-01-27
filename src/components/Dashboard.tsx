@@ -11,8 +11,9 @@ import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { hasCheckedInToday } from '../api/supabase/supabase.repositories';
-import { fetchMyLedger, fetchMyNotifications, markNotificationRead } from '../api/supabase/economy';
+import { fetchMyLedger, fetchMyNotifications, getMyCheckinStreak, getMyLevelProgress, markNotificationRead, type CheckinStreakInfo, type LevelProgress } from '../api/supabase/economy';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
+import { calculateLevelFromXp, xpForLevelStart } from '../api/economy/economy';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -257,21 +258,23 @@ const SkeletonCheckIn = () => (
     <LoadingSkeleton height={360} className="rounded-[32px]" />
 );
 
-const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean, isSupabase: boolean, isLoading?: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone, isSupabase, isLoading = false }) => {
+const DailyCheckIn: React.FC<{ user: User, onCheckIn: () => void, checkInLoading: boolean, checkInDone: boolean, isSupabase: boolean, streakInfo?: CheckinStreakInfo | null, isLoading?: boolean }> = React.memo(({ user, onCheckIn, checkInLoading, checkInDone, isSupabase, streakInfo, isLoading = false }) => {
     if (isLoading) {
         return <SkeletonCheckIn />;
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const lastCheckInDate = user.lastCheckIn ? new Date(user.lastCheckIn) : null;
+    const lastCheckInSource = isSupabase ? streakInfo?.lastCheckinUtc : user.lastCheckIn;
+    const lastCheckInDate = lastCheckInSource ? new Date(lastCheckInSource) : null;
     if (lastCheckInDate) lastCheckInDate.setHours(0, 0, 0, 0);
     const hasCheckedInToday = isSupabase
         ? checkInDone
         : checkInDone || lastCheckInDate?.getTime() === today.getTime();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : user.weeklyCheckInStreak;
+    const streakBase = isSupabase ? (streakInfo?.streak ?? 0) : user.weeklyCheckInStreak;
+    const streak = (lastCheckInDate && lastCheckInDate.getTime() < yesterday.getTime() && !hasCheckedInToday) ? 0 : streakBase;
 
     const buttonLabel = checkInLoading
         ? 'PROCESSANDO...'
@@ -371,6 +374,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [notificationsFeed, setNotificationsFeed] = useState<Notification[]>([]);
   const [isLedgerLoading, setIsLedgerLoading] = useState(false);
   const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
+  const [levelProgress, setLevelProgress] = useState<LevelProgress | null>(null);
+  const [checkinStreakInfo, setCheckinStreakInfo] = useState<CheckinStreakInfo | null>(null);
   const [checkInDone, setCheckInDone] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
@@ -407,6 +412,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     if (!user) {
         setLedgerEntries([]);
         setNotificationsFeed([]);
+        setLevelProgress(null);
+        setCheckinStreakInfo(null);
         return;
     }
     const now = Date.now();
@@ -421,15 +428,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         if (isSupabase) {
             setIsLedgerLoading(true);
             setIsNotificationsLoading(true);
-            const [ledgerResponse, notificationsResponse] = await Promise.all([
+            const [ledgerResponse, notificationsResponse, levelProgressResponse, checkinStreakResponse] = await Promise.all([
                 fetchMyLedger(20, 0),
                 fetchMyNotifications(20),
+                getMyLevelProgress(),
+                getMyCheckinStreak(),
             ]);
 
             const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
             const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
 
             setLedgerEntries(ledgerList);
+            if (levelProgressResponse.success) {
+                setLevelProgress(levelProgressResponse.progress);
+            }
+            if (checkinStreakResponse.success) {
+                setCheckinStreakInfo(checkinStreakResponse.data);
+            }
             const newNotifications = notificationList.filter(n => !safeNotifications.some(existing => existing.id === n.id));
             const mergedNotifications = [...newNotifications, ...safeNotifications];
             setNotificationsFeed(mergedNotifications.length ? mergedNotifications : notificationList);
@@ -450,6 +465,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const dashboardData = await api.fetchDashboardData();
             setData(dashboardData);
             setLedgerEntries(dashboardData?.ledger || []);
+            const fallbackLevel = calculateLevelFromXp(user.xp);
+            const levelStartXp = xpForLevelStart(fallbackLevel.level);
+            const xpIntoLevel = Math.max(0, user.xp - levelStartXp);
+            const xpNeededForNext = Math.max(0, fallbackLevel.xpToNextLevel - levelStartXp);
+            const pct = xpNeededForNext > 0 ? Math.min(100, Math.max(0, (xpIntoLevel / xpNeededForNext) * 100)) : 0;
+            setLevelProgress({
+                pct,
+                xpIntoLevel,
+                xpNeededForNext,
+            });
+            setCheckinStreakInfo({
+                streak: user.weeklyCheckInStreak,
+                lastCheckinUtc: user.lastCheckIn ?? null,
+            });
             setNotificationsFeed(safeNotifications);
             if (dashboardData?.artistsOfTheDayIds?.includes(user.id)) {
                 const processedEntry = dashboardData.processedArtistOfTheDayQueue.find((item: ProcessedArtistOfTheDayQueueEntry) => item.userId === user.id);
@@ -773,7 +802,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   if (!data) return null;
 
   const coinStart = prevCoins === null ? 0 : prevCoins;
-  const showXpToNextLevel = typeof user.xpToNextLevel === 'number' && user.xpToNextLevel > 0;
+  const xpIntoLevel = levelProgress?.xpIntoLevel ?? 0;
+  const xpNeededForNext = levelProgress?.xpNeededForNext ?? 0;
+  const progressPct = levelProgress?.pct ?? 0;
 
   const getPlanBadge = (plan: User['plan']) => {
       switch (plan) {
@@ -827,11 +858,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 <div className="mt-8 relative z-10 space-y-2">
                     <div className="text-xs text-gray-400 uppercase tracking-widest font-bold">XP Total</div>
                     <div className="text-2xl font-black text-white font-chakra tracking-tight">{formatNumber(user.xp)} XP</div>
-                    {showXpToNextLevel ? (
-                        <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
-                            Próximo nível: {formatNumber(user.xpToNextLevel)} XP
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                        Próximo nível: {formatNumber(xpNeededForNext)} XP
+                    </div>
+                    <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                            <span>Progresso do nível</span>
+                            <span>{formatNumber(xpIntoLevel)} / {formatNumber(xpNeededForNext)} XP</span>
                         </div>
-                    ) : null}
+                        <div className="h-2.5 bg-[#0B0B0B] border border-white/10 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-[#A855F7] via-[#C084FC] to-[#E9D5FF] shadow-[0_0_15px_rgba(192,132,252,0.45)] transition-all duration-700"
+                                style={{ width: `${progressPct}%` }}
+                            ></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -881,7 +922,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
-            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} isSupabase={isSupabase} isLoading={isCheckInStatusLoading} />
+            <DailyCheckIn user={user} onCheckIn={handleDailyCheckIn} checkInLoading={checkInLoading} checkInDone={checkInDone} isSupabase={isSupabase} streakInfo={checkinStreakInfo} isLoading={isCheckInStatusLoading} />
 
             {/* FEATURED MISSION */}
             {data.featuredMission ? (

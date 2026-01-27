@@ -1,6 +1,7 @@
 
 import type { User, Mission, CoinTransaction, StoreItem, UsableItem, UsableItemQueueEntry } from '../../types';
 import { BASE_MISSION_REWARDS, PLAN_MULTIPLIERS, calculateLevelFromXp } from '../economy/economy';
+import { isSupabaseProvider } from '../core/backendGuard';
 
 type ValidationResult = {
     valid: boolean;
@@ -8,6 +9,9 @@ type ValidationResult = {
 };
 
 export const validateMissionReward = (mission: Mission, user: User): ValidationResult => {
+    if (isSupabaseProvider()) {
+        return { valid: true, reason: 'skipped_supabase' };
+    }
     if (mission.xp < 0 || ('coins' in mission && mission.coins < 0)) {
         return { valid: false, reason: 'Missão com recompensas negativas.' };
     }
@@ -24,6 +28,9 @@ export const validateMissionReward = (mission: Mission, user: User): ValidationR
 };
 
 export const validateEconomyTransaction = (transaction: Partial<CoinTransaction>): ValidationResult => {
+    if (isSupabaseProvider()) {
+        return { valid: true, reason: 'skipped_supabase' };
+    }
     if (transaction.amount === undefined) {
         return { valid: false, reason: 'Transação sem valor definido.' };
     }
@@ -43,6 +50,9 @@ export const validateEconomyTransaction = (transaction: Partial<CoinTransaction>
 };
 
 export const validateStoreRedemption = (item: StoreItem | UsableItem, user: User): ValidationResult => {
+    if (isSupabaseProvider()) {
+        return { valid: true, reason: 'skipped_supabase' };
+    }
     if (user.coins < 0) {
         return { valid: false, reason: 'Usuário com saldo negativo tentando resgatar item.' };
     }
@@ -59,6 +69,9 @@ export const validateStoreRedemption = (item: StoreItem | UsableItem, user: User
 };
 
 export const validateQueueConsistency = (queueEntry: UsableItemQueueEntry): ValidationResult => {
+    if (isSupabaseProvider()) {
+        return { valid: true, reason: 'skipped_supabase' };
+    }
     if (!queueEntry.userId || !queueEntry.itemName) {
         return { valid: false, reason: 'Entrada na fila com dados incompletos.' };
     }
@@ -66,6 +79,9 @@ export const validateQueueConsistency = (queueEntry: UsableItemQueueEntry): Vali
 };
 
 export const validateRankingAfterChange = (user: User): ValidationResult => {
+    if (isSupabaseProvider()) {
+        return { valid: true, reason: 'skipped_supabase' };
+    }
     if (user.xp < 0) {
         return { valid: false, reason: 'XP do usuário tornou-se negativo.' };
     }

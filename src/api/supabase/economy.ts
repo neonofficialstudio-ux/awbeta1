@@ -4,6 +4,17 @@ import type { LedgerEntry, TransactionSource, TransactionType, AWNotification, R
 import { normalizePlan } from '../subscriptions/normalizePlan';
 import { cached } from '../../lib/sessionCache';
 
+export type LevelProgress = {
+    pct: number;
+    xpIntoLevel: number;
+    xpNeededForNext: number;
+};
+
+export type CheckinStreakInfo = {
+    streak: number;
+    lastCheckinUtc: string | null;
+};
+
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
     if (!supabaseClient) {
@@ -127,6 +138,78 @@ export const fetchMyLedger = async (limit = 20, offset = 0) => {
     } catch (err: any) {
         console.error('[SupabaseEconomy] fetchMyLedger failed', err);
         return { success: false as const, ledger: [] as LedgerEntry[], error: err?.message || 'Falha ao carregar ledger' };
+    }
+};
+
+const normalizeLevelProgress = (payload: any): LevelProgress => {
+    const pctRaw = Number(payload?.pct ?? payload?.percent ?? 0);
+    const pct = Math.max(0, Math.min(100, pctRaw <= 1 ? pctRaw * 100 : pctRaw));
+    const xpIntoLevel = Number(payload?.xp_into_level ?? payload?.xpIntoLevel ?? payload?.xp_into ?? 0);
+    const xpNeededForNext = Number(payload?.xp_needed_for_next ?? payload?.xpNeededForNext ?? payload?.xp_needed ?? 0);
+
+    return {
+        pct,
+        xpIntoLevel,
+        xpNeededForNext,
+    };
+};
+
+export const getMyLevelProgress = async () => {
+    const supabase = ensureClient();
+    if (!supabase) {
+        return { success: false as const, progress: null as LevelProgress | null, error: 'Supabase client not available' };
+    }
+
+    try {
+        const { data, error } = await cached(
+            'my_level_progress',
+            () => supabase.rpc('get_my_level_progress'),
+            30_000,
+        );
+        if (error) throw error;
+
+        const payload = Array.isArray(data) ? data[0] : data;
+        if (!payload) {
+            return { success: false as const, progress: null as LevelProgress | null, error: 'Sem dados de progresso' };
+        }
+
+        return {
+            success: true as const,
+            progress: normalizeLevelProgress(payload),
+        };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] getMyLevelProgress failed', err);
+        return { success: false as const, progress: null as LevelProgress | null, error: err?.message || 'Falha ao carregar progresso de nível' };
+    }
+};
+
+export const getMyCheckinStreak = async () => {
+    const supabase = ensureClient();
+    if (!supabase) {
+        return { success: false as const, data: null as CheckinStreakInfo | null, error: 'Supabase client not available' };
+    }
+
+    try {
+        const { data, error } = await cached(
+            'my_checkin_streak',
+            () => supabase.rpc('get_my_checkin_streak'),
+            30_000,
+        );
+        if (error) throw error;
+
+        const payload = Array.isArray(data) ? data[0] : data;
+        const streak = Number(payload?.streak ?? payload?.count ?? 0);
+        const lastCheckinUtc = payload?.last_checkin_utc ?? payload?.lastCheckinUtc ?? payload?.last_checkin ?? null;
+        return {
+            success: true as const,
+            data: {
+                streak,
+                lastCheckinUtc: lastCheckinUtc ? String(lastCheckinUtc) : null,
+            },
+        };
+    } catch (err: any) {
+        console.error('[SupabaseEconomy] getMyCheckinStreak failed', err);
+        return { success: false as const, data: null as CheckinStreakInfo | null, error: err?.message || 'Falha ao carregar check-in' };
     }
 };
 
