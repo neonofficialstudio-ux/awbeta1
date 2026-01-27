@@ -33,7 +33,9 @@ export const StabilizationEngine = {
 
                 // Sync XP/Level
                 const syncedUser = XPSyncEngine.syncUser(userId);
-                if (syncedUser !== user) { // Assuming syncUser returns new ref if changed
+                if ((syncedUser as any)?.skipped) {
+                    // Skip in supabase mode
+                } else if (syncedUser !== user) { // Assuming syncUser returns new ref if changed
                     fixedCount++;
                 }
 

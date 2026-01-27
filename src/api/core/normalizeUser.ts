@@ -1,6 +1,5 @@
 
 import type { User } from '../../types';
-import { calculateLevelFromXp } from '../economy/economy';
 import { normalizePlan } from '../subscriptions/normalizePlan';
 
 export const normalizeUserBasic = (user: User): User => {
@@ -65,16 +64,5 @@ export const normalizeUserBasic = (user: User): User => {
 };
 
 export const normalizeUserEconomy = (user: User): User => {
-    // Double check economy consistency
-    const { level, xpToNextLevel } = calculateLevelFromXp(user.xp);
-    
-    // Only update if divergence is found to avoid unnecessary object reference changes
-    if (user.level !== level || user.xpToNextLevel !== xpToNextLevel) {
-        return {
-            ...user,
-            level,
-            xpToNextLevel,
-        };
-    }
     return user;
 };

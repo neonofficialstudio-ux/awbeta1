@@ -1,6 +1,7 @@
 
 import { getRepository } from "../database/repository.factory";
 import { LevelEngine } from "./levelEngine";
+import { isSupabaseProvider } from "../core/backendGuard";
 
 const repo = getRepository();
 
@@ -10,6 +11,9 @@ export const XPSyncEngine = {
      * Fixes anomalies silently.
      */
     syncUser: (userId: string) => {
+        if (isSupabaseProvider()) {
+            return { skipped: true, reason: 'supabase' };
+        }
         const user = repo.select("users").find((u: any) => u.id === userId);
         if (!user) return null;
 
@@ -41,6 +45,9 @@ export const XPSyncEngine = {
      * Syncs all users. To be run on app init or admin trigger.
      */
     syncAll: () => {
+        if (isSupabaseProvider()) {
+            return { skipped: true, reason: 'supabase' };
+        }
         const users = repo.select("users");
         let fixedCount = 0;
         users.forEach((u: any) => {
