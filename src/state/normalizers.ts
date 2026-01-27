@@ -81,6 +81,7 @@ export const normalizeState = (state: any): AppState => {
         activeUser: safeUser,
         isAdmin: typeof state.isAdmin === 'boolean' ? state.isAdmin : null,
         notifications: Array.isArray(state.notifications) ? state.notifications : [],
+        ledger: Array.isArray(state.ledger) ? state.ledger : [],
         showWelcomeModal: !!state.showWelcomeModal,
         prevCoins: state.prevCoins ?? (safeUser ? safeUser.coins : null),
         prevXp: state.prevXp ?? (safeUser ? safeUser.xp : null),

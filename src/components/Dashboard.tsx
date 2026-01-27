@@ -359,7 +359,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, []);
 
   const { state, dispatch } = useAppContext();
-  const { activeUser: user, prevCoins, notifications: notificationState } = state;
+  const { activeUser: user, prevCoins, notifications: notificationState, ledger: ledgerState } = state;
   const isProfileLoading =
     !!user?.id && (
       user.coins === undefined || user.coins === null ||
@@ -398,7 +398,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [user?.id]);
 
   const notifications = notificationState;
-  const ledger = ledgerEntries;
+  const ledger = Array.isArray(ledgerState) && ledgerState.length ? ledgerState : ledgerEntries;
 
   const safeNotifications = Array.isArray((notificationState as any)?.notifications)
     ? (notificationState as any).notifications
@@ -411,6 +411,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const fetchData = useCallback(async (force = false) => {
     if (!user) {
         setLedgerEntries([]);
+        dispatch({ type: 'SET_LEDGER', payload: [] });
         setNotificationsFeed([]);
         setLevelProgress(null);
         setCheckinStreakInfo(null);
@@ -428,8 +429,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         if (isSupabase) {
             setIsLedgerLoading(true);
             setIsNotificationsLoading(true);
+            const shouldFetchLedger = force || !Array.isArray(ledgerState) || ledgerState.length === 0;
             const [ledgerResponse, notificationsResponse, levelProgressResponse, checkinStreakResponse] = await Promise.all([
-                fetchMyLedger(20, 0),
+                shouldFetchLedger ? fetchMyLedger(20, 0) : Promise.resolve({ success: true, ledger: ledgerState }),
                 fetchMyNotifications(20),
                 getMyLevelProgress(),
                 getMyCheckinStreak(),
@@ -439,6 +441,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
 
             setLedgerEntries(ledgerList);
+            dispatch({ type: 'SET_LEDGER', payload: ledgerList });
             if (levelProgressResponse.success) {
                 setLevelProgress(levelProgressResponse.progress);
             }
@@ -464,7 +467,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const api = await import('../api/index');
             const dashboardData = await api.fetchDashboardData();
             setData(dashboardData);
-            setLedgerEntries(dashboardData?.ledger || []);
+            const fallbackLedger = dashboardData?.ledger || [];
+            setLedgerEntries(fallbackLedger);
+            dispatch({ type: 'SET_LEDGER', payload: fallbackLedger });
             const fallbackLevel = calculateLevelFromXp(user.xp);
             const levelStartXp = xpForLevelStart(fallbackLevel.level);
             const xpIntoLevel = Math.max(0, user.xp - levelStartXp);
@@ -496,7 +501,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setIsNotificationsLoading(false);
         Perf.end('dashboard_mount');
     }
-  }, [user, isSupabase, notificationState, dispatch, onShowArtistOfTheDay]);
+  }, [user, isSupabase, notificationState, ledgerState, dispatch, onShowArtistOfTheDay]);
 
   useEffect(() => {
     void fetchData();
@@ -563,6 +568,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
       if (res.success) {
         const list = res.ledger || [];
         setLedgerEntries(list);
+        dispatch({ type: 'SET_LEDGER', payload: list });
       }
     };
 
@@ -766,12 +772,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         if (response?.ledger?.length) {
             setLedgerEntries(response.ledger);
             setData(prev => prev ? { ...prev, ledger: response.ledger } : prev);
+            dispatch({ type: 'SET_LEDGER', payload: response.ledger });
         } else {
             // 🔁 Garante atualização de streak, coins, xp e level
             const refreshed = await refreshAfterEconomyAction(user.id, dispatch);
             if (refreshed.ledger?.length) {
                 setLedgerEntries(refreshed.ledger);
                 setData(prev => prev ? { ...prev, ledger: refreshed.ledger } : prev);
+                dispatch({ type: 'SET_LEDGER', payload: refreshed.ledger });
             }
         }
 

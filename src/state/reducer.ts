@@ -7,6 +7,7 @@ export const initialState: AppState = {
   activeUser: null,
   isAdmin: null,
   notifications: [],
+  ledger: [],
   showWelcomeModal: false,
   prevCoins: null,
   prevXp: null,
@@ -131,6 +132,10 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       const incoming = Array.isArray(action.payload) ? action.payload : [];
       const current = Array.isArray(state.notifications) ? state.notifications : [];
       return { ...state, notifications: [...incoming, ...current] };
+    }
+    case 'SET_LEDGER': {
+      const incoming = Array.isArray(action.payload) ? action.payload : [];
+      return { ...state, ledger: incoming };
     }
     case 'REMOVE_NOTIFICATION': {
       const safeNotifications = Array.isArray(state.notifications)
