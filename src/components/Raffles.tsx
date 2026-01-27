@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Raffle, RaffleTicket, User } from '../types';
+import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
 import { CoinIcon, TicketIcon, CrownIcon, HistoryIcon, CheckIcon, ShieldIcon } from '../constants';
@@ -716,6 +717,9 @@ const Raffles: React.FC = () => {
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
             await fetchData();
+            // 🔁 Fonte da verdade: Supabase
+            // Sempre refetch após economia
+            await refreshAfterEconomyAction(activeUser.id, dispatch);
              dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Boa Sorte!', message: `Você comprou ${quantity} ticket(s)!` } });
         } catch (error) { console.error(error); } finally { setRaffleToBuy(null); }
     };

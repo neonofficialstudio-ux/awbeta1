@@ -749,6 +749,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         if (response?.updatedUser) {
             dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
         } else {
+            // 🔁 Garante atualização de streak, coins, xp e level
             await refreshAfterEconomyAction(user.id, dispatch);
         }
 
@@ -766,6 +767,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             setLedgerEntries(response.ledger);
             setData(prev => prev ? { ...prev, ledger: response.ledger } : prev);
         } else {
+            // 🔁 Garante atualização de streak, coins, xp e level
             const refreshed = await refreshAfterEconomyAction(user.id, dispatch);
             if (refreshed.ledger?.length) {
                 setLedgerEntries(refreshed.ledger);
