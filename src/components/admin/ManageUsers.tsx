@@ -9,7 +9,6 @@ import { getSupabase } from '../../api/supabase/client';
 import { SearchIcon, EditIcon, HistoryIcon, UsersIcon, CrownIcon, ShieldIcon } from '../../constants';
 import AvatarWithFrame from '../AvatarWithFrame';
 import UserListModal from './UserListModal';
-import { xpForLevelStart } from '../../api/economy/economy';
 
 // UI Components
 import Card from '../ui/base/Card';
@@ -690,7 +689,7 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col">
                                             <span className="font-bold text-white font-chakra">Lvl {user.level}</span>
-                                            <span className="text-xs text-gray-500 font-mono">{ (user.xp - xpForLevelStart(user.level)).toLocaleString('pt-BR') } XP</span>
+                                            <span className="text-xs text-gray-500 font-mono">{user.xp.toLocaleString('pt-BR')} XP</span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">

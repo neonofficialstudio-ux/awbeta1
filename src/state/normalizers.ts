@@ -4,7 +4,6 @@ import { EventSession, ArenaStatus, EventLiveFeedItem } from '../types/event';
 import { MissionDefinition } from '../api/missions/missions.db';
 import { RankingSession, EventRankingEntry } from '../types/ranking';
 import { AppState } from './state.types';
-import { calculateLevelFromXp } from '../api/economy/economy';
 
 export const normalizeActiveUser = (user: User | null | undefined): User | null => {
     if (!user) return null;
@@ -24,10 +23,9 @@ export const normalizeActiveUser = (user: User | null | undefined): User | null 
     safeUser.coins = typeof safeUser.coins === 'number' ? safeUser.coins : 0;
     safeUser.xp = typeof safeUser.xp === 'number' ? safeUser.xp : 0;
     
-    // Level Consistency fallback
-    const calcLevel = calculateLevelFromXp(safeUser.xp);
-    safeUser.level = safeUser.level || calcLevel.level;
-    safeUser.xpToNextLevel = safeUser.xpToNextLevel || calcLevel.xpToNextLevel;
+    // Level values are provided by backend profile (no client-side derivation)
+    safeUser.level = typeof safeUser.level === 'number' ? safeUser.level : 1;
+    safeUser.xpToNextLevel = typeof safeUser.xpToNextLevel === 'number' ? safeUser.xpToNextLevel : 0;
 
     safeUser.monthlyMissionsCompleted = safeUser.monthlyMissionsCompleted ?? 0;
     safeUser.totalMissionsCompleted = safeUser.totalMissionsCompleted ?? 0;

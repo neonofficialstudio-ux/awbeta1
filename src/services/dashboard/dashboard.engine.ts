@@ -2,7 +2,6 @@
 import { getRepository } from "../../api/database/repository.factory";
 import { EconomyEngineV6 } from "../../api/economy/economyEngineV6";
 import { CheckinEngineV4 } from "../../api/economy/checkin";
-import { LevelEngine } from "../../api/economy/levelEngine";
 import { EventSessionEngine } from "../../api/events/session";
 import { QueueEngineV5 } from "../../api/queue/queueEngineV5";
 import { GlobalRankingEngine } from "../../services/ranking/globalRanking.engine";
@@ -20,9 +19,8 @@ export const DashboardEngine = {
         const user = repo.select("users").find((u: any) => u.id === userId);
         if (!user) return null;
 
-        // 1. Economy Stats
-        const { level, xpToNextLevel } = LevelEngine.calculateLevel(user.xp);
-        
+        // 1. Economy Stats (source of truth from backend profile)
+
         // 2. Active Event
         const activeEvent = EventSessionEngine.getActiveEvent();
         const eventSession = user.eventSession;
@@ -38,9 +36,8 @@ export const DashboardEngine = {
             economy: {
                 coins: user.coins,
                 xp: user.xp,
-                level,
-                xpToNextLevel,
-                progress: LevelEngine.getLevelProgress(user)
+                level: user.level,
+                xpToNextLevel: user.xpToNextLevel
             },
             activeEvent: activeEvent ? {
                 id: activeEvent.id,

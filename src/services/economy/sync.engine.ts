@@ -1,7 +1,6 @@
 
 import { getRepository } from "../../api/database/repository.factory";
 import { LedgerEngine } from "./ledger.engine";
-import { LevelEngine } from "../../api/economy/levelEngine";
 import { rankingAPI } from "../../api/ranking/index";
 import type { User, TransactionSource } from "../../types";
 
@@ -16,47 +15,17 @@ export const CurrencySyncEngine = {
         if (!user) throw new Error("User not found");
 
         const safeAmount = Math.max(0, amount);
-        const newTotalXp = user.xp + safeAmount;
         
-        // 1. Process Level Up Logic
-        const levelResult = LevelEngine.processProgression(user, newTotalXp);
-        
-        // 2. Record XP in Ledger
+        // 1. Record XP in Ledger (backend is the source of truth for XP/Level)
         LedgerEngine.recordTransaction(userId, 'XP', safeAmount, 'earn', source, description, user.xp);
         
-        // 3. Handle Bonus Coins from Level Up
-        let newTotalCoins = user.coins;
-        if (levelResult.bonusCoins > 0) {
-            LedgerEngine.recordTransaction(
-                userId, 
-                'COIN', 
-                levelResult.bonusCoins, 
-                'earn', 
-                'level_up_bonus', 
-                `Bônus Nível ${levelResult.newLevel}`, 
-                user.coins
-            );
-            newTotalCoins += levelResult.bonusCoins;
-        }
-
-        // 4. Update User State
-        const updatedUser = {
-            ...user,
-            xp: newTotalXp,
-            level: levelResult.newLevel,
-            xpToNextLevel: levelResult.newXpToNextLevel,
-            coins: newTotalCoins
-        };
-        
-        repo.update("users", (u: any) => u.id === userId, (u: any) => updatedUser);
-
-        // 5. Sync Ranking
+        // 2. Sync Ranking
         rankingAPI.getGlobalRanking(userId); // Trigger refresh logic internally if needed
         
         return {
             success: true,
-            updatedUser,
-            notifications: levelResult.notifications
+            updatedUser: user,
+            notifications: []
         };
     },
 

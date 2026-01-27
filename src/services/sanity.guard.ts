@@ -1,6 +1,5 @@
 
 import type { User, Mission, StoreItem, UsableItem, Event, RankingUser, QueueItem } from '../types';
-import { calculateLevelFromXp } from '../api/economy/economy';
 import { normalizePlan } from '../api/subscriptions/normalizePlan';
 
 export const SanityGuard = {
@@ -46,7 +45,7 @@ export const SanityGuard = {
                 coins: 0,
                 xp: 0,
                 level: 1,
-                xpToNextLevel: 1000,
+                xpToNextLevel: 0,
                 monthlyMissionsCompleted: 0,
                 totalMissionsCompleted: 0,
                 weeklyProgress: 0,
@@ -67,16 +66,9 @@ export const SanityGuard = {
         const xp = SanityGuard.number(u.xp, 0, 0);
         const coins = SanityGuard.number(u.coins, 0, 0);
         
-        // 2. Level Consistency
-        const { level: calcLevel, xpToNextLevel: calcNext } = calculateLevelFromXp(xp);
-        let level = SanityGuard.number(u.level, 1, 1);
-        
-        // Auto-repair level if desynced significantly
-        if (Math.abs(level - calcLevel) > 1) {
-            level = calcLevel;
-        }
-        
-        const xpToNextLevel = SanityGuard.number(u.xpToNextLevel, 1000, 1);
+        // 2. Level values come from backend profile (no client-side derivation)
+        const level = SanityGuard.number(u.level, 1, 1);
+        const xpToNextLevel = SanityGuard.number(u.xpToNextLevel, 0, 0);
 
         // 3. Plan Validity & Normalization (V1.1 Update)
         const plan = normalizePlan(u.plan) as User['plan'];
