@@ -972,6 +972,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
             onRedeemSuccess({ item, updatedUser: response.updatedUser });
             await fetchData(true);
         }
+        // 🔁 Economia ledger-first → refetch obrigatório
         await refreshAfterEconomyAction(currentUser.id, dispatch);
         setIsProcessing(false);
     }, [currentUser, isProcessing, dispatch, onRedeemSuccess, fetchData]);

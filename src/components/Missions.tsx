@@ -603,6 +603,7 @@ const Missions: React.FC = () => {
             }
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             await fetchData(true);
+            // 🔁 Sempre refetch após envio de missão
             await refreshAfterEconomyAction(user.id, dispatch);
             const submittedMission = missions.find(m => m.id === missionId);
             if (submittedMission) setSubmissionSuccessInfo({ missionTitle: submittedMission.title });
