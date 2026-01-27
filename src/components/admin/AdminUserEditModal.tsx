@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../../types';
-import { calculateLevelFromXp } from '../../api/economy/economy';
 
 interface AdminUserEditModalProps {
   user: User;
@@ -90,15 +89,7 @@ const AdminUserEditModal: React.FC<AdminUserEditModalProps> = ({ user, onClose, 
             updatedValue = parseInt(value) || 0;
         }
         
-        const newFormData = { ...prev, [name]: updatedValue };
-
-        if (name === 'xp') {
-            const { level, xpToNextLevel } = calculateLevelFromXp(updatedValue as number);
-            newFormData.level = level;
-            newFormData.xpToNextLevel = xpToNextLevel;
-        }
-
-        return newFormData;
+        return { ...prev, [name]: updatedValue };
     });
   };
 

@@ -3,7 +3,6 @@ import type { User, Advertisement, ProcessedArtistOfTheDayQueueEntry, Notificati
 import { CoinIcon, XPIcon, StarIcon, CrownIcon, SpotifyIcon, YoutubeIcon, TrendingUpIcon, CheckIcon, InstagramIcon, BellIcon, HistoryIcon } from '../constants';
 import { useAppContext } from '../constants';
 import CountUp from './CountUp';
-import { xpForLevelStart } from '../api/economy/economy';
 import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import { AdsTelemetry } from '../api/ads/adsTelemetry'; 
@@ -773,10 +772,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   if (error) return <div className="text-center text-red-500 p-8 border border-red-500/30 rounded-xl bg-red-900/10 backdrop-blur-sm">{error}</div>;
   if (!data) return null;
 
-  const xpProgress = user.xp - xpForLevelStart(user.level);
-  const xpForCurrentLevel = user.xpToNextLevel;
-  const xpPercentage = Math.min(100, Math.max(0, (xpProgress / xpForCurrentLevel) * 100));
   const coinStart = prevCoins === null ? 0 : prevCoins;
+  const showXpToNextLevel = typeof user.xpToNextLevel === 'number' && user.xpToNextLevel > 0;
 
   const getPlanBadge = (plan: User['plan']) => {
       switch (plan) {
@@ -827,16 +824,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                         <span className="text-sm text-gray-500 font-bold self-end mb-2">/ 100</span>
                     </div>
                 </div>
-                <div className="mt-8 relative z-10">
-                    <div className="relative h-3 bg-black rounded-full overflow-hidden border border-white/10">
-                        <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#B45309] to-[#FFD36A] rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(255,211,106,0.6)]" style={{ width: `${xpPercentage}%` }}>
-                            <div className="absolute inset-0 bg-white/30 animate-[shine-sweep_2s_infinite]"></div>
+                <div className="mt-8 relative z-10 space-y-2">
+                    <div className="text-xs text-gray-400 uppercase tracking-widest font-bold">XP Total</div>
+                    <div className="text-2xl font-black text-white font-chakra tracking-tight">{formatNumber(user.xp)} XP</div>
+                    {showXpToNextLevel ? (
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
+                            Próximo nível: {formatNumber(user.xpToNextLevel)} XP
                         </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-3 text-[10px] font-bold text-[#808080] uppercase tracking-wider">
-                        <span className="text-white">{formatNumber(xpProgress)} XP</span>
-                        <span>{formatNumber(xpForCurrentLevel)} XP</span>
-                    </div>
+                    ) : null}
                 </div>
             </div>
 

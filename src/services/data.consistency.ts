@@ -1,7 +1,6 @@
 
 import { getRepository } from "../api/database/repository.factory";
 import { SanityGuard } from "./sanity.guard";
-import { calculateLevelFromXp, calculateDiscountedPrice } from "../api/economy/economy";
 import { PLAN_MULTIPLIERS } from "../api/economy/economy-constants"; // Updated Import
 import { DiagnosticCore } from "./diagnostic.core";
 import type { User, Mission, Event, RankingUser, QueueItem, StoreItem, UsableItem } from "../types";
@@ -36,18 +35,7 @@ export const DataConsistency = {
             report.repaired.push('fix_negative_xp');
         }
 
-        // 2. Level Sync
-        const { level: calcLevel, xpToNextLevel } = calculateLevelFromXp(updatedUser.xp);
-        if (updatedUser.level !== calcLevel) {
-            report.issues.push(`Level mismatch (Current: ${updatedUser.level}, Calc: ${calcLevel})`);
-            updatedUser.level = calcLevel;
-            updatedUser.xpToNextLevel = xpToNextLevel;
-            report.repaired.push('sync_user_level');
-        } else if (updatedUser.xpToNextLevel !== xpToNextLevel) {
-             updatedUser.xpToNextLevel = xpToNextLevel; // Silent fix
-        }
-
-        // 3. Plan Multiplier Integrity
+        // 2. Plan Multiplier Integrity
         // Use strict check against constants
         if (PLAN_MULTIPLIERS[updatedUser.plan] === undefined) {
             report.issues.push(`Invalid Plan: ${updatedUser.plan}`);
