@@ -107,8 +107,22 @@ export const ProfileSupabase = {
                 return { success: false, error: error?.message || 'Perfil não encontrado' };
             }
 
+            // Buscar estado de assinatura (cancelamento agendado, expiração)
+            const { data: subData, error: subError } = await supabase
+                .from('subscriptions')
+                .select('cancel_at_period_end,current_period_end,status,plan')
+                .eq('user_id', targetUserId)
+                .maybeSingle();
+
+            if (subError) console.warn('[ProfileSupabase] subscriptions lookup failed', subError.message);
+
             const mapped = mapProfileToUser(data);
-            const user = SanityGuard.user(mapped);
+            const hydrated = {
+                ...mapped,
+                cancellationPending: Boolean(subData?.cancel_at_period_end),
+                subscriptionExpiresAt: subData?.current_period_end ?? undefined,
+            } as User;
+            const user = SanityGuard.user(hydrated);
 
             profileCache = {
                 userId: targetUserId!,
