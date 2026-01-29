@@ -370,8 +370,17 @@ export const cancelSubscription = (userId: string) => withLatency(() => {
             const supabase = getSupabase();
             if (!supabase) throw new Error('Supabase client indisponível.');
 
-            const { error } = await supabase.rpc('request_cancel_subscription');
-            if (error) throw new Error(error.message || 'Falha ao solicitar cancelamento');
+            // 1) Cancela no PagBank (real) via Edge Function
+            const { data: session } = await supabase.auth.getSession();
+            const accessToken = session?.session?.access_token;
+            if (!accessToken) throw new Error('Sessão inválida. Faça login novamente.');
+
+            const { data, error: fnErr } = await supabase.functions.invoke('pagbank-cancel-subscription', {
+                body: { user_id: userId },
+                headers: { Authorization: `Bearer ${accessToken}`, 'x-client-info': 'aw-web' },
+            });
+            if (fnErr) throw new Error(fnErr.message || 'Falha ao cancelar no PagBank');
+            if ((data as any)?.error) throw new Error((data as any)?.error);
 
             const profileResp = await ProfileSupabase.fetchMyProfile(userId);
             if (!profileResp.success || !profileResp.user) {
