@@ -364,14 +364,65 @@ export const submitSubscriptionProof = (userId: string, requestId: string, proof
 });
 
 export const cancelSubscription = (userId: string) => withLatency(() => {
+    // ✅ Supabase-first
+    if (isSupabaseProvider()) {
+        return (async () => {
+            const supabase = getSupabase();
+            if (!supabase) throw new Error('Supabase client indisponível.');
+
+            const { error } = await supabase.rpc('request_cancel_subscription');
+            if (error) throw new Error(error.message || 'Falha ao solicitar cancelamento');
+
+            const profileResp = await ProfileSupabase.fetchMyProfile(userId);
+            if (!profileResp.success || !profileResp.user) {
+                throw new Error(profileResp.error || 'Falha ao recarregar perfil');
+            }
+
+            const notifsResp = await fetchMyNotifications(20);
+
+            return {
+                updatedUser: profileResp.user,
+                notifications: notifsResp.success ? notifsResp.notifications : [],
+            };
+        })();
+    }
+
+    // Mock fallback
     const user = db.allUsersData.find(u => u.id === userId);
     if (!user) throw new Error("User not found");
 
     const updatedUser = { ...user, cancellationPending: true, subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() };
     updateUserInDb(updatedUser);
-    
     const notification = createNotification(userId, 'Cancelamento Agendado', 'Sua assinatura será cancelada ao final do período atual.');
     return { updatedUser: SanityGuard.user(updatedUser), notifications: [notification] };
+});
+
+// (Opcional) desfazer cancelamento - útil para futura UI
+export const undoCancelSubscription = (userId: string) => withLatency(async () => {
+    if (isSupabaseProvider()) {
+        const supabase = getSupabase();
+        if (!supabase) throw new Error('Supabase client indisponível.');
+
+        const { error } = await supabase.rpc('undo_cancel_subscription');
+        if (error) throw new Error(error.message || 'Falha ao desfazer cancelamento');
+
+        const profileResp = await ProfileSupabase.fetchMyProfile(userId);
+        if (!profileResp.success || !profileResp.user) {
+            throw new Error(profileResp.error || 'Falha ao recarregar perfil');
+        }
+
+        const notifsResp = await fetchMyNotifications(20);
+        return {
+            updatedUser: profileResp.user,
+            notifications: notifsResp.success ? notifsResp.notifications : [],
+        };
+    }
+
+    const user = db.allUsersData.find(u => u.id === userId);
+    if (!user) throw new Error('User not found');
+    const updatedUser = { ...user, cancellationPending: false, subscriptionExpiresAt: undefined };
+    updateUserInDb(updatedUser);
+    return { updatedUser: SanityGuard.user(updatedUser), notifications: [] };
 });
 
 export const cancelSubscriptionRequest = (requestId: string) => withLatency(() => {
