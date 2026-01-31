@@ -43,6 +43,8 @@ function buildInvokeHeaders(accessToken: string) {
 export async function createPagbankCheckout(
   planName: string,
   userId: string,
+  customerName?: string,
+  customerEmail?: string,
 ): Promise<CreateCheckoutResponse> {
   if (config.backendProvider !== 'supabase') {
     throw new Error('Checkout PagBank disponível apenas via Supabase.');
@@ -53,7 +55,12 @@ export async function createPagbankCheckout(
 
   const accessToken = await getAccessTokenOrThrow();
 
-  const payload = { user_id: userId, plan_name: planName };
+  const payload = {
+    user_id: userId,
+    plan_name: planName,
+    customer_name: customerName ?? null,
+    customer_email: customerEmail ?? null,
+  };
 
   // ⚠️ NÃO stringify aqui.
   // O invoke já serializa para JSON internamente.
