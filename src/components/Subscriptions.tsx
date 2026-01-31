@@ -459,7 +459,12 @@ const Subscriptions: React.FC = () => {
       setCheckoutError(null);
       setCheckoutStatus('Preparando checkout PagBank...');
       setIsCheckoutSubmitting(true);
-      const checkout = await createPagbankCheckout(checkoutPlan.name, currentUser.id);
+      const checkout = await createPagbankCheckout(
+        checkoutPlan.name,
+        currentUser.id,
+        currentUser.name,
+        currentUser.email,
+      );
       sessionStorage.setItem('aw_checkout_id', checkout.checkout_id);
       sessionStorage.setItem('aw_reference_id', checkout.reference_id);
       window.location.href = checkout.checkout_url;
