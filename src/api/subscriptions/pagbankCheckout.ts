@@ -12,6 +12,16 @@ type VerifyCheckoutResponse = {
   status: string;
 };
 
+function normalizeEmail(email?: string | null) {
+  const e = String(email ?? '').trim().toLowerCase();
+  return e.length ? e : null;
+}
+
+function normalizeName(name?: string | null) {
+  const n = String(name ?? '').trim();
+  return n.length ? n : null;
+}
+
 async function getAccessTokenOrThrow() {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Supabase não disponível.');
@@ -58,8 +68,8 @@ export async function createPagbankCheckout(
   const payload = {
     user_id: userId,
     plan_name: planName,
-    customer_name: customerName ?? null,
-    customer_email: customerEmail ?? null,
+    customer_name: normalizeName(customerName),
+    customer_email: normalizeEmail(customerEmail),
   };
 
   // ⚠️ NÃO stringify aqui.

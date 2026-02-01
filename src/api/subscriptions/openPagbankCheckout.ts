@@ -5,11 +5,15 @@ import { config } from '../../core/config';
 type OpenPagbankCheckoutInput = {
   user_id: string;
   plan_name: string;
+  customer_name?: string;
+  customer_email?: string;
 };
 
 export const openPagbankCheckout = async ({
   user_id,
   plan_name,
+  customer_name,
+  customer_email,
 }: OpenPagbankCheckoutInput): Promise<void> => {
   try {
     if (config.backendProvider !== 'supabase') {
@@ -22,7 +26,12 @@ export const openPagbankCheckout = async ({
     }
 
     const { data, error } = await supabase.functions.invoke('pagbank-create-checkout-link', {
-      body: { user_id, plan_name },
+      body: {
+        user_id,
+        plan_name,
+        customer_name: customer_name?.trim() || null,
+        customer_email: customer_email?.trim().toLowerCase() || null,
+      },
     });
 
     if (error) {
