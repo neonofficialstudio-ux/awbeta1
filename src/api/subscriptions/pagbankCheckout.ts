@@ -1,5 +1,6 @@
 import { config } from '../../core/config';
 import { getSupabase } from '../supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 type CreateCheckoutResponse = {
   checkout_id: string;
@@ -14,6 +15,11 @@ type VerifyCheckoutResponse = {
 
 function normalizeEmail(email?: string | null) {
   const e = String(email ?? '').trim().toLowerCase();
+  return e.length ? e : null;
+}
+
+function normalizeAuthEmail(user: SupabaseUser | null | undefined) {
+  const e = String(user?.email ?? '').trim().toLowerCase();
   return e.length ? e : null;
 }
 
@@ -65,11 +71,24 @@ export async function createPagbankCheckout(
 
   const accessToken = await getAccessTokenOrThrow();
 
+  // ✅ Fallback: se o app não tiver email no state (profiles não tem coluna email),
+  // usamos o email real do Supabase Auth (fonte confiável para checkout).
+  let authEmail: string | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    authEmail = normalizeAuthEmail(data?.user);
+  } catch {
+    authEmail = null;
+  }
+
+  const finalEmail = normalizeEmail(customerEmail) ?? authEmail;
+  const finalName = normalizeName(customerName) ?? null;
+
   const payload = {
     user_id: userId,
     plan_name: planName,
-    customer_name: normalizeName(customerName),
-    customer_email: normalizeEmail(customerEmail),
+    customer_name: finalName,
+    customer_email: finalEmail,
   };
 
   // ⚠️ NÃO stringify aqui.
