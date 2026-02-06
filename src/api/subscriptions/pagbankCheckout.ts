@@ -1,6 +1,25 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { config } from '../../core/config';
 import { getSupabase } from '../supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+
+type EnrichedFunctionError = Error & { status?: number; code?: string };
+
+function enrichFunctionInvokeError(
+  error: unknown,
+  fallbackMessage: string,
+): EnrichedFunctionError {
+  if (error instanceof FunctionsHttpError) {
+    const status = (error as { context?: { status?: number } }).context?.status;
+    const enrichedError: EnrichedFunctionError = new Error(error.message || fallbackMessage);
+    enrichedError.status = status;
+    enrichedError.code = status ? `HTTP_${status}` : 'HTTP_ERROR';
+    return enrichedError;
+  }
+
+  if (error instanceof Error) return error as EnrichedFunctionError;
+  return new Error(fallbackMessage) as EnrichedFunctionError;
+}
 
 type CreateCheckoutResponse = {
   checkout_id: string;
@@ -101,7 +120,7 @@ export async function createPagbankCheckout(
 
   if (error) {
     console.error('[PagBank] create checkout invoke error:', error, 'data:', data);
-    throw new Error(error.message || 'Não foi possível iniciar o checkout PagBank.');
+    throw enrichFunctionInvokeError(error, 'Não foi possível iniciar o checkout PagBank.');
   }
 
   const checkoutUrl = data?.checkout_url ?? data?.url;
@@ -136,7 +155,7 @@ export async function verifyPagbankCheckout(
 
   if (error) {
     console.error('[PagBank] verify invoke error:', error, 'data:', data);
-    throw new Error(error.message || 'Não foi possível verificar o pagamento.');
+    throw enrichFunctionInvokeError(error, 'Não foi possível verificar o pagamento.');
   }
 
   return data as VerifyCheckoutResponse;

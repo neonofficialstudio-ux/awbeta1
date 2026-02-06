@@ -440,6 +440,18 @@ const Subscriptions: React.FC = () => {
   const clearCheckoutSession = () => {
     sessionStorage.removeItem('aw_checkout_id');
     sessionStorage.removeItem('aw_reference_id');
+
+    // Se o usuário voltou do PagBank com params na URL, removemos para evitar re-disparar o efeito ao recarregar.
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('checkout_id') || url.searchParams.has('reference_id')) {
+        url.searchParams.delete('checkout_id');
+        url.searchParams.delete('reference_id');
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+      }
+    } catch {
+      // noop
+    }
   };
 
   const getCheckoutErrorMessage = (error: unknown) => {
@@ -505,6 +517,19 @@ const Subscriptions: React.FC = () => {
           }
         } catch (error) {
           console.error('[checkout] pagbank_verify_failed', error);
+
+          // Para erros 4xx (request inválido, checkout inválido, tentativa de upgrade sem fluxo suportado, etc.)
+          // não adianta retry automático: limpamos e mostramos mensagem.
+          const status = (error as Error & { status?: number }).status;
+          if (status && status >= 400 && status < 500) {
+            const msg = getCheckoutErrorMessage(error).message;
+            clearCheckoutSession();
+            setPendingCheckout(null);
+            setVerificationState('timeout');
+            setVerificationMessage(msg);
+            toast.error(msg);
+            return false;
+          }
         }
 
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -526,10 +551,17 @@ const Subscriptions: React.FC = () => {
       checkoutSearchParams.get('reference_id') ?? sessionStorage.getItem('aw_reference_id');
 
     if (checkoutId && referenceId) {
+      // Evita disparar o loop de verificação múltiplas vezes para o mesmo checkout.
+      if (
+        pendingCheckout?.checkoutId === checkoutId &&
+        pendingCheckout?.referenceId === referenceId
+      ) {
+        return;
+      }
       setPendingCheckout({ checkoutId, referenceId });
       runCheckoutVerification(checkoutId, referenceId);
     }
-  }, [checkoutSearchParams, currentUser, runCheckoutVerification]);
+  }, [checkoutSearchParams, currentUser, pendingCheckout, runCheckoutVerification]);
 
   const handleCancelSubscription = async () => {
     if (!currentUser) return;
