@@ -86,12 +86,19 @@ const PlanCard: React.FC<{
     currentUser: User; 
     isCheckoutDisabled: boolean;
     isCheckoutLoading: boolean;
+    isDifferentPlanWhileActive: boolean;
     onStartCheckout: (plan: SubscriptionPlan) => void;
-}> = ({ plan, currentUser, isCheckoutDisabled, isCheckoutLoading, onStartCheckout }) => {
+}> = ({ plan, currentUser, isCheckoutDisabled, isCheckoutLoading, isDifferentPlanWhileActive, onStartCheckout }) => {
     const { icon: Icon } = plan;
     const PlanIcon = Icon || StarIcon; // Safe fallback
     
     const isCurrentPlan = plan.name === currentUser.plan;
+    const ctaText =
+        plan.name === currentUser.plan
+            ? 'SEU PLANO ATUAL'
+            : isDifferentPlanWhileActive
+              ? 'CANCELE PARA TROCAR'
+              : 'ASSINAR';
     const theme = PLAN_THEMES[plan.name] || DEFAULT_THEME;
     // Dynamic Border Logic
     const borderClass = isCurrentPlan 
@@ -125,7 +132,7 @@ const PlanCard: React.FC<{
              );
         }
         
-        const isDisabled = isCheckoutDisabled;
+        const isDisabled = isCheckoutDisabled || isDifferentPlanWhileActive;
 
         return (
              <button 
@@ -134,7 +141,7 @@ const PlanCard: React.FC<{
                 className={`${buttonBase} ${isDisabled ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-[#FFB631] to-[#FFD36A] text-[#0D0F12] border-[#FFD36A] hover:shadow-[0_0_30px_rgba(255,211,106,0.6)] hover:brightness-110'}`}
             >
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                    {isCheckoutLoading ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : 'ASSINAR'}
+                    {isCheckoutLoading ? <div className="w-4 h-4 border-2 border-t-transparent border-black rounded-full animate-spin"></div> : ctaText}
                 </span>
                 {!isDisabled && <div className="absolute inset-0 bg-white/40 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 skew-y-12 ease-out"></div>}
             </button>
@@ -241,6 +248,10 @@ const UnlockItem: React.FC<{ icon: IconComponent; title: string; delay: string }
 const Subscriptions: React.FC = () => {
   const { state, dispatch } = useAppContext();
   const { activeUser: currentUser } = state;
+  const isActiveSubscription = Boolean(currentUser?.plan && currentUser.plan !== 'Free Flow');
+  const blockCheckoutMessage = currentUser?.cancellationPending
+    ? 'Seu cancelamento está em processamento. Aguarde concluir para assinar outro plano.'
+    : 'Para trocar de plano, cancele sua assinatura atual primeiro.';
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -431,6 +442,14 @@ const Subscriptions: React.FC = () => {
   };
 
   const handleStartCheckout = (plan: SubscriptionPlan) => {
+    if (!currentUser) return;
+
+    // ✅ Bloqueio enterprise: 1 assinatura ativa por vez
+    if (isActiveSubscription && plan?.name !== currentUser.plan) {
+      toast.error(blockCheckoutMessage);
+      return;
+    }
+
     setCheckoutPlan(plan);
     setIsCheckoutOpen(true);
     setCheckoutStatus(null);
@@ -467,6 +486,13 @@ const Subscriptions: React.FC = () => {
 
   const handleOpenPagbankCheckout = async () => {
     if (!currentUser || !checkoutPlan) return;
+
+    // ✅ Segunda barreira: impede checkout mesmo se modal abrir
+    if (isActiveSubscription && checkoutPlan?.name !== currentUser.plan) {
+      toast.error(blockCheckoutMessage);
+      return;
+    }
+
     try {
       setCheckoutError(null);
       setCheckoutStatus('Preparando checkout PagBank...');
@@ -647,16 +673,22 @@ const Subscriptions: React.FC = () => {
 
         {/* 2. PLANS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1500px] mx-auto items-stretch px-2 md:px-0 mb-24">
-            {plans.map(plan => (
+            {plans.map(plan => {
+              const isDifferentPlanWhileActive =
+                isActiveSubscription && plan.name !== currentUser.plan;
+
+              return (
                 <PlanCard 
                     key={plan.name} 
                     plan={plan} 
                     currentUser={currentUser} 
                     isCheckoutDisabled={isCheckoutOpen || isCheckoutSubmitting}
                     isCheckoutLoading={isCheckoutSubmitting && checkoutPlan?.name === plan.name}
+                    isDifferentPlanWhileActive={isDifferentPlanWhileActive}
                     onStartCheckout={handleStartCheckout}
                 />
-            ))}
+              );
+            })}
         </div>
 
         {/* 3. UNLOCK FEATURES SECTION */}
