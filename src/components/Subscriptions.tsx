@@ -460,6 +460,9 @@ const Subscriptions: React.FC = () => {
     sessionStorage.removeItem('aw_checkout_id');
     sessionStorage.removeItem('aw_reference_id');
 
+    // ✅ Flag para impedir auto-verify infinito
+    sessionStorage.removeItem('aw_auto_verify_key');
+
     // Se o usuário voltou do PagBank com params na URL, removemos para evitar re-disparar o efeito ao recarregar.
     try {
       const url = new URL(window.location.href);
@@ -577,14 +580,30 @@ const Subscriptions: React.FC = () => {
       checkoutSearchParams.get('reference_id') ?? sessionStorage.getItem('aw_reference_id');
 
     if (checkoutId && referenceId) {
-      // Evita disparar o loop de verificação múltiplas vezes para o mesmo checkout.
+      // Evita disparar o loop de verificação múltiplas vezes para o mesmo checkout (mesma sessão React).
       if (
         pendingCheckout?.checkoutId === checkoutId &&
         pendingCheckout?.referenceId === referenceId
       ) {
         return;
       }
+      const autoVerifyKey = `${checkoutId}:${referenceId}`;
+      const alreadyAutoVerified = sessionStorage.getItem('aw_auto_verify_key') === autoVerifyKey;
+
       setPendingCheckout({ checkoutId, referenceId });
+
+      // ✅ Enterprise: se já rodamos o verify automático para este checkout, NÃO rodar novamente ao recarregar.
+      if (alreadyAutoVerified) {
+        setVerificationState('timeout');
+        setVerificationMessage(
+          'Pagamento em processamento. Clique em “Verificar novamente” para tentar confirmar.'
+        );
+        return;
+      }
+
+      // Marca que este checkout já teve auto-verify 1x
+      sessionStorage.setItem('aw_auto_verify_key', autoVerifyKey);
+
       runCheckoutVerification(checkoutId, referenceId);
     }
   }, [checkoutSearchParams, currentUser, pendingCheckout, runCheckoutVerification]);
