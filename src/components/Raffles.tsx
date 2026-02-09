@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Raffle, RaffleTicket, User } from '../types';
+import type { Raffle, User } from '../types';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
@@ -671,8 +671,8 @@ const Raffles: React.FC = () => {
     const { activeUser } = state;
     
     const [raffles, setRaffles] = useState<Raffle[]>([]);
-    const [myTickets, setMyTickets] = useState<RaffleTicket[]>([]);
-    const [allTickets, setAllTickets] = useState<RaffleTicket[]>([]);
+    const [myTicketsByRaffle, setMyTicketsByRaffle] = useState<Record<string, number>>({});
+    const [totalTicketsByRaffle, setTotalTicketsByRaffle] = useState<Record<string, number>>({});
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [raffleToBuy, setRaffleToBuy] = useState<Raffle | null>(null);
@@ -721,8 +721,8 @@ const Raffles: React.FC = () => {
             // Update V1.0: Return highlightedRaffleId
             const data = await api.fetchRafflesData(activeUser.id);
             setRaffles(data.raffles);
-            setMyTickets(data.myTickets);
-            setAllTickets(data.allTickets);
+            setMyTicketsByRaffle(data.myTicketsByRaffle || {});
+            setTotalTicketsByRaffle(data.totalTicketsByRaffle || {});
             setAllUsers(data.allUsers);
             setHighlightedRaffleId(data.highlightedRaffleId); // V1.0
         } catch (error) {
@@ -934,8 +934,8 @@ const Raffles: React.FC = () => {
                     {featuredStandardRaffle ? (
                         <StandardRaffleHero
                             raffle={featuredStandardRaffle}
-                            myTickets={myTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
-                            totalTickets={allTickets.filter(t => t.raffleId === featuredStandardRaffle!.id).length}
+                            myTickets={myTicketsByRaffle[featuredStandardRaffle.id] || 0}
+                            totalTickets={totalTicketsByRaffle[featuredStandardRaffle.id] || 0}
                             userCoins={activeUser.coins}
                             onBuy={setRaffleToBuy}
                         />
@@ -979,11 +979,16 @@ const Raffles: React.FC = () => {
                             Mais de um evento ativo? Distribua seus tickets estrategicamente e aumente suas chances.
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {displayRaffles.map(raffle => {
-                                const myCount = myTickets.filter(t => t.raffleId === raffle.id).length;
-                                const totalCount = allTickets.filter(t => t.raffleId === raffle.id).length;
-                                return <TicketCard key={raffle.id} raffle={raffle} myTickets={myCount} totalTickets={totalCount} userCoins={activeUser.coins} onBuy={setRaffleToBuy} />;
-                            })}
+                            {displayRaffles.map((raffle) => (
+                                <TicketCard
+                                    key={raffle.id}
+                                    raffle={raffle}
+                                    myTickets={myTicketsByRaffle[raffle.id] || 0}
+                                    totalTickets={totalTicketsByRaffle[raffle.id] || 0}
+                                    userCoins={activeUser.coins}
+                                    onBuy={setRaffleToBuy}
+                                />
+                            ))}
                         </div>
                     </div>
                 )}
@@ -998,7 +1003,15 @@ const Raffles: React.FC = () => {
                     </div>
                 </div>
 
-                {raffleToBuy && <BuyTicketsModal raffle={raffleToBuy} myTicketCount={myTickets.filter(t => t.raffleId === raffleToBuy.id).length} userCoins={activeUser.coins} onClose={() => setRaffleToBuy(null)} onConfirm={handleBuyTickets} />}
+                {raffleToBuy && (
+                    <BuyTicketsModal
+                        raffle={raffleToBuy}
+                        myTicketCount={myTicketsByRaffle[raffleToBuy.id] || 0}
+                        userCoins={activeUser.coins}
+                        onClose={() => setRaffleToBuy(null)}
+                        onConfirm={handleBuyTickets}
+                    />
+                )}
             </div>
         </div>
     );
