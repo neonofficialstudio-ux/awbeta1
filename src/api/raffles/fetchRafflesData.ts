@@ -1,4 +1,4 @@
-import type { Raffle, RaffleTicket, User } from "../../types";
+import type { Raffle, User } from "../../types";
 import { config } from "../../core/config";
 import { withLatency } from "../helpers";
 import * as db from "../mockData";
@@ -52,61 +52,62 @@ const mapRaffleRowToApp = (r: any): Raffle => ({
   meta: r.meta ?? undefined,
 } as any);
 
-const mapTicketRowToApp = (t: any): RaffleTicket => ({
-  id: t.id,
-  raffleId: t.raffle_id,
-  userId: t.user_id,
-  purchasedAt: t.purchased_at || t.created_at,
-});
+type RafflesOverviewRow = {
+  id: string;
+  item_id: string | null;
+  item_name: string;
+  item_image_url: string | null;
+  ticket_price: number;
+  ticket_limit_per_user: number;
+  starts_at: string | null;
+  ends_at: string;
+  status: string;
+  winner_user_id: string | null;
+  winner_defined_at: string | null;
+  prize_type: string | null;
+  coin_reward: number | null;
+  custom_reward_text: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  meta: any;
+  total_tickets: number;
+  my_tickets: number;
+};
 
 export const fetchRafflesData = async (userId: string) => {
   // ✅ Supabase mode
   if (config.backendProvider === "supabase") {
     const supabase = requireSupabaseClient();
 
-    // 1) Raffles
-    const rafflesRes = await supabase
-      .from("raffles")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
+    // 1) Raffles + counts (1 RPC)
+    const { data, error } = await supabase.rpc("get_raffles_overview", { p_limit: 100 });
+    if (error) throw error;
 
-    // Se algum projeto tiver coluna is_highlighted e o select(*) não trouxer, não tem problema.
-    if (rafflesRes.error) throw rafflesRes.error;
-
-    const rafflesRaw = rafflesRes.data || [];
+    const rows: RafflesOverviewRow[] = Array.isArray(data) ? (data as any) : [];
+    const rafflesRaw = rows;
     const raffles: Raffle[] = rafflesRaw.map(mapRaffleRowToApp);
 
-    const raffleIds = raffles.map((r) => r.id).filter(Boolean);
+    // 2) Build counts maps
+    const totalTicketsByRaffle: Record<string, number> = {};
+    const myTicketsByRaffle: Record<string, number> = {};
 
-    // 2) Tickets (limitado aos raffles carregados)
-    const ticketsRes = await supabase
-      .from("raffle_tickets")
-      .select("*")
-      .in(
-        "raffle_id",
-        raffleIds.length ? raffleIds : ["00000000-0000-0000-0000-000000000000"]
-      )
-      .order("created_at", { ascending: false })
-      .limit(2000);
+    for (const r of rafflesRaw) {
+      if (!r?.id) continue;
+      totalTicketsByRaffle[r.id] = Number(r.total_tickets ?? 0);
+      myTicketsByRaffle[r.id] = Number(r.my_tickets ?? 0);
+    }
 
-    if (ticketsRes.error) throw ticketsRes.error;
-
-    const allTickets: RaffleTicket[] = (ticketsRes.data || []).map(mapTicketRowToApp);
-    const myTickets: RaffleTicket[] = allTickets.filter((t) => t.userId === userId);
-
-    // 3) Users (winners + ticket holders) — ✅ com cache TTL
-    const userIds = new Set<string>();
-    allTickets.forEach((t) => t.userId && userIds.add(t.userId));
-    raffles.forEach((r) => r.winnerId && userIds.add(r.winnerId));
-
-    const userIdsArr = Array.from(userIds).filter(Boolean);
+    // 3) Users (winners only) — ✅ com cache TTL
+    const winnerIds = Array.from(
+      new Set(raffles.map((r) => r.winnerId).filter(Boolean) as string[])
+    );
 
     // Primeiro tenta resolver tudo via cache
     const cachedUsers: User[] = [];
     const missingIds: string[] = [];
 
-    for (const id of userIdsArr) {
+    for (const id of winnerIds) {
       const cached = getCachedProfile(id);
       if (cached) cachedUsers.push(cached);
       else missingIds.push(id);
@@ -144,19 +145,34 @@ export const fetchRafflesData = async (userId: string) => {
 
     return {
       raffles,
-      myTickets,
-      allTickets,
       allUsers,
       highlightedRaffleId: highlighted,
+      myTicketsByRaffle,
+      totalTicketsByRaffle,
     };
   }
 
   // ✅ Fallback (mock/dev) — mantém compatibilidade
-  return withLatency(() => ({
-    raffles: db.rafflesData,
-    myTickets: db.raffleTicketsData.filter((t: any) => t.userId === userId),
-    allTickets: db.raffleTicketsData,
-    allUsers: repo.select("users"),
-    highlightedRaffleId: db.highlightedRaffleIdData,
-  }));
+  return withLatency(() => {
+    const allTickets = db.raffleTicketsData;
+    const myTickets = db.raffleTicketsData.filter((t: any) => t.userId === userId);
+
+    const myTicketsByRaffle: Record<string, number> = {};
+    const totalTicketsByRaffle: Record<string, number> = {};
+
+    for (const t of allTickets as any[]) {
+      totalTicketsByRaffle[t.raffleId] = (totalTicketsByRaffle[t.raffleId] || 0) + 1;
+    }
+    for (const t of myTickets as any[]) {
+      myTicketsByRaffle[t.raffleId] = (myTicketsByRaffle[t.raffleId] || 0) + 1;
+    }
+
+    return {
+      raffles: db.rafflesData,
+      allUsers: repo.select("users"),
+      highlightedRaffleId: db.highlightedRaffleIdData,
+      myTicketsByRaffle,
+      totalTicketsByRaffle,
+    };
+  });
 };
