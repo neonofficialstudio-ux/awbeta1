@@ -11,9 +11,11 @@ import { getDisplayName } from '../api/core/getDisplayName';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import { getSupabase } from '../api/supabase/client';
 import { hasCheckedInToday } from '../api/supabase/supabase.repositories';
+import { ProfileSupabase } from '../api/supabase/profile';
 import { fetchMyLedger, fetchMyNotifications, getMyCheckinStreak, getMyLevelProgress, markNotificationRead, type CheckinStreakInfo, type LevelProgress } from '../api/supabase/economy';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { calculateLevelFromXp, xpForLevelStart } from '../api/economy/economy';
+import { clearSessionCache } from '../lib/sessionCache';
 
 interface DashboardProps {
     onShowArtistOfTheDay: (id: string) => void;
@@ -394,8 +396,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [getTodayRefId]);
 
   useEffect(() => {
+    setLedgerEntries([]);
+    setNotificationsFeed([]);
+    setLevelProgress(null);
+    setCheckinStreakInfo(null);
+    dispatch({ type: 'SET_LEDGER', payload: [] });
+    dispatch({ type: 'CLEAR_NOTIFICATIONS' });
+    clearSessionCache();
     lastLoadRef.current = 0;
-  }, [user?.id]);
+  }, [user?.id, dispatch]);
 
   const notifications = notificationState;
   const ledger = Array.isArray(ledgerState) && ledgerState.length ? ledgerState : ledgerEntries;
@@ -549,6 +558,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
       }
     };
 
+    let lastProfileRefreshAt = 0;
+
+    const refetchProfileThrottled = async () => {
+      const now = Date.now();
+      if (now - lastProfileRefreshAt < 5000) return;
+      lastProfileRefreshAt = now;
+      try {
+        const profileRes = await ProfileSupabase.fetchMyProfile(userId, { bypassCache: true });
+        if (profileRes?.success && profileRes.user) {
+          dispatch({ type: 'UPDATE_USER', payload: profileRes.user });
+        }
+      } catch {}
+    };
+
     const refetchNotifications = async () => {
       const res = await fetchMyNotifications(20, { userId, bypassCache: true });
       if (!isActive) return;
@@ -571,6 +594,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         const list = res.ledger || [];
         setLedgerEntries(list);
         dispatch({ type: 'SET_LEDGER', payload: list });
+        await refetchProfileThrottled();
       }
     };
 
@@ -743,22 +767,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [isSupabase, user?.id, checkInDone, checkedIn, getTodayRefId, markCheckInDoneForToday]);
 
   const handleDailyCheckIn = useCallback(async () => {
-    if (!user || checkInLoading || checkInDone || isCheckInStatusLoading) return; 
+    if (!user?.id || checkInLoading || checkInDone || isCheckInStatusLoading) return;
     setCheckInLoading(true);
     Perf.mark('check_in_action');
     try {
+        clearSessionCache();
+        lastLoadRef.current = 0;
+
         const api = await import('../api/index');
         const response = await api.dailyCheckIn(user.id);
 
-        if (response?.notifications?.length) {
-            dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
-        }
-
         if (response?.updatedUser) {
             dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
-        } else {
-            // 🔁 Garante atualização de streak, coins, xp e level
-            await refreshAfterEconomyAction(user.id, dispatch);
+        }
+
+        const refreshed = await refreshAfterEconomyAction(user.id, dispatch);
+        if (refreshed?.ledger?.length) {
+            setLedgerEntries(refreshed.ledger);
+            setData(prev => prev ? { ...prev, ledger: refreshed.ledger } : prev);
+        }
+        if (refreshed?.notifications?.length) {
+            setNotificationsFeed(refreshed.notifications);
         }
 
         dispatch({
@@ -771,22 +800,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             }
         });
 
-        if (response?.ledger?.length) {
-            setLedgerEntries(response.ledger);
-            setData(prev => prev ? { ...prev, ledger: response.ledger } : prev);
-            dispatch({ type: 'SET_LEDGER', payload: response.ledger });
-        } else {
-            // 🔁 Garante atualização de streak, coins, xp e level
-            const refreshed = await refreshAfterEconomyAction(user.id, dispatch);
-            if (refreshed.ledger?.length) {
-                setLedgerEntries(refreshed.ledger);
-                setData(prev => prev ? { ...prev, ledger: refreshed.ledger } : prev);
-                dispatch({ type: 'SET_LEDGER', payload: refreshed.ledger });
-            }
-        }
-
         markCheckInDoneForToday();
-        await fetchData(true);
     } catch (e) { 
         console.error(e); 
         dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
@@ -794,7 +808,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setCheckInLoading(false); 
         Perf.end('check_in_action');
     }
-  }, [user, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday, fetchData]);
+  }, [user?.id, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday]);
 
   if (isLoading || !user) {
     return (

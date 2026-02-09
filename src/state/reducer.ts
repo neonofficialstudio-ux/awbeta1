@@ -133,6 +133,9 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       const current = Array.isArray(state.notifications) ? state.notifications : [];
       return { ...state, notifications: [...incoming, ...current] };
     }
+    case 'CLEAR_NOTIFICATIONS': {
+      return { ...state, notifications: [] };
+    }
     case 'SET_LEDGER': {
       const incoming = Array.isArray(action.payload) ? action.payload : [];
       return { ...state, ledger: incoming };
