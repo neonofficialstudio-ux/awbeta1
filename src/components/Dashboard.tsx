@@ -389,6 +389,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const lastUserIdRef = useRef<string | null>(null);
   const lastCheckInDayRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<any>(null);
+  const lastRealtimeLedgerReconcileAtRef = useRef<number>(0);
+  const lastRealtimeNotifReconcileAtRef = useRef<number>(0);
+  const REALTIME_RECONCILE_MIN_INTERVAL_MS = 20_000;
+
+  const safePrependUniqueById = useCallback(<T extends { id?: any }>(list: T[], item: T) => {
+    const id = (item as any)?.id;
+    if (!id) return list;
+    if (list.some((x) => (x as any)?.id === id)) return list;
+    return [item, ...list];
+  }, []);
 
   const getTodayRefId = useCallback(() => new Date().toISOString().split('T')[0], []);
 
@@ -628,13 +638,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           table: 'notifications',
           filter: `user_id=eq.${userId}`,
         },
-        async () => {
-          // novo evento de feed -> debounce refetch notifications
+        async (payload: any) => {
+          const row = payload?.new;
+          if (row?.id) {
+            setNotificationsFeed((prev) => safePrependUniqueById(Array.isArray(prev) ? prev : [], row));
+            dispatch({ type: 'ADD_NOTIFICATIONS', payload: [row] });
+          }
+
           schedule('notif', async () => {
+            const now = Date.now();
+            if (now - lastRealtimeNotifReconcileAtRef.current < REALTIME_RECONCILE_MIN_INTERVAL_MS) return;
+            lastRealtimeNotifReconcileAtRef.current = now;
             try {
               await refetchNotifications();
             } catch (e) {
-              console.warn('[Dashboard Realtime] notifications refetch failed', e);
+              console.warn('[Dashboard Realtime] notifications reconcile failed', e);
             }
           });
         }
@@ -647,13 +665,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           table: 'economy_ledger',
           filter: `user_id=eq.${userId}`,
         },
-        async () => {
-          // novo ledger -> debounce refetch ledger (saldo/XP refletem)
+        async (payload: any) => {
+          const row = payload?.new;
+
+          if (row?.id) {
+            setLedgerEntries((prev) => safePrependUniqueById(Array.isArray(prev) ? prev : [], row));
+            dispatch({
+              type: 'SET_LEDGER',
+              payload: safePrependUniqueById(
+                Array.isArray(ledgerState) ? ledgerState : [],
+                row
+              ),
+            });
+            try {
+              await refetchProfileThrottled();
+            } catch {}
+          }
+
           schedule('ledger', async () => {
+            const now = Date.now();
+            if (now - lastRealtimeLedgerReconcileAtRef.current < REALTIME_RECONCILE_MIN_INTERVAL_MS) return;
+            lastRealtimeLedgerReconcileAtRef.current = now;
             try {
               await refetchLedger();
             } catch (e) {
-              console.warn('[Dashboard Realtime] ledger refetch failed', e);
+              console.warn('[Dashboard Realtime] ledger reconcile failed', e);
             }
           });
         }
@@ -679,7 +715,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         realtimeChannelRef.current = null;
       }
     };
-  }, [isSupabase, user?.id, dispatch]);
+  }, [isSupabase, user?.id, dispatch, ledgerState]);
 
   useEffect(() => {
     if (!Array.isArray(notifications) || notifications.length === 0) {
@@ -807,9 +843,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         if (refreshed?.ledger?.length) {
             setLedgerEntries(refreshed.ledger);
             setData(prev => prev ? { ...prev, ledger: refreshed.ledger } : prev);
+            dispatch({ type: 'SET_LEDGER', payload: refreshed.ledger });
         }
         if (refreshed?.notifications?.length) {
             setNotificationsFeed(refreshed.notifications);
+        }
+
+        try {
+            const streakRes = await getMyCheckinStreak({ userId: user.id, bypassCache: true });
+            if (streakRes?.success) {
+                setCheckinStreakInfo(streakRes.data);
+            }
+        } catch {
+            // noop
         }
 
         dispatch({
@@ -831,7 +877,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         restoreScroll();
         Perf.end('check_in_action');
     }
-  }, [user?.id, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday]);
+  }, [user?.id, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday, restoreScroll]);
 
   if (isLoading || !user) {
     return (
