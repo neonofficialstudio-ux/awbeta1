@@ -5,7 +5,7 @@ import type { Repository } from '../database/repository.factory';
 import { config } from '../../core/config';
 import { SanityGuard } from '../../services/sanity.guard';
 import type { User } from '../../types';
-import { cached } from '../../lib/sessionCache';
+import { getOrSetCache } from '../../lib/sessionCache';
 
 // Helper para garantir que o cliente existe
 const getClient = () => {
@@ -20,13 +20,14 @@ export async function dailyCheckin() {
     return data;
 }
 
-export async function hasCheckedInToday(userId: string) {
+export async function hasCheckedInToday(userId: string, opts?: { bypassCache?: boolean }) {
     const supabase = getClient();
 
-    const { data, error } = await cached(
+    const { data, error } = await getOrSetCache(
         `checked_in:${userId}`,
-        () => supabase.rpc('has_checked_in_today', { p_user_id: userId }),
         60_000,
+        () => supabase.rpc('has_checked_in_today', { p_user_id: userId }),
+        { bypass: opts?.bypassCache },
     );
 
     if (error) {

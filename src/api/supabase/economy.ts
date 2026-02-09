@@ -2,7 +2,7 @@ import { supabaseClient } from './client';
 import { config } from '../../core/config';
 import type { LedgerEntry, TransactionSource, TransactionType, AWNotification, RankingUser, NotificationType } from '../../types';
 import { normalizePlan } from '../subscriptions/normalizePlan';
-import { cached } from '../../lib/sessionCache';
+import { getOrSetCache } from '../../lib/sessionCache';
 
 export type LevelProgress = {
     pct: number;
@@ -118,15 +118,21 @@ const normalizeLeaderboardEntry = (row: any, index: number): RankingUser => {
   };
 };
 
-export const fetchMyLedger = async (limit = 20, offset = 0) => {
+export const fetchMyLedger = async (
+    limit = 20,
+    offset = 0,
+    opts?: { userId?: string; bypassCache?: boolean },
+) => {
     const supabase = ensureClient();
     if (!supabase) return { success: false as const, ledger: [] as LedgerEntry[], error: 'Supabase client not available' };
+    const cacheKey = `ledger:${opts?.userId ?? 'me'}:${limit}:${offset}`;
 
     try {
-        const { data, error } = await cached(
-            `my_ledger:${limit}:${offset}`,
-            () => supabase.rpc('get_my_ledger', { p_limit: limit, p_offset: offset }),
+        const { data, error } = await getOrSetCache(
+            cacheKey,
             30_000,
+            () => supabase.rpc('get_my_ledger', { p_limit: limit, p_offset: offset }),
+            { bypass: opts?.bypassCache },
         );
         if (error) throw error;
 
@@ -154,17 +160,18 @@ const normalizeLevelProgress = (payload: any): LevelProgress => {
     };
 };
 
-export const getMyLevelProgress = async () => {
+export const getMyLevelProgress = async (opts?: { userId?: string; bypassCache?: boolean }) => {
     const supabase = ensureClient();
     if (!supabase) {
         return { success: false as const, progress: null as LevelProgress | null, error: 'Supabase client not available' };
     }
 
     try {
-        const { data, error } = await cached(
-            'my_level_progress',
-            () => supabase.rpc('get_my_level_progress'),
+        const { data, error } = await getOrSetCache(
+            `level-progress:${opts?.userId ?? 'me'}`,
             30_000,
+            () => supabase.rpc('get_my_level_progress'),
+            { bypass: opts?.bypassCache },
         );
         if (error) throw error;
 
@@ -183,17 +190,18 @@ export const getMyLevelProgress = async () => {
     }
 };
 
-export const getMyCheckinStreak = async () => {
+export const getMyCheckinStreak = async (opts?: { userId?: string; bypassCache?: boolean }) => {
     const supabase = ensureClient();
     if (!supabase) {
         return { success: false as const, data: null as CheckinStreakInfo | null, error: 'Supabase client not available' };
     }
 
     try {
-        const { data, error } = await cached(
-            'my_checkin_streak',
-            () => supabase.rpc('get_my_checkin_streak'),
+        const { data, error } = await getOrSetCache(
+            `checkin-streak:${opts?.userId ?? 'me'}`,
             30_000,
+            () => supabase.rpc('get_my_checkin_streak'),
+            { bypass: opts?.bypassCache },
         );
         if (error) throw error;
 
@@ -213,15 +221,16 @@ export const getMyCheckinStreak = async () => {
     }
 };
 
-export const fetchMyNotifications = async (limit = 20) => {
+export const fetchMyNotifications = async (limit = 20, opts?: { userId?: string; bypassCache?: boolean }) => {
     const supabase = ensureClient();
     if (!supabase) return { success: false as const, notifications: [] as AWNotification[], error: 'Supabase client not available' };
 
     try {
-        const { data, error } = await cached(
-            `my_notifications:${limit}`,
-            () => supabase.rpc('get_my_notifications', { p_limit: limit }),
+        const { data, error } = await getOrSetCache(
+            `notifications:${opts?.userId ?? 'me'}:${limit}`,
             30_000,
+            () => supabase.rpc('get_my_notifications', { p_limit: limit }),
+            { bypass: opts?.bypassCache },
         );
         if (error) throw error;
 

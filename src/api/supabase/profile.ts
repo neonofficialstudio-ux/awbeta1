@@ -3,6 +3,7 @@ import { config } from '../../core/config';
 import { getSupabase } from './client';
 import { mapProfileToUser } from './mappings';
 import { SanityGuard } from '../../services/sanity.guard';
+import { getOrSetCache, setToCache } from '../../lib/sessionCache';
 
 const buildProfileMeta = (user: Partial<User>) => {
     const meta: Record<string, any> = {};
@@ -34,23 +35,13 @@ const sanitizeMeta = (meta: any) => {
     return clone;
 };
 
-// ---------------------------------------------------------------------------
-// ✅ Cache leve para evitar múltiplos SELECTs do mesmo perfil em sequência
-// (reduz egress e reduz spam de rede em re-render)
-// ---------------------------------------------------------------------------
 const PROFILE_CACHE_TTL_MS = 15_000; // 15s (curto para manter UI atualizada)
-let profileCache: {
-    userId: string;
-    fetchedAt: number;
-    user?: User;
-    inFlight?: Promise<{ success: boolean; user?: User; error?: string }>;
-} = {
-    userId: '',
-    fetchedAt: 0,
-};
 
 export const ProfileSupabase = {
-    async fetchMyProfile(userId?: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    async fetchMyProfile(
+        userId?: string,
+        opts?: { bypassCache?: boolean },
+    ): Promise<{ success: boolean; user?: User; error?: string }> {
         if (config.backendProvider !== 'supabase') {
             return { success: false, error: 'Supabase provider is not enabled' };
         }
@@ -69,82 +60,62 @@ export const ProfileSupabase = {
             targetUserId = authData.user.id;
         }
 
-        const now = Date.now();
-        if (profileCache.user && profileCache.userId === targetUserId && now - profileCache.fetchedAt < PROFILE_CACHE_TTL_MS) {
-            return { success: true, user: profileCache.user };
-        }
-
-        if (profileCache.inFlight && profileCache.userId === targetUserId) {
-            return profileCache.inFlight;
-        }
-
-        const promise = (async () => {
-            const selectFields = [
-                'id',
-                'display_name',
-                'artistic_name',
-                'name',
-                'avatar_url',
-                'coins',
-                'xp',
-                'level',
-                'plan',
-                'monthly_missions_completed',
-                'monthly_xp',
-                'monthly_level',
-                'meta',
-                'created_at',
-                'updated_at',
-            ].join(',');
-
-            const { data, error } = await supabase
-                .from('profiles')
-                .select(selectFields)
-                .eq('id', targetUserId)
-                .single();
-
-            if (error || !data) {
-                return { success: false, error: error?.message || 'Perfil não encontrado' };
-            }
-
-            // Buscar estado de assinatura (cancelamento agendado, expiração)
-            const { data: subData, error: subError } = await supabase
-                .from('subscriptions')
-                .select('cancel_at_period_end,current_period_end,status,plan')
-                .eq('user_id', targetUserId)
-                .maybeSingle();
-
-            if (subError) console.warn('[ProfileSupabase] subscriptions lookup failed', subError.message);
-
-            const mapped = mapProfileToUser(data);
-            const hydrated = {
-                ...mapped,
-                cancellationPending: Boolean(subData?.cancel_at_period_end),
-                subscriptionExpiresAt: subData?.current_period_end ?? undefined,
-            } as User;
-            const user = SanityGuard.user(hydrated);
-
-            profileCache = {
-                userId: targetUserId!,
-                fetchedAt: Date.now(),
-                user,
-            };
-
-            return { success: true, user };
-        })();
-
-        profileCache = {
-            ...profileCache,
-            userId: targetUserId,
-            inFlight: promise,
-        };
-
         try {
-            return await promise;
-        } finally {
-            if (profileCache.userId === targetUserId) {
-                profileCache.inFlight = undefined;
-            }
+            return await getOrSetCache(
+                `profile:${targetUserId}`,
+                PROFILE_CACHE_TTL_MS,
+                async () => {
+                    const selectFields = [
+                        'id',
+                        'display_name',
+                        'artistic_name',
+                        'name',
+                        'avatar_url',
+                        'coins',
+                        'xp',
+                        'level',
+                        'plan',
+                        'monthly_missions_completed',
+                        'monthly_xp',
+                        'monthly_level',
+                        'meta',
+                        'created_at',
+                        'updated_at',
+                    ].join(',');
+
+                    const { data, error } = await supabase
+                        .from('profiles')
+                        .select(selectFields)
+                        .eq('id', targetUserId)
+                        .single();
+
+                    if (error || !data) {
+                        throw new Error(error?.message || 'Perfil não encontrado');
+                    }
+
+                    // Buscar estado de assinatura (cancelamento agendado, expiração)
+                    const { data: subData, error: subError } = await supabase
+                        .from('subscriptions')
+                        .select('cancel_at_period_end,current_period_end,status,plan')
+                        .eq('user_id', targetUserId)
+                        .maybeSingle();
+
+                    if (subError) console.warn('[ProfileSupabase] subscriptions lookup failed', subError.message);
+
+                    const mapped = mapProfileToUser(data);
+                    const hydrated = {
+                        ...mapped,
+                        cancellationPending: Boolean(subData?.cancel_at_period_end),
+                        subscriptionExpiresAt: subData?.current_period_end ?? undefined,
+                    } as User;
+                    const user = SanityGuard.user(hydrated);
+
+                    return { success: true, user };
+                },
+                { bypass: opts?.bypassCache },
+            );
+        } catch (err: any) {
+            return { success: false, error: err?.message || 'Perfil não encontrado' };
         }
     },
     async updateMyProfile(user: User): Promise<{ success: boolean; updatedUser?: User; error?: string }> {
@@ -196,13 +167,7 @@ export const ProfileSupabase = {
         const mapped = mapProfileToUser(hydratedProfile);
         const updatedUser = SanityGuard.user(mapped);
 
-        if (profileCache.userId === updatedUser.id) {
-            profileCache = {
-                userId: updatedUser.id,
-                fetchedAt: Date.now(),
-                user: updatedUser,
-            };
-        }
+        setToCache(`profile:${authData.user.id}`, { success: true, user: updatedUser }, PROFILE_CACHE_TTL_MS);
 
         return { success: true, updatedUser };
     }

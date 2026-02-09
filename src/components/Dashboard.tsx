@@ -431,10 +431,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             setIsNotificationsLoading(true);
             const shouldFetchLedger = force || !Array.isArray(ledgerState) || ledgerState.length === 0;
             const [ledgerResponse, notificationsResponse, levelProgressResponse, checkinStreakResponse] = await Promise.all([
-                shouldFetchLedger ? fetchMyLedger(20, 0) : Promise.resolve({ success: true, ledger: ledgerState }),
-                fetchMyNotifications(20),
-                getMyLevelProgress(),
-                getMyCheckinStreak(),
+                shouldFetchLedger
+                    ? fetchMyLedger(20, 0, { userId: user.id, bypassCache: force })
+                    : Promise.resolve({ success: true, ledger: ledgerState }),
+                fetchMyNotifications(20, { userId: user.id, bypassCache: force }),
+                getMyLevelProgress({ userId: user.id, bypassCache: force }),
+                getMyCheckinStreak({ userId: user.id, bypassCache: force }),
             ]);
 
             const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
@@ -548,7 +550,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     };
 
     const refetchNotifications = async () => {
-      const res = await fetchMyNotifications(20);
+      const res = await fetchMyNotifications(20, { userId, bypassCache: true });
       if (!isActive) return;
       if (res.success) {
         const list = res.notifications || [];
@@ -563,7 +565,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     };
 
     const refetchLedger = async () => {
-      const res = await fetchMyLedger(20, 0);
+      const res = await fetchMyLedger(20, 0, { userId, bypassCache: true });
       if (!isActive) return;
       if (res.success) {
         const list = res.ledger || [];
@@ -717,7 +719,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         setCheckInLoading(true);
         try {
             const todayRefId = getTodayRefId();
-            const ledgerResponse = await fetchMyLedger(1, 0);
+            const ledgerResponse = await fetchMyLedger(1, 0, { userId: user.id, bypassCache: true });
             if (!ledgerResponse.success) return;
 
             const sortedLedger = [...ledgerResponse.ledger].sort((a, b) => b.timestamp - a.timestamp);

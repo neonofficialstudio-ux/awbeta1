@@ -1,6 +1,6 @@
 import { supabaseClient } from './client';
 import { config } from '../../core/config';
-import { cached } from '../../lib/sessionCache';
+import { getOrSetCache } from '../../lib/sessionCache';
 
 const ensureClient = () => {
     if (config.backendProvider !== 'supabase') return null;
@@ -16,7 +16,7 @@ export const isAdmin = async (): Promise<boolean> => {
     if (!supabase) return false;
 
     try {
-        const { data, error } = await cached('is_admin', () => supabase.rpc('is_admin'));
+        const { data, error } = await getOrSetCache('is_admin', 60_000, () => supabase.rpc('is_admin'));
         if (error) throw error;
 
         if (typeof data === 'boolean') return data;
