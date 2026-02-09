@@ -7,6 +7,25 @@ import { getSupabase } from "../supabase/client";
 import { SanityGuard } from "../../services/sanity.guard";
 import { mapProfileToUser } from "../supabase/mappings";
 
+// ✅ Cache simples em memória (TTL) para profiles usados em Raffles
+type CachedProfile = { user: User; expiresAt: number };
+const PROFILES_CACHE_TTL_MS = 5 * 60_000; // 5 minutos
+const profilesCache = new Map<string, CachedProfile>();
+
+function getCachedProfile(id: string): User | null {
+  const entry = profilesCache.get(id);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    profilesCache.delete(id);
+    return null;
+  }
+  return entry.user;
+}
+
+function setCachedProfile(id: string, user: User) {
+  profilesCache.set(id, { user, expiresAt: Date.now() + PROFILES_CACHE_TTL_MS });
+}
+
 const repo = getRepository();
 
 const requireSupabaseClient = () => {
@@ -76,27 +95,45 @@ export const fetchRafflesData = async (userId: string) => {
     const allTickets: RaffleTicket[] = (ticketsRes.data || []).map(mapTicketRowToApp);
     const myTickets: RaffleTicket[] = allTickets.filter((t) => t.userId === userId);
 
-    // 3) Users (winners + ticket holders)
+    // 3) Users (winners + ticket holders) — ✅ com cache TTL
     const userIds = new Set<string>();
-    allTickets.forEach((t) => userIds.add(t.userId));
+    allTickets.forEach((t) => t.userId && userIds.add(t.userId));
     raffles.forEach((r) => r.winnerId && userIds.add(r.winnerId));
 
-    const userIdsArr = Array.from(userIds);
-    let allUsers: User[] = [];
+    const userIdsArr = Array.from(userIds).filter(Boolean);
 
-    if (userIdsArr.length) {
+    // Primeiro tenta resolver tudo via cache
+    const cachedUsers: User[] = [];
+    const missingIds: string[] = [];
+
+    for (const id of userIdsArr) {
+      const cached = getCachedProfile(id);
+      if (cached) cachedUsers.push(cached);
+      else missingIds.push(id);
+    }
+
+    let fetchedUsers: User[] = [];
+
+    if (missingIds.length) {
       const profilesRes = await supabase
         .from("profiles")
         .select("*")
-        .in("id", userIdsArr)
+        .in("id", missingIds)
         .limit(500);
 
       if (profilesRes.error) throw profilesRes.error;
 
-      allUsers = (profilesRes.data || []).map((p: any) =>
+      fetchedUsers = (profilesRes.data || []).map((p: any) =>
         SanityGuard.user(mapProfileToUser(p))
       );
+
+      // grava no cache
+      for (const u of fetchedUsers) {
+        if (u?.id) setCachedProfile(u.id, u);
+      }
     }
+
+    const allUsers: User[] = [...cachedUsers, ...fetchedUsers];
 
     // 4) Highlight (opcional)
     // Se existir meta.is_highlighted ou coluna is_highlighted em alguns projetos, tenta detectar:

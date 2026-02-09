@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Raffle, RaffleTicket, User } from '../types';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { useAppContext } from '../constants';
@@ -676,13 +676,57 @@ const Raffles: React.FC = () => {
     const [raffleToBuy, setRaffleToBuy] = useState<Raffle | null>(null);
     const [highlightedRaffleId, setHighlightedRaffleId] = useState<string | null>(null); // V1.0
 
-    // Fetch Data
-    const fetchData = useCallback(async () => {
+    const pollTimerRef = useRef<number | null>(null);
+    const inFlightRef = useRef(false);
+    const stableCyclesRef = useRef(0);
+    const lastSignatureRef = useRef<string>('');
+
+    const clearPollTimer = () => {
+        if (pollTimerRef.current) {
+            window.clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    };
+
+    const computeSignature = (data: {
+        raffles: any[];
+        allTickets: any[];
+        highlightedRaffleId: any;
+    }) => {
+        const r0 = data.raffles?.[0];
+        const t0 = data.allTickets?.[0];
+        return [
+            data.raffles?.length ?? 0,
+            r0?.updatedAt ?? r0?.updated_at ?? r0?.createdAt ?? r0?.created_at ?? '',
+            data.allTickets?.length ?? 0,
+            t0?.createdAt ?? t0?.created_at ?? '',
+            data.highlightedRaffleId ?? '',
+        ].join('|');
+    };
+
+    const scheduleNextPoll = (ms: number) => {
+        clearPollTimer();
+        pollTimerRef.current = window.setTimeout(() => {
+            void fetchDataAdaptive();
+        }, ms);
+    };
+
+    // Fetch Data (adaptive polling)
+    const fetchDataAdaptive = useCallback(async () => {
         if (!activeUser) return;
+
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            scheduleNextPoll(30_000);
+            return;
+        }
+
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
+
         try {
             // Self-Healing: Run Status Check on Fetch
-            RaffleEngineV2.checkRaffleTimers(); 
-            
+            RaffleEngineV2.checkRaffleTimers();
+
             // Update V1.0: Return highlightedRaffleId
             const data = await api.fetchRafflesData(activeUser.id);
             setRaffles(data.raffles);
@@ -690,18 +734,51 @@ const Raffles: React.FC = () => {
             setAllTickets(data.allTickets);
             setAllUsers(data.allUsers);
             setHighlightedRaffleId(data.highlightedRaffleId); // V1.0
+
+            const sig = computeSignature({
+                raffles: data.raffles,
+                allTickets: data.allTickets,
+                highlightedRaffleId: data.highlightedRaffleId,
+            });
+
+            const changed = sig !== lastSignatureRef.current;
+            if (changed) {
+                lastSignatureRef.current = sig;
+                stableCyclesRef.current = 0;
+                scheduleNextPoll(15_000);
+            } else {
+                stableCyclesRef.current += 1;
+                const next =
+                    stableCyclesRef.current >= 6 ? 60_000 :
+                    stableCyclesRef.current >= 3 ? 30_000 :
+                    15_000;
+                scheduleNextPoll(next);
+            }
         } catch (error) {
             console.error("Failed to fetch raffles:", error);
+            scheduleNextPoll(60_000);
         } finally {
+            inFlightRef.current = false;
             setIsLoading(false);
         }
-    }, [activeUser, dispatch]);
+    }, [activeUser]);
 
     useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 15000); // Poll every 15s for status updates
-        return () => { clearInterval(interval); };
-    }, [fetchData, activeUser, dispatch]);
+        void fetchDataAdaptive();
+
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                stableCyclesRef.current = 0;
+                scheduleNextPoll(1_000);
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            clearPollTimer();
+        };
+    }, [fetchDataAdaptive]);
 
     const handleBuyTickets = async (quantity: number) => {
         if (!activeUser || !raffleToBuy) return;
@@ -716,7 +793,7 @@ const Raffles: React.FC = () => {
             const response = await api.buyRaffleTickets(activeUser.id, raffleToBuy.id, quantity);
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
-            await fetchData();
+            await fetchDataAdaptive();
             // 🔁 Fonte da verdade: Supabase
             // Sempre refetch após economia
             await refreshAfterEconomyAction(activeUser.id, dispatch);
