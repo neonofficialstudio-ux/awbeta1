@@ -1,11 +1,12 @@
 import { StatisticsEngine } from "../../services/statistics.engine";
-import { cached } from "../../lib/sessionCache";
+import { getOrSetCache } from "../../lib/sessionCache";
 import { config } from "../../core/config";
 import { getSupabase } from "../supabase/client";
 
 const adminDashboardData = () =>
-  cached(
+  getOrSetCache(
     'admin_dashboard',
+    30_000,
     async () => {
     const supabase = getSupabase();
     if (!supabase) throw new Error('Supabase client not initialized');
@@ -26,8 +27,7 @@ const adminDashboardData = () =>
         missions_active: missions.count ?? 0,
         queue_size: queue.count ?? 0,
       };
-    },
-    30_000
+    }
   );
 
 export async function adminAnalyticsAPI() {

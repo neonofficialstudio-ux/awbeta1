@@ -9,7 +9,7 @@ export async function refreshAfterEconomyAction(userId: string, dispatch: Dispat
   // 1) Profile (coins/xp/level) — determinístico
   let updatedUser: any = null;
   try {
-    const profileRes = await ProfileSupabase.fetchMyProfile(userId);
+    const profileRes = await ProfileSupabase.fetchMyProfile(userId, { bypassCache: true });
     if (profileRes?.success && profileRes.user) {
       updatedUser = profileRes.user;
       dispatch({ type: 'UPDATE_USER', payload: profileRes.user });
@@ -19,7 +19,7 @@ export async function refreshAfterEconomyAction(userId: string, dispatch: Dispat
   // 2) Notifications — não pode quebrar
   let notifications: any[] = [];
   try {
-    const nRes: any = await fetchMyNotifications(20);
+    const nRes: any = await fetchMyNotifications(20, { userId, bypassCache: true });
     notifications = nRes?.success && Array.isArray(nRes.notifications) ? nRes.notifications : [];
     if (notifications.length) {
       dispatch({ type: 'ADD_NOTIFICATIONS', payload: notifications });
@@ -29,7 +29,7 @@ export async function refreshAfterEconomyAction(userId: string, dispatch: Dispat
   // 3) Ledger — retorno para páginas que precisem atualizar UI local
   let ledger: any[] = [];
   try {
-    const lRes: any = await fetchMyLedger(20, 0);
+    const lRes: any = await fetchMyLedger(20, 0, { userId, bypassCache: true });
     ledger = lRes?.success && Array.isArray(lRes.ledger) ? lRes.ledger : [];
     dispatch({ type: 'SET_LEDGER', payload: ledger });
   } catch {}

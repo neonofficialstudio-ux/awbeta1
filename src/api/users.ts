@@ -58,7 +58,7 @@ export const login = (email: string, password: string) => withLatency(async () =
                 joined_at: data.user?.created_at
             });
 
-            const notificationsResponse = await fetchMyNotifications(20);
+            const notificationsResponse = await fetchMyNotifications(20, { userId });
 
             return {
                 user: SanityGuard.user(user),
@@ -168,8 +168,8 @@ export const dailyCheckIn = (userId: string) => withLatency(async () => {
 
         const updatedUser = SanityGuard.user(mapProfileToUser(profileData as ProfileSupabase));
 
-        const ledgerResponse = await fetchMyLedger(10, 0);
-        const notificationsResponse = await fetchMyNotifications(20);
+        const ledgerResponse = await fetchMyLedger(10, 0, { userId, bypassCache: true });
+        const notificationsResponse = await fetchMyNotifications(20, { userId, bypassCache: true });
 
         return { 
             updatedUser,
@@ -378,12 +378,12 @@ export const cancelSubscription = (userId: string) => withLatency(() => {
             if (fnErr) throw new Error(fnErr.message || 'Falha ao cancelar no PagBank');
             if ((data as any)?.error) throw new Error((data as any)?.error);
 
-            const profileResp = await ProfileSupabase.fetchMyProfile(userId);
+            const profileResp = await ProfileSupabase.fetchMyProfile(userId, { bypassCache: true });
             if (!profileResp.success || !profileResp.user) {
                 throw new Error(profileResp.error || 'Falha ao recarregar perfil');
             }
 
-            const notifsResp = await fetchMyNotifications(20);
+            const notifsResp = await fetchMyNotifications(20, { userId, bypassCache: true });
 
             return {
                 updatedUser: profileResp.user,
@@ -411,12 +411,12 @@ export const undoCancelSubscription = (userId: string) => withLatency(async () =
         const { error } = await supabase.rpc('undo_cancel_subscription');
         if (error) throw new Error(error.message || 'Falha ao desfazer cancelamento');
 
-        const profileResp = await ProfileSupabase.fetchMyProfile(userId);
+        const profileResp = await ProfileSupabase.fetchMyProfile(userId, { bypassCache: true });
         if (!profileResp.success || !profileResp.user) {
             throw new Error(profileResp.error || 'Falha ao recarregar perfil');
         }
 
-        const notifsResp = await fetchMyNotifications(20);
+        const notifsResp = await fetchMyNotifications(20, { userId, bypassCache: true });
         return {
             updatedUser: profileResp.user,
             notifications: notifsResp.success ? notifsResp.notifications : [],
