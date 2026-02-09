@@ -382,6 +382,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState<boolean | null>(null);
   const isCheckInStatusLoading = isSupabase && checkedIn === null;
+  const hasInitialLoadedRef = useRef(false);
+  const lastKnownScrollYRef = useRef<number | null>(null);
   const lastLoadRef = useRef<number>(0);
   const CACHE_TTL_MS = 30_000; // 30s
   const lastUserIdRef = useRef<string | null>(null);
@@ -389,6 +391,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   const realtimeChannelRef = useRef<any>(null);
 
   const getTodayRefId = useCallback(() => new Date().toISOString().split('T')[0], []);
+
+  const restoreScroll = () => {
+    const y = lastKnownScrollYRef.current;
+    if (typeof y !== 'number') return;
+
+    // 2 RAFs = depois do React commit + paint
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, left: 0 });
+      });
+    });
+  };
 
   const markCheckInDoneForToday = useCallback(() => {
     lastCheckInDayRef.current = getTodayRefId();
@@ -432,7 +446,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
     }
     lastLoadRef.current = now;
 
-    setIsLoading(true);
+    // Só mostra loading no primeiro carregamento real do Dashboard
+    if (!hasInitialLoadedRef.current) {
+        setIsLoading(true);
+    }
     setError(null);
     try {
         if (isSupabase) {
@@ -507,6 +524,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         console.error("Failed to fetch dashboard data:", error);
         setError("Não foi possível carregar os dados do dashboard.");
     } finally {
+        // Depois do primeiro load, nunca mais “pisca” loading
+        hasInitialLoadedRef.current = true;
         setIsLoading(false);
         setIsLedgerLoading(false);
         setIsNotificationsLoading(false);
@@ -515,8 +534,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [user, isSupabase, notificationState, ledgerState, dispatch, onShowArtistOfTheDay]);
 
   useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+    // Recarrega quando muda o usuário logado (troca de conta), não quando o fetchData é recriado
+    void fetchData(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // =====================================================
   // Realtime (Supabase): notifications + economy_ledger
@@ -768,6 +789,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
   const handleDailyCheckIn = useCallback(async () => {
     if (!user?.id || checkInLoading || checkInDone || isCheckInStatusLoading) return;
+    lastKnownScrollYRef.current = window.scrollY;
     setCheckInLoading(true);
     Perf.mark('check_in_action');
     try {
@@ -805,7 +827,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         console.error(e); 
         dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'error', title: 'Erro no check-in', message: 'Não foi possível concluir o check-in.' } });
     } finally { 
-        setCheckInLoading(false); 
+        setCheckInLoading(false);
+        restoreScroll();
         Perf.end('check_in_action');
     }
   }, [user?.id, checkInLoading, checkInDone, isCheckInStatusLoading, dispatch, markCheckInDoneForToday]);
