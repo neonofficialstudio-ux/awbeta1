@@ -676,53 +676,19 @@ const Raffles: React.FC = () => {
     const [raffleToBuy, setRaffleToBuy] = useState<Raffle | null>(null);
     const [highlightedRaffleId, setHighlightedRaffleId] = useState<string | null>(null); // V1.0
 
-    const pollTimerRef = useRef<number | null>(null);
-    const inFlightRef = useRef(false);
-    const stableCyclesRef = useRef(0);
-    const lastSignatureRef = useRef<string>('');
+    const pollIntervalRef = useRef<number | null>(null);
+    const isPollingActiveRef = useRef(false);
 
-    const clearPollTimer = () => {
-        if (pollTimerRef.current) {
-            window.clearTimeout(pollTimerRef.current);
-            pollTimerRef.current = null;
+    const stopPolling = useCallback(() => {
+        if (pollIntervalRef.current) {
+            window.clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
         }
-    };
+        isPollingActiveRef.current = false;
+    }, []);
 
-    const computeSignature = (data: {
-        raffles: any[];
-        allTickets: any[];
-        highlightedRaffleId: any;
-    }) => {
-        const r0 = data.raffles?.[0];
-        const t0 = data.allTickets?.[0];
-        return [
-            data.raffles?.length ?? 0,
-            r0?.updatedAt ?? r0?.updated_at ?? r0?.createdAt ?? r0?.created_at ?? '',
-            data.allTickets?.length ?? 0,
-            t0?.createdAt ?? t0?.created_at ?? '',
-            data.highlightedRaffleId ?? '',
-        ].join('|');
-    };
-
-    const scheduleNextPoll = (ms: number) => {
-        clearPollTimer();
-        pollTimerRef.current = window.setTimeout(() => {
-            void fetchDataAdaptive();
-        }, ms);
-    };
-
-    // Fetch Data (adaptive polling)
-    const fetchDataAdaptive = useCallback(async () => {
+    const fetchData = useCallback(async () => {
         if (!activeUser) return;
-
-        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-            scheduleNextPoll(30_000);
-            return;
-        }
-
-        if (inFlightRef.current) return;
-        inFlightRef.current = true;
-
         try {
             // Self-Healing: Run Status Check on Fetch
             RaffleEngineV2.checkRaffleTimers();
@@ -734,51 +700,81 @@ const Raffles: React.FC = () => {
             setAllTickets(data.allTickets);
             setAllUsers(data.allUsers);
             setHighlightedRaffleId(data.highlightedRaffleId); // V1.0
-
-            const sig = computeSignature({
-                raffles: data.raffles,
-                allTickets: data.allTickets,
-                highlightedRaffleId: data.highlightedRaffleId,
-            });
-
-            const changed = sig !== lastSignatureRef.current;
-            if (changed) {
-                lastSignatureRef.current = sig;
-                stableCyclesRef.current = 0;
-                scheduleNextPoll(15_000);
-            } else {
-                stableCyclesRef.current += 1;
-                const next =
-                    stableCyclesRef.current >= 6 ? 60_000 :
-                    stableCyclesRef.current >= 3 ? 30_000 :
-                    15_000;
-                scheduleNextPoll(next);
-            }
         } catch (error) {
             console.error("Failed to fetch raffles:", error);
-            scheduleNextPoll(60_000);
         } finally {
-            inFlightRef.current = false;
             setIsLoading(false);
         }
     }, [activeUser]);
 
+    const startPolling = useCallback(() => {
+        // Só inicia se tiver usuário e não estiver rodando
+        if (!activeUser) return;
+        if (isPollingActiveRef.current) return;
+
+        // Não pollar se a aba estiver oculta
+        if (document.visibilityState !== 'visible') return;
+
+        isPollingActiveRef.current = true;
+
+        // 🔥 Redução forte: 15s -> 60s
+        pollIntervalRef.current = window.setInterval(() => {
+            // segurança extra: se esconder a aba, para
+            if (document.visibilityState !== 'visible') {
+                stopPolling();
+                return;
+            }
+            void fetchData();
+        }, 60_000);
+    }, [activeUser, fetchData, stopPolling]);
+
     useEffect(() => {
-        void fetchDataAdaptive();
+        if (!activeUser) {
+            stopPolling();
+            return;
+        }
+
+        // Sempre faz 1 fetch ao entrar na tela
+        void fetchData();
+
+        // Inicia polling (somente se visível)
+        startPolling();
 
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
-                stableCyclesRef.current = 0;
-                scheduleNextPoll(1_000);
+                // ao voltar pra aba, faz um fetch imediato e retoma polling
+                void fetchData();
+                startPolling();
+            } else {
+                // ao sair da aba, corta polling
+                stopPolling();
             }
         };
+
+        const onFocus = () => {
+            // quando volta o foco, fetch + polling
+            if (document.visibilityState === 'visible') {
+                void fetchData();
+                startPolling();
+            }
+        };
+
+        const onBlur = () => {
+            // quando perde foco, para polling
+            stopPolling();
+        };
+
         document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisibility);
-            clearPollTimer();
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('blur', onBlur);
+            stopPolling();
         };
-    }, [fetchDataAdaptive]);
+    }, [activeUser, fetchData, startPolling, stopPolling]);
 
     const handleBuyTickets = async (quantity: number) => {
         if (!activeUser || !raffleToBuy) return;
@@ -793,7 +789,7 @@ const Raffles: React.FC = () => {
             const response = await api.buyRaffleTickets(activeUser.id, raffleToBuy.id, quantity);
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
-            await fetchDataAdaptive();
+            await fetchData();
             // 🔁 Fonte da verdade: Supabase
             // Sempre refetch após economia
             await refreshAfterEconomyAction(activeUser.id, dispatch);
