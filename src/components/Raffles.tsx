@@ -4,7 +4,9 @@ import type { Raffle, RaffleTicket, User } from '../types';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
+import { getSupabase } from '../api/supabase/client';
 import { CoinIcon, TicketIcon, CrownIcon, HistoryIcon, CheckIcon, ShieldIcon } from '../constants';
+import { config } from '../core/config';
 import AvatarWithFrame from './AvatarWithFrame';
 import RiotUpcomingList from './raffles/RiotUpcomingList';
 import { RaffleEngineV2 } from '../api/raffles/raffle.engine';
@@ -679,6 +681,11 @@ const Raffles: React.FC = () => {
     const pollIntervalRef = useRef<number | null>(null);
     const isPollingActiveRef = useRef(false);
 
+    const realtimeChannelRef = useRef<any>(null);
+    const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+    const rtDebounceRef = useRef<number | null>(null);
+    const lastRtFetchAtRef = useRef(0);
+
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
             window.clearInterval(pollIntervalRef.current);
@@ -687,11 +694,29 @@ const Raffles: React.FC = () => {
         isPollingActiveRef.current = false;
     }, []);
 
+    const stopRealtime = useCallback(() => {
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        try {
+            if (realtimeChannelRef.current) {
+                supabase.removeChannel(realtimeChannelRef.current);
+                realtimeChannelRef.current = null;
+            }
+        } catch {
+            // noop
+        } finally {
+            setIsRealtimeConnected(false);
+        }
+    }, []);
+
     const fetchData = useCallback(async () => {
         if (!activeUser) return;
         try {
-            // Self-Healing: Run Status Check on Fetch
-            RaffleEngineV2.checkRaffleTimers();
+            // ✅ IMPORTANT: não rodar engine mock em produção/supabase
+            if (config.backendProvider !== 'supabase') {
+                RaffleEngineV2.checkRaffleTimers();
+            }
 
             // Update V1.0: Return highlightedRaffleId
             const data = await api.fetchRafflesData(activeUser.id);
@@ -707,7 +732,22 @@ const Raffles: React.FC = () => {
         }
     }, [activeUser]);
 
-    const startPolling = useCallback(() => {
+    const scheduleRealtimeRefetch = useCallback(() => {
+        if (rtDebounceRef.current) window.clearTimeout(rtDebounceRef.current);
+
+        rtDebounceRef.current = window.setTimeout(() => {
+            const now = Date.now();
+
+            if (now - lastRtFetchAtRef.current < 5000) return;
+            lastRtFetchAtRef.current = now;
+
+            if (document.visibilityState !== 'visible') return;
+
+            void fetchData();
+        }, 700);
+    }, [fetchData]);
+
+    const startPolling = useCallback((intervalMs: number) => {
         // Só inicia se tiver usuário e não estiver rodando
         if (!activeUser) return;
         if (isPollingActiveRef.current) return;
@@ -717,7 +757,6 @@ const Raffles: React.FC = () => {
 
         isPollingActiveRef.current = true;
 
-        // 🔥 Redução forte: 15s -> 60s
         pollIntervalRef.current = window.setInterval(() => {
             // segurança extra: se esconder a aba, para
             if (document.visibilityState !== 'visible') {
@@ -725,8 +764,59 @@ const Raffles: React.FC = () => {
                 return;
             }
             void fetchData();
-        }, 60_000);
+        }, intervalMs);
     }, [activeUser, fetchData, stopPolling]);
+
+    useEffect(() => {
+        if (!activeUser) {
+            stopRealtime();
+            return;
+        }
+        if (config.backendProvider !== 'supabase') {
+            stopRealtime();
+            return;
+        }
+
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        stopRealtime();
+
+        let isActive = true;
+        const userId = activeUser.id;
+
+        const channel = supabase.channel(`raffles:${userId}`);
+        realtimeChannelRef.current = channel;
+
+        channel.on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'raffles' },
+            () => {
+                if (!isActive) return;
+                scheduleRealtimeRefetch();
+            },
+        );
+
+        channel.on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'raffle_tickets', filter: `user_id=eq.${userId}` },
+            () => {
+                if (!isActive) return;
+                scheduleRealtimeRefetch();
+            },
+        );
+
+        channel.subscribe((status: any) => {
+            if (!isActive) return;
+            setIsRealtimeConnected(status === 'SUBSCRIBED');
+        });
+
+        return () => {
+            isActive = false;
+            if (rtDebounceRef.current) window.clearTimeout(rtDebounceRef.current);
+            stopRealtime();
+        };
+    }, [activeUser?.id, scheduleRealtimeRefetch, stopRealtime]);
 
     useEffect(() => {
         if (!activeUser) {
@@ -737,14 +827,15 @@ const Raffles: React.FC = () => {
         // Sempre faz 1 fetch ao entrar na tela
         void fetchData();
 
-        // Inicia polling (somente se visível)
-        startPolling();
+        const baseInterval = isRealtimeConnected ? 5 * 60_000 : 60_000;
+        startPolling(baseInterval);
 
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
                 // ao voltar pra aba, faz um fetch imediato e retoma polling
                 void fetchData();
-                startPolling();
+                const interval = isRealtimeConnected ? 5 * 60_000 : 60_000;
+                startPolling(interval);
             } else {
                 // ao sair da aba, corta polling
                 stopPolling();
@@ -755,7 +846,8 @@ const Raffles: React.FC = () => {
             // quando volta o foco, fetch + polling
             if (document.visibilityState === 'visible') {
                 void fetchData();
-                startPolling();
+                const interval = isRealtimeConnected ? 5 * 60_000 : 60_000;
+                startPolling(interval);
             }
         };
 
@@ -774,7 +866,7 @@ const Raffles: React.FC = () => {
             window.removeEventListener('blur', onBlur);
             stopPolling();
         };
-    }, [activeUser, fetchData, startPolling, stopPolling]);
+    }, [activeUser, fetchData, startPolling, stopPolling, isRealtimeConnected]);
 
     const handleBuyTickets = async (quantity: number) => {
         if (!activeUser || !raffleToBuy) return;
@@ -790,8 +882,6 @@ const Raffles: React.FC = () => {
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
             await fetchData();
-            // 🔁 Fonte da verdade: Supabase
-            // Sempre refetch após economia
             await refreshAfterEconomyAction(activeUser.id, dispatch);
              dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Boa Sorte!', message: `Você comprou ${quantity} ticket(s)!` } });
         } catch (error) { console.error(error); } finally { setRaffleToBuy(null); }
