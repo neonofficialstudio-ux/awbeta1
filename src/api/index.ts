@@ -328,6 +328,8 @@ export {
   adminSetArtistOfDay,
 } from './supabase/artistOfDay';
 
+export { adminClearArtistOfDay } from './supabase/artistOfDayAdmin';
+
 // Export global diagnostic runner
 export const runDiagnosticReport = DiagnosticCore.runReport;
 
