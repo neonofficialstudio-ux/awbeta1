@@ -101,7 +101,12 @@ const ArtistsOfTheDayCarousel: React.FC<{
   isSupabase: boolean;
   clicked?: Record<string, boolean>;
   dayUtc?: string | null;
-}> = ({ initialArtists, isSupabase, clicked, dayUtc }) => {
+  onSupabaseSync?: (next: {
+    artist: any | null;
+    clicked: Record<string, boolean>;
+    dayUtc: string | null;
+  }) => void;
+}> = ({ initialArtists, isSupabase, clicked, dayUtc, onSupabaseSync }) => {
     const { state, dispatch } = useAppContext();
     const { activeUser } = state;
     const [artists, setArtists] = useState<any[]>([]);
@@ -109,15 +114,57 @@ const ArtistsOfTheDayCarousel: React.FC<{
     const [progress, setProgress] = useState<Record<string, any>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [rotationSeconds, setRotationSeconds] = useState<number>(10);
+    const [supabaseClicked, setSupabaseClicked] = useState<Record<string, boolean>>({});
     const current = artists[currentIndex] ?? null;
+    const clickedMap = isSupabase ? supabaseClicked : (progress[current?.id || ''] || {});
     const currentDisplayName = getDisplayName(current ? { ...current, artistic_name: current.artisticName } : null);
     void dayUtc;
+
+    const syncSupabaseAOD = async (reason: string) => {
+        if (!isSupabase) return;
+        try {
+            const api = await import('../api/index');
+            const aod = await api.getArtistOfDay();
+
+            if (!aod?.success || !aod?.has_artist || !aod?.artist?.id) {
+                setSupabaseClicked({});
+                onSupabaseSync?.({ artist: null, clicked: {}, dayUtc: aod?.day_utc ?? null });
+                return;
+            }
+
+            const artist = {
+                id: aod.artist.id,
+                display_name: aod.artist.display_name ?? null,
+                artisticName: aod.artist.artistic_name ?? null,
+                artistic_name: aod.artist.artistic_name ?? null,
+                avatar_url: aod.artist.avatar_url ?? null,
+                avatarUrl: aod.artist.avatar_url ?? null,
+                level: aod.artist.level ?? 0,
+                spotifyUrl: aod.artist.spotify_url ?? '',
+                youtubeUrl: aod.artist.youtube_url ?? '',
+                instagramUrl: aod.artist.instagram_url ?? '',
+                links: {
+                    spotify: aod.artist.spotify_url ?? '',
+                    youtube: aod.artist.youtube_url ?? '',
+                    instagram: aod.artist.instagram_url ?? '',
+                },
+            };
+
+            const nextClicked = (aod.clicked || {}) as Record<string, boolean>;
+            setSupabaseClicked(nextClicked);
+            onSupabaseSync?.({ artist, clicked: nextClicked, dayUtc: aod.day_utc ?? null });
+        } catch (e) {
+            console.warn('[ArtistOfDay] sync failed', reason, e);
+        }
+    };
 
     useEffect(() => {
         const loadArtists = async () => {
             if (isSupabase) {
                 setArtists(initialArtists || []);
+                setSupabaseClicked(clicked || {});
                 setIsLoading(false);
+                void syncSupabaseAOD('initial');
                 return;
             }
             try {
@@ -140,6 +187,51 @@ const ArtistsOfTheDayCarousel: React.FC<{
     }, [state.eventSettings, isSupabase, initialArtists]);
 
     useEffect(() => {
+        if (!isSupabase) return;
+        setSupabaseClicked(clicked || {});
+    }, [isSupabase, clicked]);
+
+    useEffect(() => {
+        if (!isSupabase) return;
+        void syncSupabaseAOD('props-change');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSupabase, dayUtc]);
+
+    useEffect(() => {
+        if (!isSupabase) return;
+
+        let alive = true;
+
+        const tick = async (reason: string) => {
+            if (!alive) return;
+            if (document.visibilityState !== 'visible') return;
+            await syncSupabaseAOD(reason);
+        };
+
+        const interval = window.setInterval(() => {
+            void tick('interval');
+        }, 20_000);
+
+        const onFocus = () => {
+            void tick('focus');
+        };
+        const onVis = () => {
+            if (document.visibilityState === 'visible') void tick('visibility');
+        };
+
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVis);
+
+        return () => {
+            alive = false;
+            window.clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVis);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSupabase]);
+
+    useEffect(() => {
         if (!artists || artists.length <= 1) return;
         if (!rotationSeconds || rotationSeconds <= 0) return;
         const interval = setInterval(() => {
@@ -156,14 +248,17 @@ const ArtistsOfTheDayCarousel: React.FC<{
         if (!activeUser || !current) return;
 
         if (isSupabase) {
-            const already = Boolean((clicked || {})[platform]);
+            const already = Boolean((supabaseClicked || {})[platform]);
             if (already) return;
+
+            setSupabaseClicked((prev) => ({ ...prev, [platform]: true }));
 
             try {
                 const api = await import('../api/index');
                 await api.recordArtistOfDayClick(platform as any);
 
                 await refreshAfterEconomyAction(activeUser.id, dispatch);
+                await syncSupabaseAOD('after-click');
 
                 dispatch({
                     type: 'ADD_TOAST',
@@ -171,18 +266,25 @@ const ArtistsOfTheDayCarousel: React.FC<{
                         id: Date.now().toString(),
                         type: 'success',
                         title: 'Registrado!',
-                        message: 'Interação registrada no Artista do Dia ✅',
+                        message: 'Clique registrado ✅',
                     },
                 });
             } catch (e) {
                 console.error('[ArtistOfDay] record click failed', e);
+
+                setSupabaseClicked((prev) => {
+                    const copy = { ...prev };
+                    delete copy[platform];
+                    return copy;
+                });
+
                 dispatch({
                     type: 'ADD_TOAST',
                     payload: {
                         id: Date.now().toString(),
                         type: 'error',
                         title: 'Falha',
-                        message: 'Não foi possível registrar o clique agora.',
+                        message: 'Não foi possível registrar agora.',
                     },
                 });
             }
@@ -222,7 +324,7 @@ const ArtistsOfTheDayCarousel: React.FC<{
     if (isLoading && !current) return <LoadingSkeleton height={400} className="mt-12 rounded-[40px]" />;
     if (!current) return null;
 
-    const currentArtistProgress = isSupabase ? (clicked || {}) : (progress[current.id] || {});
+    const currentArtistProgress = clickedMap;
     let totalLinks = 0;
     if (current.links?.spotify) totalLinks++;
     if (current.links?.instagram) totalLinks++;
@@ -269,9 +371,51 @@ const ArtistsOfTheDayCarousel: React.FC<{
                                 <p className="text-[10px] text-[#666] mt-2 flex items-center gap-2">{isSetComplete ? <><CheckIcon className="w-3 h-3 text-[#FFD36A]"/> Recompensa Coletada!</> : "Visite os links para ganhar +1 Coin"}</p>
                             </div>
                             <div className="flex justify-center md:justify-start gap-4">
-                                {current.links?.spotify && <button onClick={() => handleLinkClick('spotify', current.links.spotify)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.spotify ? 'bg-[#1DB954]/10 border-[#1DB954] text-[#1DB954]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><SpotifyIcon className="w-6 h-6" /></button>}
-                                {current.links?.instagram && <button onClick={() => handleLinkClick('instagram', current.links.instagram)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.instagram ? 'bg-[#E1306C]/10 border-[#E1306C] text-[#E1306C]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><InstagramIcon className="w-6 h-6" /></button>}
-                                {current.links?.youtube && <button onClick={() => handleLinkClick('youtube', current.links.youtube)} className={`p-4 rounded-2xl border-2 transition-all duration-300 ${currentArtistProgress.youtube ? 'bg-[#FF0000]/10 border-[#FF0000] text-[#FF0000]' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}><YoutubeIcon className="w-6 h-6" /></button>}
+                                {current.links?.spotify && (() => {
+                                    const spotifyDone = isSupabase ? !!supabaseClicked.spotify : !!currentArtistProgress.spotify;
+                                    return (
+                                        <button
+                                            onClick={() => handleLinkClick('spotify', current.links.spotify)}
+                                            disabled={!current.links.spotify || (isSupabase && spotifyDone)}
+                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${spotifyDone ? 'bg-[#1DB954]/10 border-[#1DB954] text-[#1DB954] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
+                                            aria-label={spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}
+                                            title={spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}
+                                        >
+                                            <span className="sr-only">{spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}</span>
+                                            <SpotifyIcon className="w-6 h-6" />
+                                        </button>
+                                    );
+                                })()}
+                                {current.links?.instagram && (() => {
+                                    const instagramDone = isSupabase ? !!supabaseClicked.instagram : !!currentArtistProgress.instagram;
+                                    return (
+                                        <button
+                                            onClick={() => handleLinkClick('instagram', current.links.instagram)}
+                                            disabled={!current.links.instagram || (isSupabase && instagramDone)}
+                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${instagramDone ? 'bg-[#E1306C]/10 border-[#E1306C] text-[#E1306C] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
+                                            aria-label={instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}
+                                            title={instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}
+                                        >
+                                            <span className="sr-only">{instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}</span>
+                                            <InstagramIcon className="w-6 h-6" />
+                                        </button>
+                                    );
+                                })()}
+                                {current.links?.youtube && (() => {
+                                    const youtubeDone = isSupabase ? !!supabaseClicked.youtube : !!currentArtistProgress.youtube;
+                                    return (
+                                        <button
+                                            onClick={() => handleLinkClick('youtube', current.links.youtube)}
+                                            disabled={!current.links.youtube || (isSupabase && youtubeDone)}
+                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${youtubeDone ? 'bg-[#FF0000]/10 border-[#FF0000] text-[#FF0000] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
+                                            aria-label={youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}
+                                            title={youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}
+                                        >
+                                            <span className="sr-only">{youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}</span>
+                                            <YoutubeIcon className="w-6 h-6" />
+                                        </button>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -1267,6 +1411,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           isSupabase={isSupabase}
           clicked={data.artistOfDayClicked}
           dayUtc={data.artistOfDayDayUtc}
+          onSupabaseSync={(next) => {
+            setData((prev: any) => prev ? {
+              ...prev,
+              artistsOfTheDay: next.artist ? [next.artist] : [],
+              artistsOfTheDayIds: next.artist ? [next.artist.id] : [],
+              artistOfDayClicked: next.clicked || {},
+              artistOfDayDayUtc: next.dayUtc || null,
+            } : prev);
+          }}
         />
         
       </div>
