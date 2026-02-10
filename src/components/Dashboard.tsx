@@ -270,6 +270,29 @@ const ArtistsOfTheDayCarousel: React.FC<{
     if (current.links?.youtube && currentArtistProgress.youtube) confirmedDone++;
     const pct = totalLinks > 0 ? (confirmedDone / totalLinks) * 100 : 0;
     const isSetComplete = isSupabase ? false : currentArtistProgress._rewarded;
+    const avatarUrl = (current?.avatarUrl || (current as any)?.avatar_url || '').trim();
+    const rawName =
+        (currentDisplayName ||
+            current?.artisticName ||
+            (current as any)?.artistic_name ||
+            current?.name ||
+            '') + '';
+
+    const initials = rawName
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase() || '')
+        .join('');
+    const spotifyUrl = (current?.links?.spotify || '').trim();
+    const youtubeUrl = (current?.links?.youtube || '').trim();
+    const instagramUrl = (current?.links?.instagram || '').trim();
+    const iconBase =
+        'w-10 h-10 rounded-full border border-goldenYellow-500/30 flex items-center justify-center transition';
+    const enabled =
+        'hover:bg-goldenYellow-500/10 hover:border-goldenYellow-400/60 cursor-pointer';
+    const disabled =
+        'opacity-40 cursor-not-allowed pointer-events-none';
 
     return (
         <div className="relative animate-fade-in-up mt-12 md:mt-16 px-1">
@@ -286,7 +309,24 @@ const ArtistsOfTheDayCarousel: React.FC<{
                         <div className="relative shrink-0">
                             <div className="absolute -top-12 left-1/2 -translate-x-1/2 text-[#FFD36A] animate-[float_5s_ease-in-out_infinite] z-20 drop-shadow-[0_0_15px_rgba(255,211,106,0.8)]"><CrownIcon className="w-10 h-10" /></div>
                             <div className="relative p-2 rounded-full border-2 border-[#FFD36A] shadow-[0_0_40px_rgba(255,211,106,0.25)] bg-[#050505]">
-                                <img src={current.avatarUrl} alt={current.name} className="w-32 h-32 md:w-44 md:h-44 rounded-full object-cover" />
+                                {/* Avatar */}
+                                <div className="relative">
+                                    <div className="w-28 h-28 rounded-full border border-goldenYellow-500/40 overflow-hidden bg-black/30 flex items-center justify-center">
+                                        {avatarUrl ? (
+                                            <img
+                                                src={avatarUrl}
+                                                alt={rawName || 'Artista do Dia'}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                                referrerPolicy="no-referrer"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-goldenYellow-400 font-bold text-3xl">
+                                                {initials || '🎤'}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-[#050505] text-[#FFD36A] text-[10px] font-black uppercase px-4 py-1.5 rounded-full border border-[#FFD36A] shadow-lg whitespace-nowrap">Lvl {formatNumber(current.level)}</div>
                             </div>
                         </div>
@@ -306,51 +346,33 @@ const ArtistsOfTheDayCarousel: React.FC<{
                                 <p className="text-[10px] text-[#666] mt-2 flex items-center gap-2">{isSetComplete ? <><CheckIcon className="w-3 h-3 text-[#FFD36A]"/> Recompensa Coletada!</> : "Visite os links para ganhar +1 Coin"}</p>
                             </div>
                             <div className="flex justify-center md:justify-start gap-4">
-                                {current.links?.spotify && (() => {
-                                    const spotifyDone = isSupabase ? !!supabaseClicked.spotify : !!currentArtistProgress.spotify;
-                                    return (
-                                        <button
-                                            onClick={() => handleLinkClick('spotify', current.links.spotify)}
-                                            disabled={!current.links.spotify || (isSupabase && spotifyDone)}
-                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${spotifyDone ? 'bg-[#1DB954]/10 border-[#1DB954] text-[#1DB954] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
-                                            aria-label={spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}
-                                            title={spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}
-                                        >
-                                            <span className="sr-only">{spotifyDone ? 'SPOTIFY ✅' : 'SPOTIFY'}</span>
-                                            <SpotifyIcon className="w-6 h-6" />
-                                        </button>
-                                    );
-                                })()}
-                                {current.links?.instagram && (() => {
-                                    const instagramDone = isSupabase ? !!supabaseClicked.instagram : !!currentArtistProgress.instagram;
-                                    return (
-                                        <button
-                                            onClick={() => handleLinkClick('instagram', current.links.instagram)}
-                                            disabled={!current.links.instagram || (isSupabase && instagramDone)}
-                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${instagramDone ? 'bg-[#E1306C]/10 border-[#E1306C] text-[#E1306C] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
-                                            aria-label={instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}
-                                            title={instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}
-                                        >
-                                            <span className="sr-only">{instagramDone ? 'INSTAGRAM ✅' : 'INSTAGRAM'}</span>
-                                            <InstagramIcon className="w-6 h-6" />
-                                        </button>
-                                    );
-                                })()}
-                                {current.links?.youtube && (() => {
-                                    const youtubeDone = isSupabase ? !!supabaseClicked.youtube : !!currentArtistProgress.youtube;
-                                    return (
-                                        <button
-                                            onClick={() => handleLinkClick('youtube', current.links.youtube)}
-                                            disabled={!current.links.youtube || (isSupabase && youtubeDone)}
-                                            className={`p-4 rounded-2xl border-2 transition-all duration-300 ${youtubeDone ? 'bg-[#FF0000]/10 border-[#FF0000] text-[#FF0000] opacity-60 cursor-not-allowed' : 'bg-black border-[#333] text-gray-500 hover:border-white hover:text-white'}`}
-                                            aria-label={youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}
-                                            title={youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}
-                                        >
-                                            <span className="sr-only">{youtubeDone ? 'YOUTUBE ✅' : 'YOUTUBE'}</span>
-                                            <YoutubeIcon className="w-6 h-6" />
-                                        </button>
-                                    );
-                                })()}
+                                <button
+                                    type="button"
+                                    className={`${iconBase} ${spotifyUrl ? enabled : disabled}`}
+                                    onClick={() => handleLinkClick('spotify', spotifyUrl)}
+                                    aria-label="Spotify"
+                                    title={spotifyUrl ? 'Abrir Spotify' : 'Sem link de Spotify'}
+                                >
+                                    <SpotifyIcon className="w-6 h-6" />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`${iconBase} ${youtubeUrl ? enabled : disabled}`}
+                                    onClick={() => handleLinkClick('youtube', youtubeUrl)}
+                                    aria-label="YouTube"
+                                    title={youtubeUrl ? 'Abrir YouTube' : 'Sem link de YouTube'}
+                                >
+                                    <YoutubeIcon className="w-6 h-6" />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`${iconBase} ${instagramUrl ? enabled : disabled}`}
+                                    onClick={() => handleLinkClick('instagram', instagramUrl)}
+                                    aria-label="Instagram"
+                                    title={instagramUrl ? 'Abrir Instagram' : 'Sem link de Instagram'}
+                                >
+                                    <InstagramIcon className="w-6 h-6" />
+                                </button>
                             </div>
                         </div>
                     </div>
