@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import type { MissionSubmission, RedeemedItem, UsableItemQueueEntry, CoinTransaction, ArtistOfTheDayQueueEntry, User, Mission } from '../../types';
+import { DashboardIcon, SettingsIcon } from '../../constants';
 import SystemHealthMonitor from './SystemHealthMonitor';
 import TelemetryDashboard from './TelemetryDashboard';
-
-import StatsPanel from './sections/StatsPanel';
-import InsightsPanel from './sections/InsightsPanel';
-import QueuePanel from './sections/QueuePanel';
-import TelemetryPanel from './sections/TelemetryPanel';
-import HeatmapPanel from './sections/HeatmapPanel';
-import WeeklyMissionsPanel from './sections/WeeklyMissionsPanel';
-import AuditPanel from './sections/AuditPanel';
-import { adminPainelData } from '../../api/admin/painel';
-
-import AdminArtistsOfTheDayModal from './AdminArtistOfTheDayModal';
 import toast from 'react-hot-toast';
+import AdminArtistsOfTheDayModal from './AdminArtistOfTheDayModal';
+import { getDisplayName } from '../../api/core/getDisplayName';
 
-type AdminSubTab = 'ops_v4' | 'artist_of_day' | 'health' | 'telemetry_classic';
+// Import New V4.2 Sections
+import StatsPanel from "./sections/StatsPanel";
+import InsightsPanel from "./sections/InsightsPanel";
+import QueuePanel from "./sections/QueuePanel";
+import TelemetryPanel from "./sections/TelemetryPanel";
+import HeatmapPanel from "./sections/HeatmapPanel";
+import WeeklyMissionsPanel from "./sections/WeeklyMissionsPanel";
+import AuditPanel from "./sections/AuditPanel";
+import { adminPainelData } from '../../api/admin/painel';
 
 interface AdminDashboardProps {
   missionSubmissions: MissionSubmission[];
@@ -27,371 +28,342 @@ interface AdminDashboardProps {
   missions: Mission[];
 }
 
+type ArtistOfDayRpcPayload = {
+  success?: boolean;
+  has_artist?: boolean;
+  day_utc?: string;
+  artist?: {
+    id: string;
+    display_name?: string | null;
+    artistic_name?: string | null;
+    avatar_url?: string | null;
+    level?: number | null;
+    spotify_url?: string | null;
+    youtube_url?: string | null;
+    instagram_url?: string | null;
+  } | null;
+  clicked?: Record<string, boolean> | null;
+};
+
 const SubTabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`relative px-6 py-2.5 font-bold transition-all duration-300 text-sm rounded-full border ${
-      active
-        ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/50 shadow-[0_0_15px_rgba(0,232,255,0.3)]'
-        : 'bg-slate-dark text-gray-400 border-white/10 hover:text-white hover:border-white/30'
-    }`}
-  >
-    {children}
-  </button>
+    <button
+        onClick={onClick}
+        className={`relative px-6 py-2.5 font-bold transition-all duration-300 text-sm rounded-full border ${
+            active 
+            ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/50 shadow-[0_0_15px_rgba(0,232,255,0.3)]' 
+            : 'bg-slate-dark text-gray-400 border-white/10 hover:text-white hover:border-white/30'
+        }`}
+    >
+        {children}
+    </button>
 );
 
-function utcDateISO(d: Date) {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  missionSubmissions,
-  redeemedItems,
-  usableItemQueue,
-  allTransactions,
-  artistOfTheDayQueue,
-  allUsers,
-  missions,
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
+    missionSubmissions, redeemedItems, usableItemQueue, allTransactions, artistOfTheDayQueue,
+    allUsers, missions 
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('ops_v4');
-  const [v4Data, setV4Data] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+    const [activeSubTab, setActiveSubTab] = useState<'ops_v4' | 'health' | 'telemetry_classic' | 'artist_of_day'>('ops_v4');
+    const [v4Data, setV4Data] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-  // Artist of Day admin UI state
-  const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
-  const [currentArtistId, setCurrentArtistId] = useState<string | null>(null);
-  const [currentDayUtc, setCurrentDayUtc] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<any>(null);
-  const [scheduleRows, setScheduleRows] = useState<Array<{ day_utc: string; artist_id: string }>>([]);
-  const [schedulePickDay, setSchedulePickDay] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+    // --- Artist of Day (Admin) ---
+    const [aodPayload, setAodPayload] = useState<ArtistOfDayRpcPayload | null>(null);
+    const [aodIsLoading, setAodIsLoading] = useState(false);
+    const [aodModalOpen, setAodModalOpen] = useState(false);
+    const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
+    const [currentArtistId, setCurrentArtistId] = useState<string | null>(null);
+    const [isArtistOpsLoading, setIsArtistOpsLoading] = useState(false);
 
-  const usersById = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const u of allUsers || []) map.set(u.id, u);
-    return map;
-  }, [allUsers]);
+    useEffect(() => {
+        // Fetch V4.2 Data Structure
+        const loadData = async () => {
+            try {
+                const data = await adminPainelData();
+                setV4Data(data);
+            } catch (error) {
+                console.error('[AdminDashboard] Failed to load painel data', error);
+                setV4Data(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
-  const scheduleRange = useMemo(() => {
-    const from = utcDateISO(new Date());
-    const toDate = new Date();
-    toDate.setUTCDate(toDate.getUTCDate() + 14);
-    const to = utcDateISO(toDate);
-    return { from, to };
-  }, []);
+    useEffect(() => {
+        const loadCurrent = async () => {
+            try {
+                const api = await import('../../api/index');
+                const payload = await api.getArtistOfDay();
+                if (payload?.has_artist && payload?.artist?.id) {
+                    setCurrentArtistId(payload.artist.id);
+                } else {
+                    setCurrentArtistId(null);
+                }
+            } catch (e) {
+                setCurrentArtistId(null);
+            }
+        };
+        void loadCurrent();
+    }, []);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await adminPainelData();
-        setV4Data(data);
-      } catch (error) {
-        console.error('[AdminDashboard] Failed to load painel data', error);
-        setV4Data(null);
-      } finally {
-        setIsLoading(false);
-      }
+    const loadArtistOfDay = async () => {
+        setAodIsLoading(true);
+        try {
+            const api = await import('../../api/index');
+            const res = await api.getArtistOfDay();
+            setAodPayload((res || null) as any);
+        } catch (e: any) {
+            console.error('[AdminDashboard] getArtistOfDay failed', e);
+            setAodPayload(null);
+            toast.error(e?.message || 'Falha ao carregar Artista do Dia');
+        } finally {
+            setAodIsLoading(false);
+        }
     };
-    loadData();
-  }, []);
 
-  // A) refetch helper (Atual + metrics + schedule) — sem burst
-  const refreshArtistOfDayAdmin = async () => {
-    try {
-      const api = await import('../../api/index');
-      const payload = await api.getArtistOfDay();
-      const artistId = payload?.artist?.id || null;
-      setCurrentArtistId(artistId);
-      setCurrentDayUtc(payload?.day_utc || null);
+    // Carrega ao entrar na sub-aba
+    useEffect(() => {
+        if (activeSubTab !== 'artist_of_day') return;
+        void loadArtistOfDay();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSubTab]);
 
-      const [m, sched] = await Promise.all([
-        api.adminGetArtistOfDayMetrics(payload?.day_utc),
-        api.adminListArtistOfDaySchedule(scheduleRange.from, scheduleRange.to, 60),
-      ]);
+    if (isLoading) return <div className="p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-gold-cinematic border-t-transparent rounded-full mx-auto"></div></div>;
 
-      setMetrics(m || null);
-      setScheduleRows((sched || []).map((r: any) => ({ day_utc: r.day_utc, artist_id: r.artist_id })));
-    } catch (e: any) {
-      console.error('[ArtistOfDay][admin] refresh failed', e);
-      toast.error(e?.message || 'Falha ao atualizar Artista do Dia');
-    }
-  };
+    const aodCurrentArtistId = (aodPayload?.has_artist && aodPayload?.artist?.id) ? aodPayload.artist.id : null;
+    const currentArtistName =
+      aodPayload?.artist
+        ? (aodPayload.artist.display_name || aodPayload.artist.artistic_name || 'Artista')
+        : null;
 
-  // Carrega só quando entra na sub-aba (evita requests à toa)
-  useEffect(() => {
-    if (activeSubTab !== 'artist_of_day') return;
-    void refreshArtistOfDayAdmin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSubTab]);
+    const userList = Array.isArray(allUsers) ? allUsers.filter(u => u?.role === 'user') : [];
+    const currentArtistUser: User | undefined = aodCurrentArtistId
+      ? userList.find(u => u.id === aodCurrentArtistId)
+      : undefined;
 
-  const currentUser = currentArtistId ? usersById.get(currentArtistId) : null;
+    const currentDisplayName = currentArtistUser
+      ? getDisplayName({ ...currentArtistUser, artistic_name: currentArtistUser.artisticName })
+      : (currentArtistName || '—');
 
-  const openSetTodayModal = () => {
-    setSchedulePickDay(null);
-    setIsArtistModalOpen(true);
-  };
-
-  const openScheduleDayModal = (dayUtc: string) => {
-    setSchedulePickDay(dayUtc);
-    setIsArtistModalOpen(true);
-  };
-
-  const onModalSave = async (userIds: string[]) => {
-    // Modal existente é multi — aqui usamos só 1 (primeiro)
-    const picked = userIds?.[0] || null;
-    if (!picked) {
-      toast.error('Selecione 1 artista');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const api = await import('../../api/index');
-
-      if (schedulePickDay) {
-        await api.adminScheduleArtistOfDay(schedulePickDay, picked);
-        toast.success(`✅ Agendado para ${schedulePickDay}`);
-      } else {
-        await api.adminSetArtistOfDay(picked);
-        toast.success('✅ Artista do Dia definido!');
-      }
-
-      await refreshArtistOfDayAdmin();
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || 'Falha ao salvar');
-    } finally {
-      setBusy(false);
-      setIsArtistModalOpen(false);
-      setSchedulePickDay(null);
-    }
-  };
-
-  const onClearToday = async () => {
-    setBusy(true);
-    try {
-      const api = await import('../../api/index');
-      await api.adminClearArtistOfDay();
-      toast.success('✅ Artista do Dia removido (hoje)');
-      await refreshArtistOfDayAdmin();
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || 'Falha ao remover');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onClearScheduleDay = async (dayUtc: string) => {
-    setBusy(true);
-    try {
-      const api = await import('../../api/index');
-      await api.adminClearArtistOfDayScheduleDay(dayUtc);
-      toast.success(`✅ Agenda removida (${dayUtc})`);
-      await refreshArtistOfDayAdmin();
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.message || 'Falha ao remover agenda');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (isLoading) {
     return (
-      <div className="p-8 text-center">
-        <div className="animate-spin w-8 h-8 border-4 border-gold-cinematic border-t-transparent rounded-full mx-auto"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex gap-3 mb-8 overflow-x-auto pb-2 px-1">
-        <SubTabButton active={activeSubTab === 'ops_v4'} onClick={() => setActiveSubTab('ops_v4')}>
-          Live Ops Center
-        </SubTabButton>
-        <SubTabButton active={activeSubTab === 'artist_of_day'} onClick={() => setActiveSubTab('artist_of_day')}>
-          Artista do Dia
-        </SubTabButton>
-        <SubTabButton active={activeSubTab === 'health'} onClick={() => setActiveSubTab('health')}>
-          System Health
-        </SubTabButton>
-        <SubTabButton active={activeSubTab === 'telemetry_classic'} onClick={() => setActiveSubTab('telemetry_classic')}>
-          Telemetria
-        </SubTabButton>
-      </div>
-
-      {/* Live Ops Center */}
-      {activeSubTab === 'ops_v4' && v4Data && (
-        <div className="animate-fade-in-up grid grid-cols-1 gap-6">
-          <StatsPanel data={v4Data.analytics} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              <WeeklyMissionsPanel />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <TelemetryPanel telemetry={v4Data.telemetry} />
-                <HeatmapPanel heatmap={v4Data.heatmap} />
-              </div>
-            </div>
-            <div className="space-y-6">
-              <InsightsPanel insights={v4Data.insights} />
-              <QueuePanel />
-              <AuditPanel />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NEW: Artista do Dia (Admin) */}
-      {activeSubTab === 'artist_of_day' && (
-        <div className="animate-fade-in-up grid grid-cols-1 gap-6">
-          <div className="bg-[#121212] border border-white/10 rounded-2xl p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-black text-[#FFD86B] uppercase tracking-wide">Artista do Dia</h3>
-                <p className="text-xs text-gray-400 mt-1">Fonte: manual do dia → agenda → fallback event_settings. (UTC)</p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  disabled={busy}
-                  onClick={refreshArtistOfDayAdmin}
-                  className="px-4 py-2 rounded-xl bg-gray-800 text-gray-200 text-xs font-bold hover:bg-gray-700 disabled:opacity-50"
-                >
-                  Atualizar
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={openSetTodayModal}
-                  className="px-4 py-2 rounded-xl bg-[#FFD86B] text-black text-xs font-black hover:bg-[#F6C560] disabled:opacity-50"
-                >
-                  Definir (Hoje)
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={onClearToday}
-                  className="px-4 py-2 rounded-xl bg-red-500/90 text-black text-xs font-black hover:bg-red-400 disabled:opacity-50"
-                >
-                  Remover (Hoje)
-                </button>
-              </div>
+        <div>
+             <div className="flex gap-3 mb-8 overflow-x-auto pb-2 px-1">
+                <SubTabButton active={activeSubTab === 'ops_v4'} onClick={() => setActiveSubTab('ops_v4')}>Live Ops Center</SubTabButton>
+                <SubTabButton active={activeSubTab === 'artist_of_day'} onClick={() => setActiveSubTab('artist_of_day')}>Artista do Dia</SubTabButton>
+                <SubTabButton active={activeSubTab === 'health'} onClick={() => setActiveSubTab('health')}>System Health</SubTabButton>
+                <SubTabButton active={activeSubTab === 'telemetry_classic'} onClick={() => setActiveSubTab('telemetry_classic')}>Telemetria</SubTabButton>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-black/40 border border-white/10 rounded-2xl p-4">
-                <p className="text-xs text-gray-400">Hoje (UTC)</p>
-                <p className="text-sm text-white font-bold mt-1">{currentDayUtc || '—'}</p>
-                <p className="text-xs text-gray-400 mt-3">Artista atual</p>
-                <p className="text-sm text-white font-bold mt-1">
-                  {currentUser?.artisticName || currentUser?.name || (currentArtistId ? currentArtistId : '—')}
-                </p>
-                <p className="text-[11px] text-gray-500 mt-1 break-all">{currentArtistId || ''}</p>
-              </div>
+            {/* NEW V4.2 OPERATIONS CENTER */}
+            {activeSubTab === 'ops_v4' && v4Data && (
+                <div className="animate-fade-in-up grid grid-cols-1 gap-6">
+                    <div className="bg-[#121212] border border-white/10 rounded-2xl p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-black text-[#FFD86B] font-chakra uppercase tracking-wide">
+                            Artista do Dia (Admin)
+                          </h3>
+                          <p className="text-xs text-white/60 mt-1">
+                            Defina ou remova o destaque do dia. O dia é calculado em UTC.
+                          </p>
 
-              <div className="bg-black/40 border border-white/10 rounded-2xl p-4">
-                <p className="text-xs text-gray-400">Métricas (hoje)</p>
-                <div className="mt-3 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-300">Cliques</span>
-                    <span className="text-white font-bold">{metrics?.total_clicks ?? 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-300">Usuários únicos</span>
-                    <span className="text-white font-bold">{metrics?.unique_viewers ?? 0}</span>
-                  </div>
-                  <div className="mt-3 text-xs text-gray-400">Por plataforma (cliques / únicos)</div>
-                  <div className="text-xs text-gray-200">
-                    Spotify: <b>{metrics?.by_platform?.spotify?.clicks ?? 0}</b> / <b>{metrics?.by_platform?.spotify?.unique ?? 0}</b>
-                  </div>
-                  <div className="text-xs text-gray-200">
-                    YouTube: <b>{metrics?.by_platform?.youtube?.clicks ?? 0}</b> / <b>{metrics?.by_platform?.youtube?.unique ?? 0}</b>
-                  </div>
-                  <div className="text-xs text-gray-200">
-                    Instagram: <b>{metrics?.by_platform?.instagram?.clicks ?? 0}</b> / <b>{metrics?.by_platform?.instagram?.unique ?? 0}</b>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-black/40 border border-white/10 rounded-2xl p-4">
-                <p className="text-xs text-gray-400">Agenda (próximos 14 dias)</p>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Range: {scheduleRange.from} → {scheduleRange.to}
-                </p>
-
-                <div className="mt-3 space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-2">
-                  {Array.from({ length: 15 }).map((_, i) => {
-                    const d = new Date();
-                    d.setUTCDate(d.getUTCDate() + i);
-                    const dayUtc = utcDateISO(d);
-                    const row = scheduleRows.find((r) => r.day_utc === dayUtc) || null;
-                    const u = row ? usersById.get(row.artist_id) : null;
-                    const label = u?.artisticName || u?.name || (row?.artist_id ?? '—');
-
-                    return (
-                      <div key={dayUtc} className="flex items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
-                        <div className="min-w-0">
-                          <div className="text-xs text-gray-300 font-bold">{dayUtc}</div>
-                          <div className="text-[11px] text-gray-400 truncate">{row ? label : 'Sem agendamento'}</div>
+                          <div className="mt-3 text-sm text-white/80">
+                            <span className="text-white/60">Atual:</span>{" "}
+                            {currentArtistId
+                              ? getDisplayName({ ...(allUsers.find(u => u.id === currentArtistId) as any), artistic_name: (allUsers.find(u => u.id === currentArtistId) as any)?.artisticName })
+                              : "Nenhum artista definido hoje"}
+                          </div>
                         </div>
+
                         <div className="flex gap-2">
                           <button
-                            disabled={busy}
-                            onClick={() => openScheduleDayModal(dayUtc)}
-                            className="px-3 py-1 rounded-lg bg-gray-800 text-gray-200 text-[11px] font-bold hover:bg-gray-700 disabled:opacity-50"
+                            onClick={() => setIsArtistModalOpen(true)}
+                            className="px-4 py-2 rounded-xl bg-[#FFD86B] text-black font-black text-xs uppercase tracking-widest hover:bg-[#F6C560] transition disabled:opacity-60"
+                            disabled={isArtistOpsLoading}
                           >
                             Definir
                           </button>
+
                           <button
-                            disabled={busy || !row}
-                            onClick={() => onClearScheduleDay(dayUtc)}
-                            className="px-3 py-1 rounded-lg bg-red-500/80 text-black text-[11px] font-black hover:bg-red-400 disabled:opacity-50"
+                            onClick={async () => {
+                              try {
+                                setIsArtistOpsLoading(true);
+                                const api = await import('../../api/index');
+                                await api.adminClearArtistOfDay();
+                                setCurrentArtistId(null);
+                              } catch (e: any) {
+                                console.error(e);
+                              } finally {
+                                setIsArtistOpsLoading(false);
+                              }
+                            }}
+                            className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs uppercase tracking-widest hover:bg-white/10 transition disabled:opacity-60"
+                            disabled={isArtistOpsLoading}
                           >
-                            Remover
+                            Remover (Hoje)
                           </button>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <AdminArtistsOfTheDayModal
+                        isOpen={isArtistModalOpen}
+                        onClose={() => setIsArtistModalOpen(false)}
+                        allUsers={allUsers}
+                        currentArtistIds={currentArtistId ? [currentArtistId] : []}
+                        onSave={async (userIds) => {
+                          const nextId = userIds?.[0] || null;
+                          if (!nextId) {
+                            const api = await import('../../api/index');
+                            await api.adminClearArtistOfDay();
+                            setCurrentArtistId(null);
+                            return;
+                          }
+                          const api = await import('../../api/index');
+                          await api.adminSetArtistOfDay(nextId);
+                          setCurrentArtistId(nextId);
+                        }}
+                      />
+                    </div>
+
+                    {/* Top Stats */}
+                    <StatsPanel data={v4Data.analytics} />
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Left Column (2/3) */}
+                        <div className="lg:col-span-2 space-y-6">
+                             <WeeklyMissionsPanel />
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <TelemetryPanel telemetry={v4Data.telemetry} />
+                                <HeatmapPanel heatmap={v4Data.heatmap} />
+                             </div>
+                        </div>
+
+                        {/* Right Column (1/3) */}
+                        <div className="space-y-6">
+                            <InsightsPanel insights={v4Data.insights} />
+                            <QueuePanel />
+                            <AuditPanel />
+                        </div>
+                    </div>
                 </div>
+            )}
 
-                <p className="text-[11px] text-gray-500 mt-3">
-                  Observação: a agenda só entra em ação quando não existe “set manual” em <code>artist_of_day</code>.
-                </p>
-              </div>
-            </div>
-          </div>
+            {/* ADMIN: ARTIST OF THE DAY */}
+            {activeSubTab === 'artist_of_day' && (
+                <div className="animate-fade-in-up grid grid-cols-1 gap-6">
+                    <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl p-6 shadow-xl">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                            <div>
+                                <h2 className="text-xl md:text-2xl font-black text-[#FFD86B] font-chakra uppercase tracking-wide">
+                                    Controle — Artista do Dia
+                                </h2>
+                                <p className="text-gray-400 text-sm mt-1">
+                                    Define manualmente o artista em destaque do dia (UTC) via RPC <span className="text-gray-300">admin_set_artist_of_day</span>.
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setAodModalOpen(true)}
+                                    className="px-4 py-2 rounded-xl bg-[#FFD86B] text-black font-black text-xs uppercase tracking-widest hover:bg-[#F6C560] transition"
+                                >
+                                    Selecionar Artista
+                                </button>
+                                <button
+                                    onClick={() => loadArtistOfDay()}
+                                    disabled={aodIsLoading}
+                                    className="px-4 py-2 rounded-xl bg-gray-800 text-gray-200 font-bold text-xs uppercase tracking-widest hover:bg-gray-700 transition disabled:opacity-50"
+                                >
+                                    {aodIsLoading ? 'Atualizando...' : 'Recarregar'}
+                                </button>
+                            </div>
+                        </div>
 
-          <AdminArtistsOfTheDayModal
-            isOpen={isArtistModalOpen}
-            onClose={() => {
-              setIsArtistModalOpen(false);
-              setSchedulePickDay(null);
-            }}
-            allUsers={allUsers}
-            currentArtistIds={currentArtistId ? [currentArtistId] : []}
-            onSave={onModalSave}
-          />
+                        <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <div className="lg:col-span-2 bg-[#121212] border border-white/10 rounded-2xl p-5">
+                                <p className="text-xs uppercase tracking-widest text-gray-500 font-bold">Status Hoje (UTC)</p>
+                                <div className="mt-3 flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-full bg-black/40 border border-[#FFD86B]/30 overflow-hidden flex items-center justify-center">
+                                        {(currentArtistUser?.avatarUrl || (aodPayload?.artist?.avatar_url || '')) ? (
+                                            <img
+                                                src={currentArtistUser?.avatarUrl || (aodPayload?.artist?.avatar_url || '')}
+                                                alt="avatar"
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <span className="text-[#FFD86B] font-black">★</span>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-white font-black text-lg truncate">
+                                            {aodPayload?.has_artist ? currentDisplayName : 'Sem destaque hoje'}
+                                        </p>
+                                        <p className="text-gray-400 text-sm">
+                                            {aodPayload?.day_utc ? `Dia (UTC): ${aodPayload.day_utc}` : 'Dia (UTC): —'}
+                                        </p>
+                                        <p className="text-gray-500 text-xs mt-1 truncate">
+                                            ID: {aodCurrentArtistId || '—'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-[#121212] border border-white/10 rounded-2xl p-5">
+                                <p className="text-xs uppercase tracking-widest text-gray-500 font-bold">Dica</p>
+                                <p className="text-gray-300 text-sm mt-3 leading-relaxed">
+                                    Se não aparecer no Dashboard do app, confirme que o artista selecionado tem
+                                    <span className="text-gray-200 font-bold"> perfil válido</span> e que o front está em
+                                    <span className="text-gray-200 font-bold"> backendProvider = supabase</span>.
+                                </p>
+                                <p className="text-gray-500 text-xs mt-3">
+                                    O destaque é por dia (UTC) e substitui o artista anterior.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Modal reutilizado (lista de users) — salva apenas 1 */}
+                    <AdminArtistsOfTheDayModal
+                        isOpen={aodModalOpen}
+                        onClose={() => setAodModalOpen(false)}
+                        allUsers={allUsers}
+                        currentArtistIds={aodCurrentArtistId ? [aodCurrentArtistId] : []}
+                        onSave={async (ids) => {
+                            try {
+                                const nextId = Array.isArray(ids) && ids.length ? ids[0] : null;
+                                if (!nextId) {
+                                    toast.error('Selecione 1 artista para definir o destaque.');
+                                    return;
+                                }
+                                const api = await import('../../api/index');
+                                await api.adminSetArtistOfDay(nextId);
+                                toast.success('✅ Artista do Dia definido!');
+                                await loadArtistOfDay();
+                            } catch (e: any) {
+                                console.error(e);
+                                toast.error(e?.message || 'Falha ao definir Artista do Dia');
+                            }
+                        }}
+                    />
+                </div>
+            )}
+
+            {activeSubTab === 'health' && (
+                <SystemHealthMonitor 
+                    allUsers={allUsers}
+                    missions={missions}
+                    missionSubmissions={missionSubmissions}
+                    redeemedItems={redeemedItems}
+                    allTransactions={allTransactions}
+                    usableItemQueue={usableItemQueue}
+                />
+            )}
+
+            {activeSubTab === 'telemetry_classic' && (
+                <TelemetryDashboard allUsers={allUsers} />
+            )}
         </div>
-      )}
-
-      {activeSubTab === 'health' && (
-        <SystemHealthMonitor
-          allUsers={allUsers}
-          missions={missions}
-          missionSubmissions={missionSubmissions}
-          redeemedItems={redeemedItems}
-          allTransactions={allTransactions}
-          usableItemQueue={usableItemQueue}
-        />
-      )}
-
-      {activeSubTab === 'telemetry_classic' && <TelemetryDashboard allUsers={allUsers} />}
-    </div>
-  );
+    );
 };
 
 export default AdminDashboard;
