@@ -1,5 +1,6 @@
 
 // API HUB V5.0 - CONSOLIDATED ARCHITECTURE
+export * from './events';
 
 // Admin & Analytics
 export { adminPainelData } from "./admin/painel";

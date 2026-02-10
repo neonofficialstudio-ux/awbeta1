@@ -9,6 +9,8 @@ import { LiveArenaEngine } from "./liveArenaEngine";
 import { EventSessionEngine } from "./session";
 import { EconomyEngineV6 } from "../economy/economyEngineV6";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";
+import { isSupabaseProvider } from '../core/backendGuard';
+import * as SupabaseArtistOfDay from '../supabase/artistOfDay';
 import type { User, Event, Notification, EventMission, EventMissionSubmission } from "../../types";
 import { SanityGuard } from "../../services/sanity.guard";
 import { EventClosureEngine } from "../../services/events/eventClosure.engine";
@@ -471,6 +473,22 @@ export const EventEngineUnified = {
         return {
             rotationSeconds: (typeof sec === 'number' && sec > 0) ? sec : (db.artistCarouselDurationData || 10)
         };
+    },
+
+
+
+    getArtistOfDay: async () => {
+        if (isSupabaseProvider()) {
+            return SupabaseArtistOfDay.getArtistOfDay();
+        }
+        return { success: true, has_artist: false };
+    },
+
+    recordArtistOfDayClick: async (platform: 'spotify' | 'youtube' | 'instagram') => {
+        if (isSupabaseProvider()) {
+            return SupabaseArtistOfDay.recordArtistOfDayClick(platform);
+        }
+        return { success: false };
     },
 
     claimArtistOfDayReward: (userId: string, artistId: string) => withLatency(async () => {

@@ -6,6 +6,7 @@ import Notifications from '../components/Notifications';
 import ToastSystem from '../components/ToastSystem';
 import { useAppContext } from '../constants';
 import * as api from '../api/index';
+import { isSupabaseProvider } from '../api/core/backendGuard';
 import type { User, StoreItem, UsableItem, InventoryTab } from '../types';
 import { usePageTitle } from '../components/ui/hooks/usePageTitle';
 import NotFoundState from '../components/ui/feedback/NotFoundState';
@@ -176,10 +177,17 @@ export const MainLayout: React.FC = () => {
     };
 
     const handleCloseArtistOfTheDayModal = async (navigateToDashboard = false) => {
-        if (activeUser && artistOfTheDayAnnouncementId) {
-            const response = await api.markArtistOfTheDayAsSeen(activeUser.id, artistOfTheDayAnnouncementId);
-            if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+        if (isSupabaseProvider() && artistOfTheDayAnnouncementId) {
+            try {
+                localStorage.setItem(`aw_aod_seen:${artistOfTheDayAnnouncementId}`, '1');
+            } catch {}
+        } else {
+            if (activeUser && artistOfTheDayAnnouncementId) {
+                const response = await api.markArtistOfTheDayAsSeen(activeUser.id, artistOfTheDayAnnouncementId);
+                if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+            }
         }
+
         setShowArtistOfTheDayModal(false);
         setArtistOfTheDayAnnouncementId(null);
         if (navigateToDashboard) dispatch({ type: 'SET_VIEW', payload: 'dashboard' });

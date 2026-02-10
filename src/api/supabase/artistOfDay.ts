@@ -1,8 +1,8 @@
+// src/api/supabase/artistOfDay.ts
 import { getSupabase } from './client';
-import { getOrSetCache } from '../../lib/sessionCache';
-import type { User } from '../../types';
+import { config } from '../../core/config';
 
-type ArtistOfDayResponse = {
+export type ArtistOfDayPayload = {
   success: boolean;
   has_artist: boolean;
   day_utc?: string;
@@ -19,97 +19,42 @@ type ArtistOfDayResponse = {
   clicked?: Record<string, boolean>;
 };
 
-export type ArtistOfDayPayload = {
-  dayUtc: string;
-  artist: User & { links?: { spotify?: string; youtube?: string; instagram?: string } };
-  clicked: Record<string, boolean>;
-};
-
-export type RecordClickResult = {
-  success: boolean;
-  has_artist: boolean;
-  day_utc?: string;
-  artist_id?: string;
-  required?: number;
-  done?: number;
-  bonus_awarded?: boolean;
-};
-
-const ensureClient = () => {
+export async function getArtistOfDay(): Promise<ArtistOfDayPayload> {
+  if (config.backendProvider !== 'supabase') {
+    return { success: false, has_artist: false };
+  }
   const supabase = getSupabase();
-  if (!supabase) throw new Error('[ArtistOfDaySupabase] Supabase client not initialized');
-  return supabase;
-};
+  if (!supabase) throw new Error('[ArtistOfDay] Supabase client not initialized');
 
-function mapToUser(a: NonNullable<ArtistOfDayResponse['artist']>): ArtistOfDayPayload['artist'] {
-  // Mantém compat com UI atual (User + links)
-  const user: any = {
-    id: a.id,
-    name: a.display_name ?? '',
-    displayName: a.display_name ?? '',
-    artisticName: a.artistic_name ?? '',
-    avatarUrl: a.avatar_url ?? '',
-    level: Number(a.level ?? 0),
-    spotifyUrl: a.spotify_url ?? '',
-    youtubeUrl: a.youtube_url ?? '',
-    instagramUrl: a.instagram_url ?? '',
-    links: {
-      spotify: a.spotify_url ?? '',
-      youtube: a.youtube_url ?? '',
-      instagram: a.instagram_url ?? '',
-    },
-  };
-  return user as ArtistOfDayPayload['artist'];
+  const { data, error } = await supabase.rpc('get_artist_of_day');
+  if (error) throw error;
+
+  // rpc retorna jsonb
+  return (data as any) ?? { success: true, has_artist: false };
 }
 
-export const ArtistOfDaySupabase = {
-  async getArtistOfDay(opts?: { bypassCache?: boolean }): Promise<{ success: boolean; data?: ArtistOfDayPayload; error?: string }> {
-    try {
-      const supabase = ensureClient();
+export async function recordArtistOfDayClick(platform: 'spotify' | 'youtube' | 'instagram') {
+  if (config.backendProvider !== 'supabase') {
+    return { success: false };
+  }
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('[ArtistOfDay] Supabase client not initialized');
 
-      const { data, error } = await getOrSetCache(
-        `artist-of-day`,
-        30_000,
-        () => supabase.rpc('get_artist_of_day'),
-        { bypass: opts?.bypassCache },
-      );
+  const { data, error } = await supabase.rpc('record_artist_of_day_click', { p_platform: platform });
+  if (error) throw error;
 
-      if (error) throw error;
+  return data as any;
+}
 
-      const payload = (data ?? null) as ArtistOfDayResponse | null;
+export async function adminSetArtistOfDay(artistId: string) {
+  if (config.backendProvider !== 'supabase') {
+    return { success: false };
+  }
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('[ArtistOfDay] Supabase client not initialized');
 
-      if (!payload?.success) {
-        return { success: false, error: 'Resposta inválida do get_artist_of_day' };
-      }
+  const { data, error } = await supabase.rpc('admin_set_artist_of_day', { p_artist_id: artistId });
+  if (error) throw error;
 
-      if (!payload.has_artist || !payload.artist || !payload.day_utc) {
-        return { success: true, data: undefined };
-      }
-
-      return {
-        success: true,
-        data: {
-          dayUtc: String(payload.day_utc),
-          artist: mapToUser(payload.artist),
-          clicked: (payload.clicked ?? {}) as Record<string, boolean>,
-        },
-      };
-    } catch (err: any) {
-      console.error('[ArtistOfDaySupabase] getArtistOfDay failed', err);
-      return { success: false, error: err?.message || 'Falha ao carregar Artista do Dia' };
-    }
-  },
-
-  async recordClick(platform: 'spotify' | 'youtube' | 'instagram'): Promise<{ success: boolean; result?: RecordClickResult; error?: string }> {
-    try {
-      const supabase = ensureClient();
-      const { data, error } = await supabase.rpc('record_artist_of_day_click', { p_platform: platform });
-      if (error) throw error;
-
-      return { success: true, result: data as RecordClickResult };
-    } catch (err: any) {
-      console.error('[ArtistOfDaySupabase] recordClick failed', err);
-      return { success: false, error: err?.message || 'Falha ao registrar clique' };
-    }
-  },
-};
+  return data as any;
+}
