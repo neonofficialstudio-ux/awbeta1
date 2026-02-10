@@ -322,6 +322,12 @@ export {
   listInsights
 } from "./telemetry/insights/list";
 
+export {
+  getArtistOfDay,
+  recordArtistOfDayClick,
+  adminSetArtistOfDay,
+} from './supabase/artistOfDay';
+
 // Export global diagnostic runner
 export const runDiagnosticReport = DiagnosticCore.runReport;
 
