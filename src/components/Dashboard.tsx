@@ -115,58 +115,26 @@ const ArtistsOfTheDayCarousel: React.FC<{
     const [isLoading, setIsLoading] = useState(true);
     const [rotationSeconds, setRotationSeconds] = useState<number>(10);
     const [supabaseClicked, setSupabaseClicked] = useState<Record<string, boolean>>({});
+    const [supabaseDayUtc, setSupabaseDayUtc] = useState<string | null>(null);
     const current = artists[currentIndex] ?? null;
     const clickedMap = isSupabase ? supabaseClicked : (progress[current?.id || ''] || {});
     const currentDisplayName = getDisplayName(current ? { ...current, artistic_name: current.artisticName } : null);
-    void dayUtc;
-
-    const syncSupabaseAOD = async (reason: string) => {
-        if (!isSupabase) return;
-        try {
-            const api = await import('../api/index');
-            const aod = await api.getArtistOfDay();
-
-            if (!aod?.success || !aod?.has_artist || !aod?.artist?.id) {
-                setSupabaseClicked({});
-                onSupabaseSync?.({ artist: null, clicked: {}, dayUtc: aod?.day_utc ?? null });
-                return;
-            }
-
-            const artist = {
-                id: aod.artist.id,
-                display_name: aod.artist.display_name ?? null,
-                artisticName: aod.artist.artistic_name ?? null,
-                artistic_name: aod.artist.artistic_name ?? null,
-                avatar_url: aod.artist.avatar_url ?? null,
-                avatarUrl: aod.artist.avatar_url ?? null,
-                level: aod.artist.level ?? 0,
-                spotifyUrl: aod.artist.spotify_url ?? '',
-                youtubeUrl: aod.artist.youtube_url ?? '',
-                instagramUrl: aod.artist.instagram_url ?? '',
-                links: {
-                    spotify: aod.artist.spotify_url ?? '',
-                    youtube: aod.artist.youtube_url ?? '',
-                    instagram: aod.artist.instagram_url ?? '',
-                },
-            };
-
-            const nextClicked = (aod.clicked || {}) as Record<string, boolean>;
-            setSupabaseClicked(nextClicked);
-            onSupabaseSync?.({ artist, clicked: nextClicked, dayUtc: aod.day_utc ?? null });
-        } catch (e) {
-            console.warn('[ArtistOfDay] sync failed', reason, e);
-        }
-    };
+    void supabaseDayUtc;
 
     useEffect(() => {
+        if (isSupabase) {
+            // ✅ Supabase mode: render-only. Sem polling, sem visibility sync, sem interval.
+            setArtists(Array.isArray(initialArtists) ? initialArtists : []);
+            setSupabaseClicked(clicked || {});
+            setSupabaseDayUtc(dayUtc || null);
+            setIsLoading(false);
+
+            // ⚠️ IMPORTANTÍSSIMO:
+            // Não chamar sync aqui. Nada de getArtistOfDay / recordArtist... aqui.
+            return;
+        }
+
         const loadArtists = async () => {
-            if (isSupabase) {
-                setArtists(initialArtists || []);
-                setSupabaseClicked(clicked || {});
-                setIsLoading(false);
-                void syncSupabaseAOD('initial');
-                return;
-            }
             try {
                 const api = await import('../api/index');
                 const data = await api.fetchArtistsOfTheDayFull();
@@ -184,52 +152,7 @@ const ArtistsOfTheDayCarousel: React.FC<{
             const savedProgress = JSON.parse(localStorage.getItem("daily-artist-progress") || "{}");
             setProgress(savedProgress);
         }
-    }, [state.eventSettings, isSupabase, initialArtists]);
-
-    useEffect(() => {
-        if (!isSupabase) return;
-        setSupabaseClicked(clicked || {});
-    }, [isSupabase, clicked]);
-
-    useEffect(() => {
-        if (!isSupabase) return;
-        void syncSupabaseAOD('props-change');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isSupabase, dayUtc]);
-
-    useEffect(() => {
-        if (!isSupabase) return;
-
-        let alive = true;
-
-        const tick = async (reason: string) => {
-            if (!alive) return;
-            if (document.visibilityState !== 'visible') return;
-            await syncSupabaseAOD(reason);
-        };
-
-        const interval = window.setInterval(() => {
-            void tick('interval');
-        }, 20_000);
-
-        const onFocus = () => {
-            void tick('focus');
-        };
-        const onVis = () => {
-            if (document.visibilityState === 'visible') void tick('visibility');
-        };
-
-        window.addEventListener('focus', onFocus);
-        document.addEventListener('visibilitychange', onVis);
-
-        return () => {
-            alive = false;
-            window.clearInterval(interval);
-            window.removeEventListener('focus', onFocus);
-            document.removeEventListener('visibilitychange', onVis);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isSupabase]);
+    }, [state.eventSettings, isSupabase, initialArtists, clicked, dayUtc]);
 
     useEffect(() => {
         if (!artists || artists.length <= 1) return;
@@ -240,25 +163,42 @@ const ArtistsOfTheDayCarousel: React.FC<{
         return () => clearInterval(interval);
     }, [artists.length, rotationSeconds]);
 
-    const handleLinkClick = async (platform: string, url: string) => {
+    const handleLinkClick = async (platform: 'spotify' | 'youtube' | 'instagram', url: string) => {
         if (!url) return;
 
         window.open(url, '_blank');
 
         if (!activeUser || !current) return;
 
+        // ✅ Supabase mode: refresh forte controlado, só no clique
         if (isSupabase) {
-            const already = Boolean((supabaseClicked || {})[platform]);
-            if (already) return;
-
-            setSupabaseClicked((prev) => ({ ...prev, [platform]: true }));
-
             try {
                 const api = await import('../api/index');
-                await api.recordArtistOfDayClick(platform as any);
+                await api.recordArtistOfDayClick(platform);
+                const aod = await api.getArtistOfDay();
+                if (aod?.success && aod?.has_artist) {
+                    const artist = {
+                        id: aod.artist.id,
+                        name: aod.artist.display_name || aod.artist.artistic_name || '',
+                        artisticName: aod.artist.artistic_name || '',
+                        avatarUrl: aod.artist.avatar_url || '',
+                        level: aod.artist.level || 1,
+                        links: {
+                            spotify: aod.artist.spotify_url || '',
+                            youtube: aod.artist.youtube_url || '',
+                            instagram: aod.artist.instagram_url || '',
+                        },
+                    };
 
-                await refreshAfterEconomyAction(activeUser.id, dispatch);
-                await syncSupabaseAOD('after-click');
+                    const nextClicked = (aod.clicked || {}) as Record<string, boolean>;
+                    setSupabaseClicked(nextClicked);
+                    setSupabaseDayUtc(aod.day_utc || null);
+                    onSupabaseSync?.({
+                        artist,
+                        clicked: nextClicked,
+                        dayUtc: aod.day_utc || null,
+                    });
+                }
 
                 dispatch({
                     type: 'ADD_TOAST',
@@ -269,14 +209,9 @@ const ArtistsOfTheDayCarousel: React.FC<{
                         message: 'Clique registrado ✅',
                     },
                 });
+                await refreshAfterEconomyAction(activeUser.id, dispatch);
             } catch (e) {
-                console.error('[ArtistOfDay] record click failed', e);
-
-                setSupabaseClicked((prev) => {
-                    const copy = { ...prev };
-                    delete copy[platform];
-                    return copy;
-                });
+                console.warn('[ArtistOfDay] click sync failed', e);
 
                 dispatch({
                     type: 'ADD_TOAST',
