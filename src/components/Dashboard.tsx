@@ -660,29 +660,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
 
             try {
                 const api = await import('../api/index');
-                const aod = await api.getArtistOfDay();
+                const payload = await api.getArtistOfDay();
 
-                if (aod?.success && aod?.has_artist && aod?.artist?.id) {
-                    artistOfDayDayUtc = aod.day_utc ?? null;
-                    artistOfDayClicked = (aod.clicked as any) || {};
+                if (payload?.success && payload?.has_artist && payload?.artist) {
+                    const a = payload.artist;
 
                     artistOfDay = {
-                        id: aod.artist.id,
-                        display_name: aod.artist.display_name ?? null,
-                        artisticName: aod.artist.artistic_name ?? null,
-                        artistic_name: aod.artist.artistic_name ?? null,
-                        avatar_url: aod.artist.avatar_url ?? null,
-                        avatarUrl: aod.artist.avatar_url ?? null,
-                        level: aod.artist.level ?? 0,
-                        spotifyUrl: aod.artist.spotify_url ?? '',
-                        youtubeUrl: aod.artist.youtube_url ?? '',
-                        instagramUrl: aod.artist.instagram_url ?? '',
+                        id: a.id,
+                        name: a.display_name || a.artistic_name || a.id,
+                        displayName: a.display_name,
+                        artisticName: a.artistic_name,
+                        avatarUrl: a.avatar_url,
+                        level: a.level ?? 0,
+                        spotifyUrl: a.spotify_url,
+                        youtubeUrl: a.youtube_url,
+                        instagramUrl: a.instagram_url,
                         links: {
-                            spotify: aod.artist.spotify_url ?? '',
-                            youtube: aod.artist.youtube_url ?? '',
-                            instagram: aod.artist.instagram_url ?? '',
+                            spotify: a.spotify_url || '',
+                            youtube: a.youtube_url || '',
+                            instagram: a.instagram_url || '',
                         },
                     };
+
+                    artistOfDayClicked = payload.clicked || {};
+                    artistOfDayDayUtc = payload.day_utc || null;
                 }
             } catch (e) {
                 console.warn('[ArtistOfDay] getArtistOfDay failed', e);
@@ -971,21 +972,37 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         async () => {
           if (!alive) return;
 
-          // debounce curto anti-burst
           if (debounce) window.clearTimeout(debounce);
           debounce = window.setTimeout(async () => {
             try {
               const api = await import('../api/index');
               const payload = await api.getArtistOfDay();
-
               if (!alive) return;
 
-              // só atualiza clicked/dayUtc/artists se tiver artista
-              if (payload?.success && payload?.has_artist) {
+              if (payload?.success && payload?.has_artist && payload?.artist) {
+                const a = payload.artist;
+
+                const artistOfDay = {
+                  id: a.id,
+                  name: a.display_name || a.artistic_name || a.id,
+                  displayName: a.display_name,
+                  artisticName: a.artistic_name,
+                  avatarUrl: a.avatar_url,
+                  level: a.level ?? 0,
+                  spotifyUrl: a.spotify_url,
+                  youtubeUrl: a.youtube_url,
+                  instagramUrl: a.instagram_url,
+                  links: {
+                    spotify: a.spotify_url || '',
+                    youtube: a.youtube_url || '',
+                    instagram: a.instagram_url || '',
+                  },
+                };
+
                 setData((prev: any) => ({
                   ...(prev || {}),
-                  artistsOfTheDay: payload.artist ? [payload.artist] : [],
-                  artistsOfTheDayIds: payload.artist ? [payload.artist.id] : [],
+                  artistsOfTheDay: [artistOfDay],
+                  artistsOfTheDayIds: [artistOfDay.id],
                   artistOfDayClicked: payload.clicked || {},
                   artistOfDayDayUtc: payload.day_utc || null,
                 }));
