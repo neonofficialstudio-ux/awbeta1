@@ -70,6 +70,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const [aodPayload, setAodPayload] = useState<ArtistOfDayRpcPayload | null>(null);
     const [aodIsLoading, setAodIsLoading] = useState(false);
     const [aodModalOpen, setAodModalOpen] = useState(false);
+    const [isArtistModalOpen, setIsArtistModalOpen] = useState(false);
+    const [currentArtistId, setCurrentArtistId] = useState<string | null>(null);
+    const [isArtistOpsLoading, setIsArtistOpsLoading] = useState(false);
 
     useEffect(() => {
         // Fetch V4.2 Data Structure
@@ -85,6 +88,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }
         };
         loadData();
+    }, []);
+
+    useEffect(() => {
+        const loadCurrent = async () => {
+            try {
+                const api = await import('../../api/index');
+                const payload = await api.getArtistOfDay();
+                if (payload?.has_artist && payload?.artist?.id) {
+                    setCurrentArtistId(payload.artist.id);
+                } else {
+                    setCurrentArtistId(null);
+                }
+            } catch (e) {
+                setCurrentArtistId(null);
+            }
+        };
+        void loadCurrent();
     }, []);
 
     const loadArtistOfDay = async () => {
@@ -111,15 +131,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     if (isLoading) return <div className="p-8 text-center"><div className="animate-spin w-8 h-8 border-4 border-gold-cinematic border-t-transparent rounded-full mx-auto"></div></div>;
 
-    const currentArtistId = (aodPayload?.has_artist && aodPayload?.artist?.id) ? aodPayload.artist.id : null;
+    const aodCurrentArtistId = (aodPayload?.has_artist && aodPayload?.artist?.id) ? aodPayload.artist.id : null;
     const currentArtistName =
       aodPayload?.artist
         ? (aodPayload.artist.display_name || aodPayload.artist.artistic_name || 'Artista')
         : null;
 
     const userList = Array.isArray(allUsers) ? allUsers.filter(u => u?.role === 'user') : [];
-    const currentArtistUser: User | undefined = currentArtistId
-      ? userList.find(u => u.id === currentArtistId)
+    const currentArtistUser: User | undefined = aodCurrentArtistId
+      ? userList.find(u => u.id === aodCurrentArtistId)
       : undefined;
 
     const currentDisplayName = currentArtistUser
@@ -138,7 +158,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* NEW V4.2 OPERATIONS CENTER */}
             {activeSubTab === 'ops_v4' && v4Data && (
                 <div className="animate-fade-in-up grid grid-cols-1 gap-6">
-                    
+                    <div className="bg-[#121212] border border-white/10 rounded-2xl p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-black text-[#FFD86B] font-chakra uppercase tracking-wide">
+                            Artista do Dia (Admin)
+                          </h3>
+                          <p className="text-xs text-white/60 mt-1">
+                            Defina ou remova o destaque do dia. O dia é calculado em UTC.
+                          </p>
+
+                          <div className="mt-3 text-sm text-white/80">
+                            <span className="text-white/60">Atual:</span>{" "}
+                            {currentArtistId
+                              ? getDisplayName({ ...(allUsers.find(u => u.id === currentArtistId) as any), artistic_name: (allUsers.find(u => u.id === currentArtistId) as any)?.artisticName })
+                              : "Nenhum artista definido hoje"}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setIsArtistModalOpen(true)}
+                            className="px-4 py-2 rounded-xl bg-[#FFD86B] text-black font-black text-xs uppercase tracking-widest hover:bg-[#F6C560] transition disabled:opacity-60"
+                            disabled={isArtistOpsLoading}
+                          >
+                            Definir
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                setIsArtistOpsLoading(true);
+                                const api = await import('../../api/index');
+                                await api.adminClearArtistOfDay();
+                                setCurrentArtistId(null);
+                              } catch (e: any) {
+                                console.error(e);
+                              } finally {
+                                setIsArtistOpsLoading(false);
+                              }
+                            }}
+                            className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs uppercase tracking-widest hover:bg-white/10 transition disabled:opacity-60"
+                            disabled={isArtistOpsLoading}
+                          >
+                            Remover (Hoje)
+                          </button>
+                        </div>
+                      </div>
+
+                      <AdminArtistsOfTheDayModal
+                        isOpen={isArtistModalOpen}
+                        onClose={() => setIsArtistModalOpen(false)}
+                        allUsers={allUsers}
+                        currentArtistIds={currentArtistId ? [currentArtistId] : []}
+                        onSave={async (userIds) => {
+                          const nextId = userIds?.[0] || null;
+                          if (!nextId) {
+                            const api = await import('../../api/index');
+                            await api.adminClearArtistOfDay();
+                            setCurrentArtistId(null);
+                            return;
+                          }
+                          const api = await import('../../api/index');
+                          await api.adminSetArtistOfDay(nextId);
+                          setCurrentArtistId(nextId);
+                        }}
+                      />
+                    </div>
+
                     {/* Top Stats */}
                     <StatsPanel data={v4Data.analytics} />
 
@@ -215,7 +302,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                             {aodPayload?.day_utc ? `Dia (UTC): ${aodPayload.day_utc}` : 'Dia (UTC): —'}
                                         </p>
                                         <p className="text-gray-500 text-xs mt-1 truncate">
-                                            ID: {currentArtistId || '—'}
+                                            ID: {aodCurrentArtistId || '—'}
                                         </p>
                                     </div>
                                 </div>
@@ -240,7 +327,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         isOpen={aodModalOpen}
                         onClose={() => setAodModalOpen(false)}
                         allUsers={allUsers}
-                        currentArtistIds={currentArtistId ? [currentArtistId] : []}
+                        currentArtistIds={aodCurrentArtistId ? [aodCurrentArtistId] : []}
                         onSave={async (ids) => {
                             try {
                                 const nextId = Array.isArray(ids) && ids.length ? ids[0] : null;
