@@ -17,6 +17,8 @@ export const fetchRafflesData = fetchRafflesDataSupabase;
 export const fetchArtistsOfTheDayFull = EventEngineUnified.fetchArtistsOfTheDayFull;
 export const fetchArtistOfTheDayConfig = EventEngineUnified.fetchArtistOfTheDayConfig;
 export const claimArtistOfDayReward = EventEngineUnified.claimArtistOfDayReward;
+export const getArtistOfDay = EventEngineUnified.getArtistOfDay;
+export const recordArtistOfDayClick = EventEngineUnified.recordArtistOfDayClick;
 
 // --- HELPERS & LEGACY ENDPOINTS ---
 export const getEventMissions = EventEngineUnified.getEventMissions;

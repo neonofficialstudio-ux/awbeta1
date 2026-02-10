@@ -96,7 +96,12 @@ const AdvertisementCarousel: React.FC<{ ads: Advertisement[] }> = React.memo(({ 
     );
 });
 
-const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: boolean }> = ({ initialArtists, isSupabase }) => {
+const ArtistsOfTheDayCarousel: React.FC<{
+  initialArtists?: any[];
+  isSupabase: boolean;
+  clicked?: Record<string, boolean>;
+  dayUtc?: string | null;
+}> = ({ initialArtists, isSupabase, clicked, dayUtc }) => {
     const { state, dispatch } = useAppContext();
     const { activeUser } = state;
     const [artists, setArtists] = useState<any[]>([]);
@@ -106,6 +111,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
     const [rotationSeconds, setRotationSeconds] = useState<number>(10);
     const current = artists[currentIndex] ?? null;
     const currentDisplayName = getDisplayName(current ? { ...current, artistic_name: current.artisticName } : null);
+    void dayUtc;
 
     useEffect(() => {
         const loadArtists = async () => {
@@ -119,17 +125,18 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
                 const data = await api.fetchArtistsOfTheDayFull();
                 setArtists(data);
                 setCurrentIndex(0);
-                // Events removidos: config vinda de events não é mais carregada aqui
             } catch (e) {
                 console.error(e);
-                if(initialArtists) setArtists(initialArtists);
+                if (initialArtists) setArtists(initialArtists);
             } finally {
                 setIsLoading(false);
             }
         };
         loadArtists();
-        const savedProgress = JSON.parse(localStorage.getItem("daily-artist-progress") || "{}");
-        setProgress(savedProgress);
+        if (!isSupabase) {
+            const savedProgress = JSON.parse(localStorage.getItem("daily-artist-progress") || "{}");
+            setProgress(savedProgress);
+        }
     }, [state.eventSettings, isSupabase, initialArtists]);
 
     useEffect(() => {
@@ -143,8 +150,46 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
 
     const handleLinkClick = async (platform: string, url: string) => {
         if (!url) return;
+
         window.open(url, '_blank');
+
         if (!activeUser || !current) return;
+
+        if (isSupabase) {
+            const already = Boolean((clicked || {})[platform]);
+            if (already) return;
+
+            try {
+                const api = await import('../api/index');
+                await api.recordArtistOfDayClick(platform as any);
+
+                await refreshAfterEconomyAction(activeUser.id, dispatch);
+
+                dispatch({
+                    type: 'ADD_TOAST',
+                    payload: {
+                        id: Date.now().toString(),
+                        type: 'success',
+                        title: 'Registrado!',
+                        message: 'Interação registrada no Artista do Dia ✅',
+                    },
+                });
+            } catch (e) {
+                console.error('[ArtistOfDay] record click failed', e);
+                dispatch({
+                    type: 'ADD_TOAST',
+                    payload: {
+                        id: Date.now().toString(),
+                        type: 'error',
+                        title: 'Falha',
+                        message: 'Não foi possível registrar o clique agora.',
+                    },
+                });
+            }
+
+            return;
+        }
+
         const key = current.id;
         const artistProgress = progress[key] || {};
         if (artistProgress[platform]) return;
@@ -152,45 +197,32 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
         const updatedMap = { ...progress, [key]: updatedArtistProgress };
         setProgress(updatedMap);
         localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
-        
+
         let required = 0;
         if (current.links?.spotify) required++;
         if (current.links?.instagram) required++;
         if (current.links?.youtube) required++;
-        
+
         const completedCount = Object.values(updatedArtistProgress).filter(v => v === true).length;
         if (completedCount >= required && !updatedArtistProgress._rewarded && required > 0 && !isSupabase) {
             try {
                 const api = await import('../api/index');
                 const res = await api.claimArtistOfDayReward(activeUser.id, current.id);
                 if (res.success && res.updatedUser) {
-                     updatedMap[key]._rewarded = true;
-                     setProgress(updatedMap);
-                     localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
-                     dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
-                     dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Recompensa Coletada', message: `+1 Lummi Coin por apoiar ${currentDisplayName}!` } });
+                    updatedMap[key]._rewarded = true;
+                    setProgress(updatedMap);
+                    localStorage.setItem("daily-artist-progress", JSON.stringify(updatedMap));
+                    dispatch({ type: 'UPDATE_USER', payload: res.updatedUser });
+                    dispatch({ type: 'ADD_TOAST', payload: { id: Date.now().toString(), type: 'success', title: 'Recompensa Coletada', message: `+1 Lummi Coin por apoiar ${currentDisplayName}!` } });
                 }
             } catch (e) { console.error("Failed to claim reward", e); }
         }
     };
 
-    if (isSupabase) {
-        return (
-            <div className="bg-[#111] p-10 rounded-[40px] border border-[#333] text-center text-gray-400 shadow-inner mt-12">
-                <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-[#222] border border-[#333] mb-4">
-                    <CrownIcon className="w-5 h-5 text-[#FFD36A]" />
-                    <span className="text-xs font-black uppercase tracking-[0.2em] text-[#FFD36A]">Em breve</span>
-                </div>
-                <p className="text-lg font-bold text-white mb-2">Artistas do Dia</p>
-                <p className="text-sm text-gray-500">Este recurso chegará em breve no modo Supabase.</p>
-            </div>
-        );
-    }
-
     if (isLoading && !current) return <LoadingSkeleton height={400} className="mt-12 rounded-[40px]" />;
     if (!current) return null;
 
-    const currentArtistProgress = progress[current.id] || {};
+    const currentArtistProgress = isSupabase ? (clicked || {}) : (progress[current.id] || {});
     let totalLinks = 0;
     if (current.links?.spotify) totalLinks++;
     if (current.links?.instagram) totalLinks++;
@@ -200,7 +232,7 @@ const ArtistsOfTheDayCarousel: React.FC<{ initialArtists?: User[], isSupabase: b
     if (current.links?.instagram && currentArtistProgress.instagram) confirmedDone++;
     if (current.links?.youtube && currentArtistProgress.youtube) confirmedDone++;
     const pct = totalLinks > 0 ? (confirmedDone / totalLinks) * 100 : 0;
-    const isSetComplete = currentArtistProgress._rewarded;
+    const isSetComplete = isSupabase ? false : currentArtistProgress._rewarded;
 
     return (
         <div className="relative animate-fade-in-up mt-12 md:mt-16 px-1">
@@ -478,6 +510,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             const ledgerList = ledgerResponse.success ? ledgerResponse.ledger : [];
             const notificationList = notificationsResponse.success ? notificationsResponse.notifications : [];
 
+            let artistOfDay: any = null;
+            let artistOfDayClicked: Record<string, boolean> = {};
+            let artistOfDayDayUtc: string | null = null;
+
+            try {
+                const api = await import('../api/index');
+                const aod = await api.getArtistOfDay();
+
+                if (aod?.success && aod?.has_artist && aod?.artist?.id) {
+                    artistOfDayDayUtc = aod.day_utc ?? null;
+                    artistOfDayClicked = (aod.clicked as any) || {};
+
+                    artistOfDay = {
+                        id: aod.artist.id,
+                        display_name: aod.artist.display_name ?? null,
+                        artisticName: aod.artist.artistic_name ?? null,
+                        artistic_name: aod.artist.artistic_name ?? null,
+                        avatar_url: aod.artist.avatar_url ?? null,
+                        avatarUrl: aod.artist.avatar_url ?? null,
+                        level: aod.artist.level ?? 0,
+                        spotifyUrl: aod.artist.spotify_url ?? '',
+                        youtubeUrl: aod.artist.youtube_url ?? '',
+                        instagramUrl: aod.artist.instagram_url ?? '',
+                        links: {
+                            spotify: aod.artist.spotify_url ?? '',
+                            youtube: aod.artist.youtube_url ?? '',
+                            instagram: aod.artist.instagram_url ?? '',
+                        },
+                    };
+                }
+            } catch (e) {
+                console.warn('[ArtistOfDay] getArtistOfDay failed', e);
+            }
+
             setLedgerEntries(ledgerList);
             dispatch({ type: 'SET_LEDGER', payload: ledgerList });
             if (levelProgressResponse.success) {
@@ -496,11 +562,23 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             setData({
                 advertisements: [],
                 featuredMission: null,
-                artistsOfTheDay: [],
+                artistsOfTheDay: artistOfDay ? [artistOfDay] : [],
                 processedArtistOfTheDayQueue: [],
-                artistsOfTheDayIds: [],
-                ledger: ledgerList
+                artistsOfTheDayIds: artistOfDay ? [artistOfDay.id] : [],
+                artistOfDayClicked,
+                artistOfDayDayUtc,
+                ledger: ledgerList,
             });
+
+            try {
+                if (artistOfDay && artistOfDayDayUtc && user?.id === artistOfDay.id) {
+                    const key = `aw_aod_seen:${artistOfDayDayUtc}`;
+                    const seen = localStorage.getItem(key) === '1';
+                    if (!seen) {
+                        onShowArtistOfTheDay(artistOfDayDayUtc);
+                    }
+                }
+            } catch {}
         } else {
             const api = await import('../api/index');
             const dashboardData = await api.fetchDashboardData();
@@ -1184,7 +1262,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             </div>
         </div>
 
-        <ArtistsOfTheDayCarousel initialArtists={data.artistsOfTheDay} isSupabase={isSupabase} />
+        <ArtistsOfTheDayCarousel
+          initialArtists={data.artistsOfTheDay}
+          isSupabase={isSupabase}
+          clicked={data.artistOfDayClicked}
+          dayUtc={data.artistOfDayDayUtc}
+        />
         
       </div>
     </div>
