@@ -948,6 +948,66 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
   }, [notifications]);
 
   useEffect(() => {
+    if (!isSupabase) return;
+    if (!user?.id) return;
+
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    let alive = true;
+    let debounce: number | null = null;
+
+    const channel = supabase.channel(`artist_of_day_clicks:${user.id}`);
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'artist_of_day_clicks',
+          filter: `viewer_id=eq.${user.id}`,
+        },
+        async () => {
+          if (!alive) return;
+
+          // debounce curto anti-burst
+          if (debounce) window.clearTimeout(debounce);
+          debounce = window.setTimeout(async () => {
+            try {
+              const api = await import('../api/index');
+              const payload = await api.getArtistOfDay();
+
+              if (!alive) return;
+
+              // só atualiza clicked/dayUtc/artists se tiver artista
+              if (payload?.success && payload?.has_artist) {
+                setData((prev: any) => ({
+                  ...(prev || {}),
+                  artistsOfTheDay: payload.artist ? [payload.artist] : [],
+                  artistsOfTheDayIds: payload.artist ? [payload.artist.id] : [],
+                  artistOfDayClicked: payload.clicked || {},
+                  artistOfDayDayUtc: payload.day_utc || null,
+                }));
+              }
+            } catch (e) {
+              console.error('[artist_of_day] realtime refresh failed', e);
+            }
+          }, 400);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      alive = false;
+      if (debounce) window.clearTimeout(debounce);
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [isSupabase, user?.id]);
+
+  useEffect(() => {
     if (!isSupabase || !user) {
         setCheckedIn(false);
         return;

@@ -708,6 +708,21 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
                                             <Button variant="ghost" size="sm" onClick={() => onViewUserHistory(user)} className="text-neon-cyan hover:bg-neon-cyan/10 border border-transparent hover:border-neon-cyan/30">
                                                 <HistoryIcon className="w-4 h-4" />
                                             </Button>
+                                            <button
+                                                className="px-3 py-1 rounded-md bg-goldenYellow-500 text-black font-bold text-xs hover:bg-goldenYellow-400 transition"
+                                                onClick={async () => {
+                                                    try {
+                                                        const api = await import('../../api/index');
+                                                        await api.adminSetArtistOfDay(user.id);
+                                                        toast.success('✅ Artista do Dia definido!');
+                                                    } catch (e: any) {
+                                                        console.error(e);
+                                                        toast.error(e?.message || 'Falha ao definir Artista do Dia');
+                                                    }
+                                                }}
+                                            >
+                                                Artista do Dia
+                                            </button>
                                             {user.isBanned ? (
                                                 <Button variant="ghost" size="sm" onClick={() => setUserToUnban(user)} className="text-green-400 hover:bg-green-500/10 border border-transparent">
                                                     <ShieldIcon className="w-4 h-4" />
