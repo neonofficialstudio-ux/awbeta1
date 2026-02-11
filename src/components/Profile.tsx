@@ -274,23 +274,33 @@ const Profile: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (validateUrls() && formData) {
+          const instagramUrl = instagramUsername ? `https://www.instagram.com/${instagramUsername}` : '';
+          const tiktokUrl = tiktokUsername ? `https://www.tiktok.com/@${tiktokUsername}` : '';
+
           const dataToSave = {
+            ...user,
             ...formData,
-            instagramUrl: `https://www.instagram.com/${instagramUsername}`,
-            tiktokUrl: tiktokUsername ? `https://www.tiktok.com/@${tiktokUsername}` : '',
+            name: formData.name ?? user.name,
+            artisticName: formData.artisticName ?? user.artisticName,
+            avatarUrl: formData.avatarUrl ?? user.avatarUrl,
+            spotifyUrl: (formData.spotifyUrl ?? '').trim(),
+            youtubeUrl: (formData.youtubeUrl ?? '').trim(),
+            instagramUrl,
+            tiktokUrl,
+            phone: (formData.phone ?? '').trim(),
+            email: formData.email ?? user.email,
           };
 
           await api.upsertMySocialLinks({
-            spotifyUrl: dataToSave.spotifyUrl ?? null,
-            youtubeUrl: dataToSave.youtubeUrl ?? null,
-            instagramUrl: dataToSave.instagramUrl ?? null,
-            tiktokUrl: dataToSave.tiktokUrl ?? null,
+            spotifyUrl: dataToSave.spotifyUrl || null,
+            youtubeUrl: dataToSave.youtubeUrl || null,
+            instagramUrl: dataToSave.instagramUrl || null,
+            tiktokUrl: dataToSave.tiktokUrl || null,
           });
 
           const response = await api.updateUser(dataToSave);
           if (response.updatedUser) {
-            // ✅ evita reset por payload parcial (normalizeActiveUser dá defaults)
-            const merged = { ...user, ...response.updatedUser };
+            const merged = { ...user, ...dataToSave, ...response.updatedUser };
             dispatch({ type: 'UPDATE_USER', payload: merged });
           }
           setIsEditing(false);

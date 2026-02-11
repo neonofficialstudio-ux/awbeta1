@@ -90,6 +90,28 @@ export const ProfileSupabase = {
                         throw new Error(error?.message || 'Perfil não encontrado');
                     }
 
+                    const { data: linksRows, error: linksError } = await supabase
+                        .from('profile_social_links')
+                        .select('platform,url')
+                        .eq('user_id', targetUserId);
+
+                    if (linksError) {
+                        console.warn('[ProfileSupabase] profile_social_links lookup failed', linksError.message);
+                    }
+
+                    const links = (linksRows || []).reduce((acc: any, row: any) => {
+                        const platform = `${row.platform || ''}`.toLowerCase();
+                        const url = `${row.url || ''}`.trim();
+                        if (!url) return acc;
+
+                        if (platform === 'spotify') acc.spotifyUrl = url;
+                        if (platform === 'youtube') acc.youtubeUrl = url;
+                        if (platform === 'instagram') acc.instagramUrl = url;
+                        if (platform === 'tiktok') acc.tiktokUrl = url;
+
+                        return acc;
+                    }, {});
+
                     // Buscar estado de assinatura (cancelamento agendado, expiração)
                     const { data: subData, error: subError } = await supabase
                         .from('subscriptions')
@@ -102,6 +124,7 @@ export const ProfileSupabase = {
                     const mapped = mapProfileToUser(data);
                     const hydrated = {
                         ...mapped,
+                        ...links,
                         cancellationPending: Boolean(subData?.cancel_at_period_end),
                         subscriptionExpiresAt: subData?.current_period_end ?? undefined,
                     } as User;
