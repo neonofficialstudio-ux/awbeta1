@@ -42,6 +42,7 @@ export type UserRole = 'user' | 'admin' | 'superadmin';
 export interface User {
   id: string;
   name: string;
+  displayName?: string;
   artisticName: string;
   avatarUrl: string;
   
