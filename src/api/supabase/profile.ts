@@ -10,10 +10,7 @@ const buildProfileMeta = (user: Partial<User>) => {
     const allowedMeta = {
         email: user.email,
         phone: user.phone,
-        spotifyUrl: user.spotifyUrl,
-        youtubeUrl: user.youtubeUrl,
-        instagramUrl: user.instagramUrl,
-        tiktokUrl: user.tiktokUrl,
+        // 🚫 links sociais NÃO ficam mais no meta
     };
 
     Object.entries(allowedMeta).forEach(([key, value]) => {
@@ -145,6 +142,17 @@ export const ProfileSupabase = {
         if (error) {
             console.error('[ProfileSupabase] update_my_profile failed', error);
             return { success: false, error: error.message || 'Falha ao atualizar perfil' };
+        }
+
+        try {
+            // ✅ Refetch forte do perfil (fonte da verdade)
+            const fresh = await ProfileSupabase.fetchMyProfile(authData.user.id, { bypassCache: true });
+            if (fresh.success && fresh.user) {
+                setToCache(`profile:${authData.user.id}`, { success: true, user: fresh.user }, PROFILE_CACHE_TTL_MS);
+                return { success: true, updatedUser: fresh.user };
+            }
+        } catch (e) {
+            console.warn('[ProfileSupabase] refetch after update failed', e);
         }
 
         const payload = Array.isArray(data) ? data[0] : data;
