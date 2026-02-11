@@ -91,24 +91,19 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       return { ...initialState, activeUser: null };
     case 'UPDATE_USER':
     case 'SET_USER': {
-      const updatedUser = normalizeActiveUser(action.payload);
-      if (!updatedUser) return state;
-
-      const newPrevCoins = (state.activeUser?.coins !== undefined && state.activeUser?.coins !== updatedUser.coins) 
-            ? state.activeUser.coins 
-            : (state.prevCoins !== null ? state.prevCoins : updatedUser.coins);
-            
-      const newPrevXp = (state.activeUser?.xp !== undefined && state.activeUser?.xp !== updatedUser.xp) 
-            ? state.activeUser.xp 
-            : (state.prevXp !== null ? state.prevXp : updatedUser.xp);
+      const incoming = action.payload || {};
+      const base = state.activeUser || {};
+      const mergedPayload = { ...base, ...incoming };
+      const nextUser = normalizeActiveUser(mergedPayload);
+      if (!nextUser) return state;
 
       return { 
           ...state, 
-          activeUser: updatedUser, 
-          prevCoins: newPrevCoins, 
-          prevXp: newPrevXp,
-          eventSession: updatedUser.eventSession || state.eventSession,
-          events: { ...state.events, session: updatedUser.eventSession || state.events.session }
+          activeUser: nextUser,
+          prevCoins: state.activeUser?.coins ?? state.prevCoins,
+          prevXp: state.activeUser?.xp ?? state.prevXp,
+          eventSession: nextUser.eventSession || state.eventSession,
+          events: { ...state.events, session: nextUser.eventSession || state.events.session }
       };
     }
 
