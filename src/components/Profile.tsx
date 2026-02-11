@@ -279,8 +279,20 @@ const Profile: React.FC = () => {
             instagramUrl: `https://www.instagram.com/${instagramUsername}`,
             tiktokUrl: tiktokUsername ? `https://www.tiktok.com/@${tiktokUsername}` : '',
           };
+
+          await api.upsertMySocialLinks({
+            spotifyUrl: dataToSave.spotifyUrl ?? null,
+            youtubeUrl: dataToSave.youtubeUrl ?? null,
+            instagramUrl: dataToSave.instagramUrl ?? null,
+            tiktokUrl: dataToSave.tiktokUrl ?? null,
+          });
+
           const response = await api.updateUser(dataToSave);
-          if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+          if (response.updatedUser) {
+            // ✅ evita reset por payload parcial (normalizeActiveUser dá defaults)
+            const merged = { ...user, ...response.updatedUser };
+            dispatch({ type: 'UPDATE_USER', payload: merged });
+          }
           setIsEditing(false);
         }
     };
