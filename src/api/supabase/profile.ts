@@ -90,29 +90,6 @@ export const ProfileSupabase = {
                         throw new Error(error?.message || 'Perfil não encontrado');
                     }
 
-                    const { data: linksRows, error: linksError } = await supabase
-                        .from('profile_social_links')
-                        .select('platform,url')
-                        .eq('user_id', targetUserId);
-
-                    if (linksError) {
-                        console.warn('[ProfileSupabase] profile_social_links lookup failed', linksError.message);
-                    }
-
-                    const links = (linksRows || []).reduce((acc: any, row: any) => {
-                        const platform = `${row.platform || ''}`.toLowerCase();
-                        const url = `${row.url || ''}`.trim();
-                        if (!url) return acc;
-
-                        if (platform === 'spotify') acc.spotifyUrl = url;
-                        if (platform === 'youtube') acc.youtubeUrl = url;
-                        if (platform === 'instagram') acc.instagramUrl = url;
-                        if (platform === 'tiktok') acc.tiktokUrl = url;
-
-                        return acc;
-                    }, {});
-
-                    // Buscar estado de assinatura (cancelamento agendado, expiração)
                     const { data: subData, error: subError } = await supabase
                         .from('subscriptions')
                         .select('cancel_at_period_end,current_period_end,status,plan')
@@ -122,9 +99,27 @@ export const ProfileSupabase = {
                     if (subError) console.warn('[ProfileSupabase] subscriptions lookup failed', subError.message);
 
                     const mapped = mapProfileToUser(data);
+
+                    // ✅ Fonte única dos links
+                    const { data: linksData, error: linksErr } = await supabase
+                        .from('profile_social_links')
+                        .select('platform,url')
+                        .eq('user_id', targetUserId);
+
+                    if (linksErr) {
+                        console.warn('[ProfileSupabase] social links lookup failed', linksErr.message);
+                    }
+
+                    const links = (linksData || []).reduce((acc: any, row: any) => {
+                        acc[row.platform] = row.url || '';
+                        return acc;
+                    }, {});
                     const hydrated = {
                         ...mapped,
-                        ...links,
+                        spotifyUrl: links.spotify ?? '',
+                        youtubeUrl: links.youtube ?? '',
+                        instagramUrl: links.instagram ?? '',
+                        tiktokUrl: links.tiktok ?? '',
                         cancellationPending: Boolean(subData?.cancel_at_period_end),
                         subscriptionExpiresAt: subData?.current_period_end ?? undefined,
                     } as User;
@@ -167,11 +162,11 @@ export const ProfileSupabase = {
             return { success: false, error: error.message || 'Falha ao atualizar perfil' };
         }
 
-        // ✅ RPC retorna { success: true, profile: {...} }
-        const raw = Array.isArray(data) ? data[0] : data;
-        const profilePayload = raw?.profile ?? raw;
+        const payload = Array.isArray(data) ? data[0] : data;
 
-        // fallback se por algum motivo vier vazio
+        // ✅ RPC retorna { success, profile: {...} }
+        const profilePayload = (payload as any)?.profile ?? payload;
+
         const hydratedProfile = profilePayload || {
             id: user.id,
             name: user.name,
@@ -182,9 +177,23 @@ export const ProfileSupabase = {
             coins: user.coins,
             xp: user.xp,
             level: user.level,
+            check_in_streak: user.weeklyCheckInStreak,
             last_check_in: user.lastCheckIn,
+            joined_at: user.joinedISO,
             meta: sanitizedMeta,
         };
+
+        // ✅ Social links são tabela dedicada (fonte única)
+        try {
+            await supabase.rpc('upsert_my_social_links', {
+                p_spotify_url: user.spotifyUrl ?? '',
+                p_youtube_url: user.youtubeUrl ?? '',
+                p_instagram_url: user.instagramUrl ?? '',
+                p_tiktok_url: user.tiktokUrl ?? '',
+            });
+        } catch (e) {
+            console.warn('[ProfileSupabase] upsert_my_social_links failed (non-blocking)', e);
+        }
 
         const mapped = mapProfileToUser(hydratedProfile);
 
