@@ -326,9 +326,12 @@ export {
   getArtistOfDay,
   recordArtistOfDayClick,
   adminSetArtistOfDay,
-} from './supabase/artistOfDay';
-
-export { adminClearArtistOfDay } from './supabase/artistOfDayAdmin';
+  adminClearArtistOfDay,
+  adminGetArtistOfDayMetrics,
+  adminListArtistOfDaySchedule,
+  adminScheduleArtistOfDay,
+  adminClearArtistOfDayScheduleDay,
+} from "./supabase/artistOfDay";
 
 // Export global diagnostic runner
 export const runDiagnosticReport = DiagnosticCore.runReport;
