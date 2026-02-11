@@ -43,6 +43,7 @@ export interface User {
   id: string;
   name: string;
   artisticName: string;
+  displayName?: string;
   avatarUrl: string;
   
   // Economy

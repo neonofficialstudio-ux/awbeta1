@@ -15,12 +15,19 @@ const coerceString = (value: any): string => {
 export const mapProfileToUser = (profile: any, extendedData: any = {}): User => {
     const meta = profile?.meta || profile?.metadata || profile?.profile_meta || {};
 
-    const displayName = profile.display_name || profile.name || "Sem Nome";
+    const displayName = profile.display_name || profile.artistic_name || profile.name || "Sem Nome";
+
+    // NUNCA sobrescrever name com display_name.
+    const name = profile.name || "";
+
+    // artisticName = nome artístico real
+    const artisticName = profile.artistic_name || "";
 
     return {
         id: profile.id,
-        name: displayName,
-        artisticName: profile.artistic_name || profile.display_name || profile.name || "Artista",
+        name,
+        artisticName,
+        displayName,
         email: coerceString(profile.email || meta.email),
         avatarUrl: profile.avatar_url || "https://i.pravatar.cc/150?u=default",
         role: profile.role || 'user',
@@ -49,10 +56,10 @@ export const mapProfileToUser = (profile: any, extendedData: any = {}): User => 
         
         // Socials & Meta
         phone: coerceString(profile.phone || meta.phone),
-        instagramUrl: coerceString(profile.instagram_url || meta.instagramUrl || meta.instagram),
-        tiktokUrl: coerceString(profile.tiktok_url || meta.tiktokUrl || meta.tiktok),
-        spotifyUrl: coerceString(profile.spotify_url || meta.spotifyUrl || meta.spotify),
-        youtubeUrl: coerceString(profile.youtube_url || meta.youtubeUrl || meta.youtube),
+        instagramUrl: coerceString(profile.instagram_url || ""),
+        tiktokUrl: coerceString(profile.tiktok_url || ""),
+        spotifyUrl: coerceString(profile.spotify_url || ""),
+        youtubeUrl: coerceString(profile.youtube_url || ""),
         weeklyCheckInStreak: profile.check_in_streak || 0,
         lastCheckIn: profile.last_check_in,
         joinedISO: profile.joined_at,
