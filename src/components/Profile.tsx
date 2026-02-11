@@ -274,36 +274,136 @@ const Profile: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (validateUrls() && formData) {
-          const instagramUrl = instagramUsername ? `https://www.instagram.com/${instagramUsername}` : '';
-          const tiktokUrl = tiktokUsername ? `https://www.tiktok.com/@${tiktokUsername}` : '';
+          try {
+            const instagramUrl = instagramUsername ? `https://www.instagram.com/${instagramUsername}` : '';
+            const tiktokUrl = tiktokUsername ? `https://www.tiktok.com/@${tiktokUsername}` : '';
 
-          const dataToSave = {
-            ...user,
-            ...formData,
-            name: formData.name ?? user.name,
-            artisticName: formData.artisticName ?? user.artisticName,
-            avatarUrl: formData.avatarUrl ?? user.avatarUrl,
-            spotifyUrl: (formData.spotifyUrl ?? '').trim(),
-            youtubeUrl: (formData.youtubeUrl ?? '').trim(),
-            instagramUrl,
-            tiktokUrl,
-            phone: (formData.phone ?? '').trim(),
-            email: formData.email ?? user.email,
-          };
+            const dataToSave = {
+              ...user,
+              ...formData,
+              name: formData.name ?? user.name,
+              artisticName: formData.artisticName ?? user.artisticName,
+              avatarUrl: formData.avatarUrl ?? user.avatarUrl,
+              spotifyUrl: (formData.spotifyUrl ?? '').trim(),
+              youtubeUrl: (formData.youtubeUrl ?? '').trim(),
+              instagramUrl,
+              tiktokUrl,
+              phone: (formData.phone ?? '').trim(),
+              email: formData.email ?? user.email,
+            };
 
-          await api.upsertMySocialLinks({
-            spotifyUrl: dataToSave.spotifyUrl || null,
-            youtubeUrl: dataToSave.youtubeUrl || null,
-            instagramUrl: dataToSave.instagramUrl || null,
-            tiktokUrl: dataToSave.tiktokUrl || null,
-          });
+            await api.upsertMySocialLinks({
+              spotifyUrl: dataToSave.spotifyUrl || null,
+              youtubeUrl: dataToSave.youtubeUrl || null,
+              instagramUrl: dataToSave.instagramUrl || null,
+              tiktokUrl: dataToSave.tiktokUrl || null,
+            });
 
-          const response = await api.updateUser(dataToSave);
-          if (response.updatedUser) {
-            const merged = { ...user, ...dataToSave, ...response.updatedUser };
-            dispatch({ type: 'UPDATE_USER', payload: merged });
+            const response = await api.updateUser(dataToSave);
+
+            if (response.updatedUser) {
+              // ✅ ENTERPRISE: nunca deixar o form sobrescrever economia/plan
+              // Só permitimos que o form altere campos realmente editáveis.
+              const editablePatch = {
+                name: dataToSave.name,
+                artisticName: dataToSave.artisticName,
+                email: dataToSave.email,
+                phone: dataToSave.phone,
+                avatarUrl: dataToSave.avatarUrl,
+                spotifyUrl: dataToSave.spotifyUrl,
+                youtubeUrl: dataToSave.youtubeUrl,
+                instagramUrl: dataToSave.instagramUrl,
+                tiktokUrl: dataToSave.tiktokUrl,
+              };
+
+              // Base segura: estado atual (user) -> resultado do backend -> patch editável
+              // (backend sempre tem prioridade na economia)
+              const merged = {
+                ...user,
+                ...response.updatedUser,
+                ...editablePatch,
+                coins: response.updatedUser.coins ?? user.coins,
+                xp: response.updatedUser.xp ?? user.xp,
+                level: response.updatedUser.level ?? user.level,
+                plan: response.updatedUser.plan ?? user.plan,
+              };
+
+              dispatch({ type: 'UPDATE_USER', payload: merged });
+
+              // ✅ Sincroniza o formulário com o estado atualizado (mata “cache fantasma”)
+              setFormData(merged);
+              setInstagramUsername(extractUsername(merged.instagramUrl));
+              setTiktokUsername(extractUsername(merged.tiktokUrl));
+            }
+
+            setIsEditing(false);
+          } catch (err) {
+            const msg = String((err as { message?: string })?.message || err || '');
+
+            if (msg.includes('instagram_change_locked_until_')) {
+              const until = msg.split('instagram_change_locked_until_')[1]?.trim();
+              dispatch({
+                type: 'ADD_TOAST',
+                payload: {
+                  id: Date.now().toString(),
+                  type: 'error',
+                  title: 'Alteração bloqueada',
+                  message: `Você só poderá alterar seu Instagram novamente após: ${until}.`,
+                },
+              });
+              return;
+            }
+
+            if (msg.includes('tiktok_change_locked_until_')) {
+              const until = msg.split('tiktok_change_locked_until_')[1]?.trim();
+              dispatch({
+                type: 'ADD_TOAST',
+                payload: {
+                  id: Date.now().toString(),
+                  type: 'error',
+                  title: 'Alteração bloqueada',
+                  message: `Você só poderá alterar seu TikTok novamente após: ${until}.`,
+                },
+              });
+              return;
+            }
+
+            if (msg.includes('invalid_instagram')) {
+              dispatch({
+                type: 'ADD_TOAST',
+                payload: {
+                  id: Date.now().toString(),
+                  type: 'error',
+                  title: 'Instagram inválido',
+                  message: 'Informe um @usuario válido ou um link do instagram.com.',
+                },
+              });
+              return;
+            }
+
+            if (msg.includes('invalid_tiktok')) {
+              dispatch({
+                type: 'ADD_TOAST',
+                payload: {
+                  id: Date.now().toString(),
+                  type: 'error',
+                  title: 'TikTok inválido',
+                  message: 'Informe um @usuario válido ou um link do tiktok.com.',
+                },
+              });
+              return;
+            }
+
+            dispatch({
+              type: 'ADD_TOAST',
+              payload: {
+                id: Date.now().toString(),
+                type: 'error',
+                title: 'Erro ao salvar',
+                message: 'Não foi possível atualizar seu perfil. Tente novamente.',
+              },
+            });
           }
-          setIsEditing(false);
         }
     };
 
