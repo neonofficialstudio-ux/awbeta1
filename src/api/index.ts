@@ -326,6 +326,7 @@ export {
   getArtistOfDay,
   recordArtistOfDayClick,
   adminSetArtistOfDay,
+  upsertMySocialLinks,
   adminClearArtistOfDay,
   adminGetArtistOfDayMetrics,
   adminListArtistOfDaySchedule,

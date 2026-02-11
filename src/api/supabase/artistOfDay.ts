@@ -66,6 +66,26 @@ export async function recordArtistOfDayClick(platform: "spotify" | "youtube" | "
   return data as any;
 }
 
+export async function upsertMySocialLinks(params: {
+  spotifyUrl?: string | null;
+  youtubeUrl?: string | null;
+  instagramUrl?: string | null;
+  tiktokUrl?: string | null;
+}) {
+  if (config.backendProvider !== "supabase") {
+    throw new Error("upsertMySocialLinks only available in supabase mode");
+  }
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.rpc("upsert_my_social_links", {
+    p_spotify_url: params.spotifyUrl ?? null,
+    p_youtube_url: params.youtubeUrl ?? null,
+    p_instagram_url: params.instagramUrl ?? null,
+    p_tiktok_url: params.tiktokUrl ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function adminSetArtistOfDay(artistId: string) {
   if (config.backendProvider !== "supabase") {
     throw new Error("adminSetArtistOfDay only available in supabase mode");
