@@ -130,6 +130,11 @@ export const ProfileSupabase = {
             return { success: false, error: 'Usuário não autenticado' };
         }
 
+        const spotify = (user.spotifyUrl ?? '').trim();
+        const youtube = (user.youtubeUrl ?? '').trim();
+        const instagram = (user.instagramUrl ?? '').trim();
+        const tiktok = (user.tiktokUrl ?? '').trim();
+
         const profileMeta = buildProfileMeta(user);
         const sanitizedMeta = sanitizeMeta(profileMeta);
         const { data, error } = await supabase.rpc('update_my_profile', {
@@ -144,6 +149,18 @@ export const ProfileSupabase = {
             return { success: false, error: error.message || 'Falha ao atualizar perfil' };
         }
 
+        const { error: linksError } = await supabase.rpc('upsert_my_social_links', {
+            p_spotify_url: spotify || null,
+            p_youtube_url: youtube || null,
+            p_instagram_url: instagram || null,
+            p_tiktok_url: tiktok || null,
+        });
+
+        if (linksError) {
+            console.error('[ProfileSupabase] upsert_my_social_links failed', linksError);
+            return { success: false, error: linksError.message || 'Falha ao atualizar links sociais' };
+        }
+
         try {
             // ✅ Refetch forte do perfil (fonte da verdade)
             const fresh = await ProfileSupabase.fetchMyProfile(authData.user.id, { bypassCache: true });
@@ -152,7 +169,7 @@ export const ProfileSupabase = {
                 return { success: true, updatedUser: fresh.user };
             }
         } catch (e) {
-            console.warn('[ProfileSupabase] refetch after update failed', e);
+            console.warn('[ProfileSupabase] refetch after profile+links update failed', e);
         }
 
         const payload = Array.isArray(data) ? data[0] : data;
