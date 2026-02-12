@@ -1,5 +1,5 @@
 // src/components/admin/AdminDashboard.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { MissionSubmission, RedeemedItem, UsableItemQueueEntry, CoinTransaction, ArtistOfTheDayQueueEntry, User, Mission } from '../../types';
 import SystemHealthMonitor from './SystemHealthMonitor';
 import TelemetryDashboard from './TelemetryDashboard';
@@ -15,6 +15,8 @@ import { adminPainelData } from '../../api/admin/painel';
 
 import AdminArtistsOfTheDayModal from './AdminArtistOfTheDayModal';
 import toast from 'react-hot-toast';
+import { getDisplayName } from '../../api/core/getDisplayName';
+import { getSupabase } from '../../api/supabase/client';
 
 type AdminSubTab = 'ops_v4' | 'artist_of_day' | 'health' | 'telemetry_classic';
 
@@ -64,11 +66,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [aodMetricsDay, setAodMetricsDay] = useState<string>(() => getUtcDayString());
   const [isAodLoading, setIsAodLoading] = useState(false);
 
-  const usersById = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const u of allUsers || []) map.set(u.id, u);
-    return map;
-  }, [allUsers]);
+  const resolveUser = (id?: string | null) => {
+    if (!id) return null;
+    return allUsers?.find(u => u.id === id) || null;
+  };
+
+  const renderUserBadge = (id?: string | null) => {
+    const u = resolveUser(id);
+    if (!u) {
+      return (
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="w-7 h-7 rounded-full bg-white/5 border border-white/10" />
+          <span className="font-mono">{id ? id.slice(0, 8) : '-'}</span>
+        </div>
+      );
+    }
+
+    const display = getDisplayName({ ...u, artistic_name: (u as any).artisticName });
+    const avatar = (u as any).avatarUrl || 'https://i.pravatar.cc/150?u=default';
+
+    return (
+      <div className="flex items-center gap-2">
+        <img src={avatar} className="w-7 h-7 rounded-full object-cover border border-white/10" />
+        <div className="leading-tight">
+          <div className="text-xs font-bold text-white">{display}</div>
+          <div className="text-[10px] text-gray-400 font-mono">{u.id.slice(0, 8)}</div>
+        </div>
+      </div>
+    );
+  };
+
 
   useEffect(() => {
     const loadData = async () => {
@@ -101,9 +128,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadAodMetrics = async (dayUtc?: string) => {
     try {
-      const api = await import('../../api/index');
-      const res = await api.getArtistOfDayMetrics(dayUtc);
-      setAodMetrics(res);
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase client not initialized');
+
+      const { data, error } = await supabase.rpc('admin_get_artist_of_day_metrics', {
+        p_day_utc: dayUtc ?? null,
+      });
+
+      if (error) throw error;
+      setAodMetrics(data || null);
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || 'Falha ao carregar métricas');
@@ -128,7 +161,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSubTab]);
 
-  const currentUser = currentArtistId ? usersById.get(currentArtistId) : null;
 
   const onModalSave = async (userIds: string[]) => {
     try {
@@ -235,7 +267,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-black text-[#FFD86B] uppercase tracking-wide">Artista do Dia</h3>
-                <p className="text-xs text-gray-400 mt-1">Atual: {currentUser?.artisticName || currentUser?.name || currentArtistId || '—'}</p>
+                <div className="mt-2">{renderUserBadge(currentArtistId)}</div>
               </div>
               <div className="flex gap-2">
                 <button
@@ -339,9 +371,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                     {aodSchedule.map((row: any) => (
                       <div key={row.day_utc} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
-                        <div className="text-sm">
+                        <div className="text-sm space-y-1">
                           <div className="text-white font-bold">{row.day_utc}</div>
-                          <div className="text-gray-400 text-xs">artist_id: {row.artist_id}</div>
+                          {renderUserBadge(row.artistId ?? row.artist_id)}
                         </div>
                         <button
                           className="px-3 py-2 rounded-lg bg-red-500/10 text-red-300 border border-red-500/30 text-xs font-bold hover:bg-red-500/20"
@@ -402,7 +434,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                       <div className="text-xs text-gray-400 uppercase">By platform</div>
                       <div className="text-xs text-gray-300 whitespace-pre-wrap">
-                        {JSON.stringify(aodMetrics.clicks_by_platform || {}, null, 2)}
+                        {JSON.stringify(aodMetrics.by_platform || {
+                          spotify: { clicks: 0, unique: 0 },
+                          youtube: { clicks: 0, unique: 0 },
+                          instagram: { clicks: 0, unique: 0 },
+                        }, null, 2)}
                       </div>
                     </div>
                   </div>
