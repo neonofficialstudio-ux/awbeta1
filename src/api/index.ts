@@ -334,6 +334,7 @@ export {
   adminScheduleArtistOfDay,
   adminUnscheduleArtistOfDay,
   adminClearArtistOfDayScheduleDay,
+  adminApplyArtistOfDayToday,
 } from "./supabase/artistOfDay";
 
 // Export global diagnostic runner
