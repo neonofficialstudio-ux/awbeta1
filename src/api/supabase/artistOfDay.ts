@@ -107,51 +107,69 @@ export async function adminClearArtistOfDay() {
 }
 
 export async function adminGetArtistOfDayMetrics(dayUtc?: string) {
-  if (config.backendProvider !== "supabase") {
-    throw new Error("adminGetArtistOfDayMetrics only available in supabase mode");
-  }
-  const supabase = requireSupabase();
-  const args = dayUtc ? { p_day_utc: dayUtc } : {};
-  const { data, error } = await supabase.rpc("admin_get_artist_of_day_metrics", args as any);
-  if (error) throw error;
-  return (data || { success: true, has_artist: false }) as ArtistOfDayMetricsPayload;
+  return getArtistOfDayMetrics(dayUtc);
 }
 
-export async function adminListArtistOfDaySchedule(fromUtc: string, toUtc: string, limit = 60) {
-  if (config.backendProvider !== "supabase") {
-    throw new Error("adminListArtistOfDaySchedule only available in supabase mode");
-  }
-  const supabase = requireSupabase();
-  const { data, error } = await supabase.rpc("admin_list_artist_of_day_schedule", {
-    p_from: fromUtc,
-    p_to: toUtc,
-    p_limit: limit,
-  });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []) as ScheduleRow[];
+export async function adminListArtistOfDaySchedule(fromUtc?: string, toUtc?: string, limit = 14) {
+  void fromUtc;
+  void toUtc;
+  const rows = await adminListArtistOfDayScheduleV2(limit);
+  return rows as ScheduleRow[];
 }
 
 export async function adminScheduleArtistOfDay(dayUtc: string, artistId: string) {
-  if (config.backendProvider !== "supabase") {
-    throw new Error("adminScheduleArtistOfDay only available in supabase mode");
-  }
-  const supabase = requireSupabase();
-  const { data, error } = await supabase.rpc("admin_schedule_artist_of_day", {
-    p_day_utc: dayUtc,
-    p_artist_id: artistId,
-  });
-  if (error) throw error;
-  return data as any;
+  return adminScheduleArtistOfDayV2(dayUtc, artistId);
 }
 
 export async function adminClearArtistOfDayScheduleDay(dayUtc: string) {
-  if (config.backendProvider !== "supabase") {
-    throw new Error("adminClearArtistOfDayScheduleDay only available in supabase mode");
-  }
-  const supabase = requireSupabase();
-  const { data, error } = await supabase.rpc("admin_clear_artist_of_day_schedule_day", {
+  return adminUnscheduleArtistOfDay(dayUtc);
+}
+
+export async function getArtistOfDayMetrics(dayUtc?: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase.rpc('get_artist_of_day_metrics', {
+    p_day_utc: dayUtc ?? null,
+  });
+
+  if (error) throw new Error(error.message || 'Falha ao carregar métricas');
+  return data;
+}
+
+async function adminScheduleArtistOfDayV2(dayUtc: string, artistId: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase.rpc('admin_schedule_artist_of_day', {
+    p_day_utc: dayUtc,
+    p_artist_id: artistId,
+  });
+
+  if (error) throw new Error(error.message || 'Falha ao agendar Artista do Dia');
+  return data;
+}
+
+export async function adminUnscheduleArtistOfDay(dayUtc: string) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase.rpc('admin_unschedule_artist_of_day', {
     p_day_utc: dayUtc,
   });
-  if (error) throw error;
-  return data as any;
+
+  if (error) throw new Error(error.message || 'Falha ao remover agendamento');
+  return data;
+}
+
+export async function adminListArtistOfDayScheduleV2(limit = 14) {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase.rpc('admin_list_artist_of_day_schedule', {
+    p_limit: limit,
+  });
+
+  if (error) throw new Error(error.message || 'Falha ao listar agenda');
+  return Array.isArray(data) ? data : [];
 }

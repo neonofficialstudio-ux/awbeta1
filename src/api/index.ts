@@ -329,8 +329,10 @@ export {
   upsertMySocialLinks,
   adminClearArtistOfDay,
   adminGetArtistOfDayMetrics,
+  getArtistOfDayMetrics,
   adminListArtistOfDaySchedule,
   adminScheduleArtistOfDay,
+  adminUnscheduleArtistOfDay,
   adminClearArtistOfDayScheduleDay,
 } from "./supabase/artistOfDay";
 
