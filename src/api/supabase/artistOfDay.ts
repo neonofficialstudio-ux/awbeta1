@@ -173,3 +173,12 @@ export async function adminListArtistOfDayScheduleV2(limit = 14) {
   if (error) throw new Error(error.message || 'Falha ao listar agenda');
   return Array.isArray(data) ? data : [];
 }
+
+export async function adminApplyArtistOfDayToday() {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase.rpc('admin_apply_artist_of_day_today');
+  if (error) throw new Error(error.message || 'Falha ao aplicar artista do dia');
+  return data;
+}

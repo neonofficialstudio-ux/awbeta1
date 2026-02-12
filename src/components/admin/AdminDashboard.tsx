@@ -47,6 +47,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   void artistOfTheDayQueue;
 
+  const getUtcDayString = () => new Date().toISOString().slice(0, 10);
+  const getUtcNowLabel = () => new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('ops_v4');
   const [v4Data, setV4Data] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,7 +61,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [aodSchedule, setAodSchedule] = useState<any[]>([]);
   const [aodMetrics, setAodMetrics] = useState<any>(null);
-  const [aodMetricsDay, setAodMetricsDay] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [aodMetricsDay, setAodMetricsDay] = useState<string>(() => getUtcDayString());
   const [isAodLoading, setIsAodLoading] = useState(false);
 
   const usersById = useMemo(() => {
@@ -265,11 +268,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
                     <button
                       className="px-3 py-2 rounded-lg bg-[#FFD86B] text-black text-xs font-black hover:bg-[#F6C560]"
-                      onClick={() => { setSchedulePickDay(new Date().toISOString().slice(0, 10)); setIsArtistModalOpen(true); }}
+                      onClick={() => { setSchedulePickDay(getUtcDayString()); setIsArtistModalOpen(true); }}
                     >
                       Agendar (Hoje)
                     </button>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs text-gray-400">
+                    <span className="font-bold text-white/80">Agora:</span> {getUtcNowLabel()} •
+                    <span className="font-bold text-white/80"> Hoje (UTC):</span> {getUtcDayString()}
+                  </div>
+
+                  <button
+                    className="px-3 py-2 rounded-lg bg-gold-cinematic/20 border border-gold-cinematic/30 text-gold-cinematic text-xs font-black hover:bg-gold-cinematic/30"
+                    onClick={async () => {
+                      try {
+                        const api = await import('../../api/index');
+                        const res = await api.adminApplyArtistOfDayToday();
+                        if (res?.applied) {
+                          toast.success(`✅ Aplicado! (UTC ${res.day_utc})`);
+                        } else {
+                          toast(`ℹ️ Nada para aplicar (UTC ${res?.day_utc})`, { icon: 'ℹ️' });
+                        }
+                        await loadAodSchedule();
+                      } catch (e: any) {
+                        console.error(e);
+                        toast.error(e?.message || 'Falha ao aplicar artista do dia');
+                      }
+                    }}
+                  >
+                    Aplicar Agora (UTC)
+                  </button>
                 </div>
 
                 <div className="flex gap-2 mb-4">
