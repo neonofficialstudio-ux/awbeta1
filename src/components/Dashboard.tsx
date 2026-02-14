@@ -661,8 +661,35 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 dispatch({ type: 'ADD_NOTIFICATIONS', payload: newNotifications });
             }
 
+            let advertisements: any[] = [];
+
+            try {
+                const { getSupabase } = await import('../api/supabase/client');
+                const supabase = getSupabase();
+                if (supabase) {
+                    const { data: adsData, error: adsError } = await supabase.rpc('get_active_advertisements');
+                    if (adsError) throw adsError;
+
+                    advertisements = (adsData || []).map((row: any) => ({
+                        id: row.id,
+                        title: row.title,
+                        description: row.description ?? '',
+                        imageUrl: row.image_url,
+                        linkUrl: row.link_url,
+                        isActive: row.is_active,
+                        duration: Number(row.duration_seconds ?? 6),
+                        startsAt: row.starts_at ?? undefined,
+                        endsAt: row.ends_at ?? undefined,
+                        views: Number(row.views ?? 0),
+                        clicks: Number(row.clicks ?? 0),
+                    }));
+                }
+            } catch (e) {
+                console.warn('[Advertisements] get_active_advertisements failed', e);
+            }
+
             setData({
-                advertisements: [],
+                advertisements,
                 featuredMission: null,
                 artistsOfTheDay: artistOfDay ? [artistOfDay] : [],
                 processedArtistOfTheDayQueue: [],

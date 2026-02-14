@@ -896,7 +896,16 @@ export const AdminService = {
         return { success: true };
     },
     
-    saveAdvertisement: (ad: Advertisement) => {
+    saveAdvertisement: async (ad: Advertisement) => {
+        // ✅ Supabase path
+        if (config.backendProvider === 'supabase') {
+            const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
+            const res = await supabaseAdminRepository.advertisements.save(ad as any);
+            if (!res.success) return { success: false, error: res.error };
+            return { success: true };
+        }
+
+        // Mock path (mantém como era)
         ensureMockBackend('saveAdvertisement');
         if (!ad.id) ad.id = `ad-${Date.now()}`;
         const existing = repo.select("advertisements").find((a:any) => a.id === ad.id);
@@ -908,7 +917,16 @@ export const AdminService = {
         return { success: true };
     },
     
-    deleteAdvertisement: (id: string) => {
+    deleteAdvertisement: async (id: string) => {
+        // ✅ Supabase path
+        if (config.backendProvider === 'supabase') {
+            const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
+            const res = await supabaseAdminRepository.advertisements.delete(id);
+            if (!res.success) return { success: false, error: res.error };
+            return { success: true };
+        }
+
+        // Mock path (mantém como era)
         ensureMockBackend('deleteAdvertisement');
         repo.delete("advertisements", (a:any) => a.id === id);
         return { success: true };
