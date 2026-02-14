@@ -1,5 +1,5 @@
+// src/api/supabase/supabase.client.ts
+// Compat layer: evita imports legados apontarem para null.
+// Fonte da verdade: ./client.ts
 
-// Placeholder for Supabase Client V4.1
-// This will be configured in the migration phase.
-
-export const supabaseClient = null; 
+export { supabaseClient, getSupabase } from './client';
