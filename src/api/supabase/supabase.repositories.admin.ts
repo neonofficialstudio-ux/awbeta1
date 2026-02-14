@@ -189,6 +189,7 @@ export const supabaseAdminRepository = {
         rafflesRes,
         ticketsRes,
         statsRes,
+        adsRes,
       ] = await Promise.all([
         supabase.from('profiles').select('id, display_name, avatar_url, level, coins'),
         supabase.from('missions').select('*'),
@@ -226,6 +227,9 @@ export const supabaseAdminRepository = {
           .from('profiles')
           .select('id', { head: true, count: 'exact' })
           .gte('created_at', twentyFourHoursAgo),
+
+        // ✅ NEW: anúncios (admin)
+        supabase.rpc('admin_list_advertisements'),
       ]);
 
       const queryErrors = [
@@ -240,6 +244,7 @@ export const supabaseAdminRepository = {
         rafflesRes.error,
         ticketsRes.error,
         statsRes.error,
+        adsRes.error,
       ].filter(Boolean);
 
       if (queryErrors.length) {
@@ -343,6 +348,8 @@ export const supabaseAdminRepository = {
         purchasedAt: t.purchased_at || t.created_at,
       }));
 
+      const advertisements = (adsRes.data || []).map((row: any) => mapAdRowToApp(row));
+
       const systemHealth = {
         status: 'healthy',
         lastUpdate: new Date().toISOString(),
@@ -367,6 +374,7 @@ export const supabaseAdminRepository = {
           raffles: mappedRaffles,
           allTickets: mappedTickets,
           highlightedRaffleId: raffles.find((r: any) => r.is_highlighted)?.id || null,
+          advertisements,
           systemHealth,
           subscriptionStats: { newUsersLastDay: statsRes.count || 0 },
         },
