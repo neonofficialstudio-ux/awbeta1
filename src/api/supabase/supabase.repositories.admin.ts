@@ -528,7 +528,7 @@ export const supabaseAdminRepository = {
 
       try {
         const payload = {
-          p_id: ad?.id ?? null,
+          p_id: ad?.id && ad.id.trim() !== '' ? ad.id : null,
           p_title: String(ad?.title ?? ''),
           p_description: ad?.description ?? null,
           p_image_url: String(ad?.imageUrl ?? ''),
