@@ -6,6 +6,34 @@ import { missionsAdminRepository } from './repositories/admin/missions';
 import { MISSION_SUBMISSION_LIGHT_SELECT } from './selects';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
 
+type AdvertisementRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  image_url: string;
+  link_url: string;
+  is_active: boolean;
+  duration_seconds: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  views?: number | null;
+  clicks?: number | null;
+};
+
+const mapAdRowToApp = (row: AdvertisementRow) => ({
+  id: row.id,
+  title: row.title,
+  description: row.description ?? '',
+  imageUrl: row.image_url,
+  linkUrl: row.link_url,
+  isActive: row.is_active,
+  duration: Number(row.duration_seconds ?? 6),
+  startsAt: row.starts_at ?? undefined,
+  endsAt: row.ends_at ?? undefined,
+  views: Number(row.views ?? 0),
+  clicks: Number(row.clicks ?? 0),
+});
+
 export type AdminMissionFilter = 'active' | 'expired' | 'all';
 
 const ensureAdminClient = async () => {
@@ -463,6 +491,72 @@ export const supabaseAdminRepository = {
       console.error('[SupabaseAdminRepo] fetchAdminStats failed', err);
       return { success: false as const, stats: null as any, error: err?.message || 'Failed to load admin stats' };
     }
+  },
+
+  advertisements: {
+    async list() {
+      const supabase = await ensureAdminClient();
+      if (!supabase) {
+        return { success: false as const, advertisements: [] as any[], error: 'Supabase provider not enabled' };
+      }
+
+      try {
+        const { data, error } = await supabase.rpc('admin_list_advertisements');
+        if (error) throw error;
+
+        const advertisements = (data as any[] | null | undefined)?.map((row: any) => mapAdRowToApp(row)) ?? [];
+        return { success: true as const, advertisements, error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] advertisements.list failed', err);
+        return { success: false as const, advertisements: [] as any[], error: err?.message || 'Failed to list advertisements' };
+      }
+    },
+
+    async save(ad: any) {
+      const supabase = await ensureAdminClient();
+      if (!supabase) {
+        return { success: false as const, advertisement: null as any, error: 'Supabase provider not enabled' };
+      }
+
+      try {
+        const payload = {
+          p_id: ad?.id ?? null,
+          p_title: String(ad?.title ?? ''),
+          p_description: ad?.description ?? null,
+          p_image_url: String(ad?.imageUrl ?? ''),
+          p_link_url: String(ad?.linkUrl ?? ''),
+          p_is_active: Boolean(ad?.isActive ?? true),
+          p_duration_seconds: Number(ad?.duration ?? 6),
+          p_starts_at: ad?.startsAt ?? null,
+          p_ends_at: ad?.endsAt ?? null,
+        };
+
+        const { data, error } = await supabase.rpc('admin_upsert_advertisement', payload);
+        if (error) throw error;
+
+        // RPC retorna row de advertisements (snake_case)
+        return { success: true as const, advertisement: mapAdRowToApp(data as any), error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] advertisements.save failed', err);
+        return { success: false as const, advertisement: null as any, error: err?.message || 'Failed to save advertisement' };
+      }
+    },
+
+    async delete(id: string) {
+      const supabase = await ensureAdminClient();
+      if (!supabase) {
+        return { success: false as const, error: 'Supabase provider not enabled' };
+      }
+
+      try {
+        const { error } = await supabase.rpc('admin_delete_advertisement', { p_id: id });
+        if (error) throw error;
+        return { success: true as const, error: null as any };
+      } catch (err: any) {
+        console.error('[SupabaseAdminRepo] advertisements.delete failed', err);
+        return { success: false as const, error: err?.message || 'Failed to delete advertisement' };
+      }
+    },
   },
 
   missions: {
