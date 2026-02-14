@@ -1,9 +1,16 @@
 import { ProfileSupabase } from '../api/supabase/profile';
 import { fetchMyNotifications, fetchMyLedger } from '../api/supabase/economy';
+import { config } from './config';
 
 type Dispatch = (action: any) => void;
 
-export async function refreshAfterEconomyAction(userId: string, dispatch: Dispatch) {
+export async function refreshAfterEconomyAction(userId: string, dispatch: Dispatch, reason?: string) {
+  if (!config.isProduction) {
+    console.groupCollapsed(`[refreshAfterEconomyAction] reason=${reason ?? 'unknown'}`);
+    console.trace();
+    console.groupEnd();
+  }
+
   if (!userId) return { user: null, notifications: [], ledger: [] };
 
   // 1) Profile (coins/xp/level) — determinístico

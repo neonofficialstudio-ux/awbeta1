@@ -685,6 +685,7 @@ const Raffles: React.FC = () => {
     const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
     const rtDebounceRef = useRef<number | null>(null);
     const lastRtFetchAtRef = useRef(0);
+    const lastFocusRefreshRef = useRef(0);
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
@@ -830,25 +831,33 @@ const Raffles: React.FC = () => {
         const baseInterval = isRealtimeConnected ? 5 * 60_000 : 60_000;
         startPolling(baseInterval);
 
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                // ao voltar pra aba, faz um fetch imediato e retoma polling
+        const THROTTLE_MS = 5000;
+
+        const maybeRefresh = () => {
+            const now = Date.now();
+            if (now - lastFocusRefreshRef.current < THROTTLE_MS) return;
+            lastFocusRefreshRef.current = now;
+
+            try {
                 void fetchData();
                 const interval = isRealtimeConnected ? 5 * 60_000 : 60_000;
                 startPolling(interval);
-            } else {
-                // ao sair da aba, corta polling
-                stopPolling();
+            } catch (e) {
+                console.warn('[Raffles] focus/visibility refresh failed', e);
             }
         };
 
         const onFocus = () => {
-            // quando volta o foco, fetch + polling
+            maybeRefresh();
+        };
+
+        const onVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                void fetchData();
-                const interval = isRealtimeConnected ? 5 * 60_000 : 60_000;
-                startPolling(interval);
+                maybeRefresh();
+                return;
             }
+
+            stopPolling();
         };
 
         const onBlur = () => {
@@ -856,12 +865,12 @@ const Raffles: React.FC = () => {
             stopPolling();
         };
 
-        document.addEventListener('visibilitychange', onVisibility);
+        document.addEventListener('visibilitychange', onVisibilityChange);
         window.addEventListener('focus', onFocus);
         window.addEventListener('blur', onBlur);
 
         return () => {
-            document.removeEventListener('visibilitychange', onVisibility);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
             window.removeEventListener('focus', onFocus);
             window.removeEventListener('blur', onBlur);
             stopPolling();

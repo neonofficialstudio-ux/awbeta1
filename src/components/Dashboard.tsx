@@ -209,7 +209,7 @@ const ArtistsOfTheDayCarousel: React.FC<{
                         message: 'Clique registrado ✅',
                     },
                 });
-                await refreshAfterEconomyAction(activeUser.id, dispatch);
+                await refreshAfterEconomyAction(activeUser.id, dispatch, 'manual-test');
             } catch (e) {
                 console.warn('[ArtistOfDay] click sync failed', e);
 
