@@ -1,6 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import type { Advertisement } from '../../types';
 
+const AD_DRAFT_KEY = 'aw_admin_ad_draft_v1';
+
+const safeLoadDraft = () => {
+  try {
+    const raw = sessionStorage.getItem(AD_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const safeSaveDraft = (draft: any) => {
+  try {
+    sessionStorage.setItem(AD_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore
+  }
+};
+
+const safeClearDraft = () => {
+  try {
+    sessionStorage.removeItem(AD_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+};
+
 interface AdminAdvertisementModalProps {
   ad: Advertisement | null;
   onClose: () => void;
@@ -21,17 +50,35 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
     if (ad) {
       setFormData(ad);
     } else {
-      // Reset to default for a new ad form
-      setFormData({
-        title: '',
-        description: '',
-        imageUrl: '',
-        linkUrl: '',
-        isActive: true,
-        duration: 5,
-      });
+      // Novo anúncio: tenta restaurar draft da sessão
+      const draft = safeLoadDraft();
+      if (draft) {
+        setFormData({
+          title: String(draft.title ?? ''),
+          description: String(draft.description ?? ''),
+          imageUrl: String(draft.imageUrl ?? ''),
+          linkUrl: String(draft.linkUrl ?? ''),
+          isActive: Boolean(draft.isActive ?? true),
+          duration: Math.max(1, Number(draft.duration ?? 5)),
+        });
+      } else {
+        setFormData({
+          title: '',
+          description: '',
+          imageUrl: '',
+          linkUrl: '',
+          isActive: true,
+          duration: 5,
+        });
+      }
     }
   }, [ad]);
+
+  useEffect(() => {
+    // Só salva draft quando é "novo anúncio"
+    if (ad) return;
+    safeSaveDraft(formData);
+  }, [ad, formData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -47,7 +94,13 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ad) safeClearDraft();
     onSave({ ...formData, id: ad?.id || '' });
+  };
+
+  const handleClose = () => {
+    if (!ad) safeClearDraft();
+    onClose();
   };
 
   return (
@@ -80,7 +133,7 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
             <label htmlFor="isActive" className="ml-2 block text-sm text-gray-300">Ativo (visível no dashboard)</label>
           </div>
           <div className="mt-6 flex justify-end space-x-4 pt-4 border-t border-gray-800">
-            <button type="button" onClick={onClose} className="py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors">Cancelar</button>
+            <button type="button" onClick={handleClose} className="py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600 transition-colors">Cancelar</button>
             <button type="submit" className="py-2 px-6 rounded-lg bg-goldenYellow-500 text-black font-bold hover:bg-goldenYellow-400 transition-colors">Salvar</button>
           </div>
         </form>
