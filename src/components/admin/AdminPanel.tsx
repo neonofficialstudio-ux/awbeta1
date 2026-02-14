@@ -55,28 +55,32 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
-    const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
+    const [adminData, setAdminData] = useState<any>(null);
     
     // Local state
     const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(adminSettingsInitialSubTab || 'telemetry_pro');
     const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>('console');
 
     const refreshAdminData = useCallback(async () => {
+        setIsLoading(true);
         try {
-            const data = await Promise.resolve(AdminEngine.getDashboardData());
-            setAdminData({ ...emptyAdminDashboard, ...(data || {}) });
+            const res = await Promise.resolve(AdminEngine.getDashboardData());
+            if (res?.success) {
+                const data = res.data || {};
+                setAdminData((prev: any) => ({ ...(prev || {}), ...emptyAdminDashboard, ...data }));
+            } else {
+                console.warn('[AdminPanel] refresh failed:', res?.error);
+            }
         } catch (error) {
-            console.error("Failed to refresh admin data:", error);
-            setAdminData(emptyAdminDashboard);
+            console.warn('[AdminPanel] refresh threw:', error);
+        } finally {
+            setIsLoading(false);
         }
     }, []);
 
     useEffect(() => {
         // Initial load only
-        setIsLoading(true);
-        refreshAdminData().finally(() => {
-            setIsLoading(false);
-        });
+        refreshAdminData();
     }, [refreshAdminData]);
 
     // Updated to handle sync/async returns
@@ -100,7 +104,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     
     const onUnbanUser = (userId: string) => handleAdminAction(api.unbanUser(userId));
 
-    if (isLoading || !adminData) {
+    if (!adminData) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-gold-cinematic shadow-[0_0_20px_rgba(246,197,96,0.5)]"></div>
