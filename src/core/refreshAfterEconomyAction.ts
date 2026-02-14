@@ -13,6 +13,23 @@ export async function refreshAfterEconomyAction(userId: string, dispatch: Dispat
 
   if (!userId) return { user: null, notifications: [], ledger: [] };
 
+  // Throttle global para evitar spam em focus/visibility
+  // (ex: quando algum listener dispara múltiplas vezes ao voltar para a aba)
+  const now = Date.now();
+  (globalThis as any).__aw_lastEconomyRefreshAt = (globalThis as any).__aw_lastEconomyRefreshAt || 0;
+
+  const last = (globalThis as any).__aw_lastEconomyRefreshAt as number;
+  const THROTTLE_MS = 5000;
+
+  if (now - last < THROTTLE_MS) {
+    if (!config.isProduction) {
+      console.log('[refreshAfterEconomyAction] throttled', { reason, sinceMs: now - last });
+    }
+    return { user: null, notifications: [], ledger: [] };
+  }
+
+  (globalThis as any).__aw_lastEconomyRefreshAt = now;
+
   // 1) Profile (coins/xp/level) — determinístico
   let updatedUser: any = null;
   try {
