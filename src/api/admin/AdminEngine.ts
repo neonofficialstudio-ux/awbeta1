@@ -58,6 +58,20 @@ const normalizeMissionScope = (value: any): 'weekly' | 'event' => {
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
 
+// Cache in-memory para evitar burst de requests quando AdminPanel remonta
+let adminDashboardCache: any | null = null;
+let adminDashboardCacheAt = 0;
+let adminDashboardInFlight: Promise<any> | null = null;
+
+// Ajuste fino: 30s já elimina o “voltei pra pegar link e recarregou tudo”
+const ADMIN_DASHBOARD_TTL_MS = 30_000;
+
+export const invalidateAdminDashboardCache = () => {
+    adminDashboardCache = null;
+    adminDashboardCacheAt = 0;
+    adminDashboardInFlight = null;
+};
+
 const AdminAudit = {
     log: (adminId: string, action: string, targetId?: string, details?: any) => {
         LogEngineV4.log({
@@ -129,7 +143,33 @@ export const AdminService = {
     getDashboardData: async () => {
         if (config.backendProvider === 'supabase') {
             try {
-                const response = await supabaseAdminRepository.fetchAdminDashboard();
+                const now = Date.now();
+
+                // 1) Cache hit
+                if (adminDashboardCache && now - adminDashboardCacheAt < ADMIN_DASHBOARD_TTL_MS) {
+                    return adminDashboardCache;
+                }
+
+                // 2) Dedupe: se já tem request rodando, reusa
+                if (adminDashboardInFlight) {
+                    return adminDashboardInFlight;
+                }
+
+                adminDashboardInFlight = (async () => {
+                    const res = await supabaseAdminRepository.fetchAdminDashboard();
+
+                    // Só cacheia sucesso (evita prender erro em cache)
+                    if (res?.success) {
+                        adminDashboardCache = res;
+                        adminDashboardCacheAt = Date.now();
+                    }
+
+                    return res;
+                })().finally(() => {
+                    adminDashboardInFlight = null;
+                });
+
+                const response = await adminDashboardInFlight;
                 if (!response?.success) {
                     console.error('[AdminEngine] Supabase dashboard fetch failed', response?.error);
                 }
@@ -902,6 +942,7 @@ export const AdminService = {
             const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
             const res = await supabaseAdminRepository.advertisements.save(ad as any);
             if (!res.success) return { success: false, error: res.error };
+            invalidateAdminDashboardCache();
             return { success: true };
         }
 
@@ -923,6 +964,7 @@ export const AdminService = {
             const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
             const res = await supabaseAdminRepository.advertisements.delete(id);
             if (!res.success) return { success: false, error: res.error };
+            invalidateAdminDashboardCache();
             return { success: true };
         }
 
