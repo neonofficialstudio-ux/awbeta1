@@ -230,8 +230,7 @@ export const MainLayout: React.FC = () => {
             case 'admin':
                 if (isAdmin === null) return <PageSkeleton />;
                 if (!isAdmin) return <NotFoundState onGoHome={() => dispatch({type: 'SET_VIEW', payload: 'dashboard'})} />;
-                return <AdminPanel 
-                    key={adminActiveTab}
+                return <AdminPanel
                     activeTab={adminActiveTab}
                     adminMissionsInitialSubTab={adminMissionsInitialSubTab}
                     adminStoreInitialSubTab={adminStoreInitialSubTab}
