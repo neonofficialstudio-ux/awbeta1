@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Mission, MissionSubmission, User, SubmissionStatus } from '../../types';
 import AdminMissionModal from './AdminMissionModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -14,6 +14,7 @@ import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
 import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
 import { supabaseAdminRepository, type AdminMissionFilter } from '../../api/supabase/supabase.repositories.admin';
+import { useAppContext } from '../../constants';
 
 // UI Lib
 import Card from '../ui/base/Card';
@@ -62,6 +63,9 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
     missions, onSaveMission, onDeleteMission, featuredMissionId, setFeaturedMissionId, 
     missionSubmissions: initialSubmissions, allUsers, onReview, onEditStatus, onBatchApprove, onBatchSaveMissions, initialSubTab
 }) => {
+  const { dispatch } = useAppContext();
+  const lastRef = useRef<string>('');
+
   // State Management
   const [activeTab, setActiveTab] = useState<'manage' | 'review' | 'generator'>(initialSubTab as any || 'manage');
   const [submissions, setSubmissions] = useState<MissionSubmission[]>(initialSubmissions);
@@ -176,6 +180,13 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       };
       loadData();
   }, [filterStatus, filterType, filterSearch, refreshKey, missionsData, page]);
+
+
+  useEffect(() => {
+      if (lastRef.current === activeTab) return;
+      lastRef.current = activeTab;
+      dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: 'missions', subTab: activeTab } });
+  }, [activeTab, dispatch]);
 
   // Handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {

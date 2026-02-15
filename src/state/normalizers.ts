@@ -92,6 +92,9 @@ export const normalizeState = (state: any): AppState => {
         adminStoreInitialSubTab: state.adminStoreInitialSubTab || 'visual',
         adminQueuesInitialSubTab: state.adminQueuesInitialSubTab || 'items',
         adminSettingsInitialSubTab: state.adminSettingsInitialSubTab || 'advertisements',
+        adminEconomyInitialSubTab: state.adminEconomyInitialSubTab || 'console',
+        adminUsersInitialSubTab: state.adminUsersInitialSubTab || 'list',
+        adminSubscriptionsInitialSubTab: state.adminSubscriptionsInitialSubTab || 'plans',
         unseenAdminNotifications: Array.isArray(state.unseenAdminNotifications) ? state.unseenAdminNotifications : [],
 
         // UI

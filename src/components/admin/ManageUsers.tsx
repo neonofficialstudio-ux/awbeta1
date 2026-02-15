@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { User, MissionSubmission, PunishmentType } from '../../types';
 import AdminUserEditModal from './AdminUserEditModal';
 import AdminPunishmentModal from './AdminPunishmentModal';
@@ -21,8 +21,10 @@ import MetricCard from '../ui/patterns/MetricCard';
 import Tabs from '../ui/navigation/Tabs';
 import Toolbar from '../ui/advanced/Toolbar';
 import { getDisplayName } from '../../api/core/getDisplayName';
+import { useAppContext } from '../../constants';
 
 interface ManageUsersProps {
+  initialSubTab?: 'list' | 'metrics' | 'leads';
   allUsers: User[];
   missionSubmissions: MissionSubmission[];
   onUpdateUser: (user: User) => void;
@@ -485,7 +487,7 @@ const LeadsTable: React.FC<{ users: User[] }> = ({ users }) => {
     );
 };
 
-const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions, onUpdateUser, onPunishUser, onUnbanUser, onResetMonthlyRanking, onViewUserHistory }) => {
+const ManageUsers: React.FC<ManageUsersProps> = ({ initialSubTab, allUsers, missionSubmissions, onUpdateUser, onPunishUser, onUnbanUser, onResetMonthlyRanking, onViewUserHistory }) => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [punishingUser, setPunishingUser] = useState<User | null>(null);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -496,8 +498,16 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, missionSubmissions,
   const [award3, setAward3] = useState<number>(1500);
   const [searchTerm, setSearchTerm] = useState('');
   const [subscriptionFilter, setSubscriptionFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState<'list' | 'metrics' | 'leads'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'metrics' | 'leads'>(initialSubTab || 'list');
   const [userToUnban, setUserToUnban] = useState<User | null>(null);
+  const { dispatch } = useAppContext();
+  const lastRef = useRef<string>('');
+
+  useEffect(() => {
+    if (lastRef.current === activeTab) return;
+    lastRef.current = activeTab;
+    dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: 'users', subTab: activeTab } });
+  }, [activeTab, dispatch]);
 
   const loadMonthlyPreview = async () => {
     const supabase = getSupabase();

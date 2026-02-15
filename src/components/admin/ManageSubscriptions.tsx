@@ -1,11 +1,13 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { SubscriptionPlan } from "../../types";
 import AdminSubscriptionModal from "./AdminSubscriptionModal";
 import { EditIcon } from "../../constants";
 import Tabs from '../ui/navigation/Tabs';
+import { useAppContext } from '../../constants';
 
 interface ManageSubscriptionsProps {
+    initialSubTab?: 'plans' | 'requests';
     subscriptionRequests: any[];
     subscriptionStats: any;
     subscriptionHistory: any[];
@@ -16,6 +18,7 @@ interface ManageSubscriptionsProps {
 }
 
 export default function ManageSubscriptions({
+    initialSubTab,
     subscriptionRequests = [],
     subscriptionStats = {},
     subscriptionHistory = [],
@@ -24,10 +27,18 @@ export default function ManageSubscriptions({
     onReject,
     onSavePlan
 }: ManageSubscriptionsProps) {
-    const [activeTab, setActiveTab] = useState<'plans' | 'requests'>('plans');
+    const [activeTab, setActiveTab] = useState<'plans' | 'requests'>(initialSubTab || 'plans');
     const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+    const { dispatch } = useAppContext();
+    const lastRef = useRef<string>('');
+
+    useEffect(() => {
+        if (lastRef.current === activeTab) return;
+        lastRef.current = activeTab;
+        dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: 'subscriptions', subTab: activeTab } });
+    }, [activeTab, dispatch]);
 
     useEffect(() => {
         // Sync logic if needed

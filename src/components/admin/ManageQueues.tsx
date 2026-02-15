@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { UsableItemQueueEntry, ProcessedUsableItemQueueEntry, ArtistOfTheDayQueueEntry, ProcessedArtistOfTheDayQueueEntry, User, Mission, RedeemedItem } from '../../types';
 import AvatarWithFrame from '../AvatarWithFrame';
 import { CheckIcon, PromoteIcon, MissionIcon } from '../../constants';
@@ -8,6 +8,7 @@ import AdminMissionModal from './AdminMissionModal';
 import AdminRewardDetailsModal from './AdminRewardDetailsModal';
 import { getSupabase } from '../../api/supabase/client';
 import { config } from '../../core/config';
+import { useAppContext } from '../../constants';
 
 // UI Components
 import Card from '../ui/base/Card';
@@ -41,6 +42,8 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
   onConvertItemToMission,
   onCreateMissionFromQueue
 }) => {
+  const { dispatch } = useAppContext();
+  const lastRef = useRef<string>('');
   const [activeSubTab, setActiveSubTab] = useState<QueueSubTab>('items');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const isSupabase = config.backendProvider === 'supabase';
@@ -315,6 +318,13 @@ const ManageQueues: React.FC<ManageQueuesProps> = ({
       setActiveSubTab(initialSubTab);
     }
   }, [initialSubTab]);
+
+
+  useEffect(() => {
+    if (lastRef.current === activeSubTab) return;
+    lastRef.current = activeSubTab;
+    dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: 'queues', subTab: activeSubTab } });
+  }, [activeSubTab, dispatch]);
 
   const loadProductionQueue = async () => {
     if (!isSupabase) return;

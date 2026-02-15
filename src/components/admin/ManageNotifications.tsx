@@ -2,14 +2,17 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { User } from '../../types';
 import { SearchIcon } from '../../constants';
 import { getDisplayName } from '../../api/core/getDisplayName';
+import { useAppContext } from '../../constants';
 
 interface ManageNotificationsProps {
+  initialType?: 'global' | 'private';
   allUsers: User[];
   onSend: (payload: { title: string; message: string; isGlobal: boolean; targetUserIds?: string[] }) => Promise<void>;
 }
 
-const ManageNotifications: React.FC<ManageNotificationsProps> = ({ allUsers, onSend }) => {
-  const [type, setType] = useState<'global' | 'private'>('global');
+const ManageNotifications: React.FC<ManageNotificationsProps> = ({ initialType, allUsers, onSend }) => {
+  const { dispatch } = useAppContext();
+  const [type, setType] = useState<'global' | 'private'>(initialType || 'global');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -45,6 +48,14 @@ const ManageNotifications: React.FC<ManageNotificationsProps> = ({ allUsers, onS
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_ADMIN_TAB',
+      payload: { tab: 'settings', subTab: `notifications:${type}` },
+    });
+  }, [type, dispatch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
