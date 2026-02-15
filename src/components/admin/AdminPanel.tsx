@@ -73,24 +73,53 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const refreshAdminData = useCallback(async () => {
         setIsLoading(true);
+
         try {
-            const res = await Promise.resolve(AdminEngine.getDashboardData());
+            const res: any = await Promise.resolve(AdminEngine.getDashboardData());
+
+            // 1) Se vier undefined/null: não deixa adminData nulo (evita spinner infinito)
             if (!res) {
-                console.warn('[AdminPanel] refresh returned undefined (ignored)');
+                console.warn('[AdminPanel] refresh returned undefined/null (fallback to empty)');
+                setAdminData((prev: any) => ({
+                    ...emptyAdminDashboard,
+                    ...(prev || {}),
+                }));
                 return;
             }
-            if (res?.success) {
-                const data = res.data || {};
-                setAdminData((prev: any) => ({
-                  ...emptyAdminDashboard,
-                  ...(prev || {}),
-                  ...data,
-                }));
-            } else {
-                console.warn('[AdminPanel] refresh failed:', res?.error);
+
+            // 2) Caso padrão: retorno wrapper { success, data, error }
+            if (typeof res === 'object' && 'success' in res) {
+                if (res.success) {
+                    const data = res.data || {};
+                    setAdminData((prev: any) => ({
+                        ...emptyAdminDashboard,
+                        ...(prev || {}),
+                        ...data,
+                    }));
+                } else {
+                    console.warn('[AdminPanel] refresh failed:', res?.error);
+                    // mantém UI estável com fallback (sem voltar adminData pra null)
+                    setAdminData((prev: any) => ({
+                        ...emptyAdminDashboard,
+                        ...(prev || {}),
+                    }));
+                }
+                return;
             }
+
+            // 3) Caso alternativo: retorno “cru” (ex: emptyAdminDashboard direto)
+            setAdminData((prev: any) => ({
+                ...emptyAdminDashboard,
+                ...(prev || {}),
+                ...(res || {}),
+            }));
         } catch (error) {
             console.warn('[AdminPanel] refresh threw:', error);
+            // fallback seguro: não derruba tela
+            setAdminData((prev: any) => ({
+                ...emptyAdminDashboard,
+                ...(prev || {}),
+            }));
         } finally {
             setIsLoading(false);
         }
