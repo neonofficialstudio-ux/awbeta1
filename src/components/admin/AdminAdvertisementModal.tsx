@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Advertisement } from '../../types';
 
 const DRAFT_KEY = 'aw:admin_ads:draft_v1';
+const DEFAULT_FORM: Omit<Advertisement, 'id'> = {
+  title: '',
+  description: '',
+  imageUrl: '',
+  linkUrl: '',
+  isActive: true,
+  duration: 5,
+};
 
 interface AdminAdvertisementModalProps {
   ad: Advertisement | null;
@@ -10,14 +18,9 @@ interface AdminAdvertisementModalProps {
 }
 
 const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Omit<Advertisement, 'id'>>({
-    title: '',
-    description: '',
-    imageUrl: '',
-    linkUrl: '',
-    isActive: true,
-    duration: 5, // Default duration
-  });
+  const [formData, setFormData] = useState<Omit<Advertisement, 'id'>>(DEFAULT_FORM);
+  const [isDirty, setIsDirty] = useState(false);
+  const loadedAdIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -35,27 +38,40 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
   }, []);
 
   useEffect(() => {
-    if (ad) {
-      setFormData(ad);
-      try {
-        sessionStorage.removeItem(DRAFT_KEY);
-      } catch {
-        // ignore
+    const incomingId = ad?.id ?? null;
+
+    if (incomingId) {
+      if (loadedAdIdRef.current !== incomingId) {
+        loadedAdIdRef.current = incomingId;
+        setFormData({
+          title: ad?.title ?? '',
+          description: ad?.description ?? '',
+          imageUrl: ad?.imageUrl ?? '',
+          linkUrl: ad?.linkUrl ?? '',
+          isActive: ad?.isActive ?? true,
+          duration: ad?.duration ?? 5,
+        });
+        setIsDirty(false);
+        try {
+          sessionStorage.removeItem(DRAFT_KEY);
+        } catch {
+          // ignore
+        }
       }
-    } else {
-      setFormData({
-        title: '',
-        description: '',
-        imageUrl: '',
-        linkUrl: '',
-        isActive: true,
-        duration: 5,
-      });
+      return;
     }
-  }, [ad]);
+
+    if (loadedAdIdRef.current !== null) {
+      loadedAdIdRef.current = null;
+    }
+    if (!isDirty) {
+      setFormData(DEFAULT_FORM);
+    }
+  }, [ad?.id, isDirty]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    setIsDirty(true);
     if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
         setFormData(prev => {
@@ -93,6 +109,7 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({ ...formData, id: ad?.id || '' });
+    setIsDirty(false);
     try {
       sessionStorage.removeItem(DRAFT_KEY);
     } catch {
