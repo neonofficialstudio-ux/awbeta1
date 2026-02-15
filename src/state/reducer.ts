@@ -16,6 +16,9 @@ export const initialState: AppState = {
   adminStoreInitialSubTab: 'visual',
   adminQueuesInitialSubTab: 'items',
   adminSettingsInitialSubTab: 'advertisements',
+  adminEconomyInitialSubTab: 'console',
+  adminUsersInitialSubTab: 'list',
+  adminSubscriptionsInitialSubTab: 'plans',
   storeInitialTab: 'redeem',
   inventoryInitialTab: 'visual',
   unseenAdminNotifications: [],
@@ -53,16 +56,27 @@ export const appReducer = (state: AppState, action: Action): AppState => {
       return { ...state, currentView: action.payload };
     case 'SET_ADMIN_STATUS':
       return { ...state, isAdmin: action.payload };
-    case 'SET_ADMIN_TAB':
-      return {
+    case 'SET_ADMIN_TAB': {
+      const { tab, subTab } = action.payload || {};
+      const next: AppState = {
         ...state,
         currentView: 'admin',
-        adminActiveTab: action.payload.tab,
-        adminMissionsInitialSubTab: action.payload.tab === 'missions' && action.payload.subTab ? action.payload.subTab : state.adminMissionsInitialSubTab,
-        adminStoreInitialSubTab: action.payload.tab === 'store' && action.payload.subTab ? action.payload.subTab : state.adminStoreInitialSubTab,
-        adminQueuesInitialSubTab: action.payload.tab === 'queues' && action.payload.subTab ? action.payload.subTab : state.adminQueuesInitialSubTab,
-        adminSettingsInitialSubTab: action.payload.tab === 'settings' && action.payload.subTab ? action.payload.subTab : state.adminSettingsInitialSubTab,
+        adminActiveTab: tab ?? state.adminActiveTab,
       };
+
+      if (subTab) {
+        if (tab === 'missions') next.adminMissionsInitialSubTab = subTab;
+        if (tab === 'store') next.adminStoreInitialSubTab = subTab as any;
+        if (tab === 'queues') next.adminQueuesInitialSubTab = subTab;
+        if (tab === 'settings') next.adminSettingsInitialSubTab = subTab;
+
+        if (tab === 'economy_console') next.adminEconomyInitialSubTab = subTab as 'console' | 'pro';
+        if (tab === 'users') next.adminUsersInitialSubTab = subTab as 'list' | 'metrics' | 'leads';
+        if (tab === 'subscriptions') next.adminSubscriptionsInitialSubTab = subTab as 'plans' | 'requests';
+      }
+
+      return next;
+    }
     case 'SET_STORE_TAB':
       return { ...state, currentView: 'store', storeInitialTab: action.payload };
     case 'SET_INVENTORY_TAB':

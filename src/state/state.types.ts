@@ -33,6 +33,9 @@ export interface AppState {
   adminStoreInitialSubTab: any; // AdminStoreTab
   adminQueuesInitialSubTab: string;
   adminSettingsInitialSubTab: string;
+  adminEconomyInitialSubTab: 'console' | 'pro';
+  adminUsersInitialSubTab: 'list' | 'metrics' | 'leads';
+  adminSubscriptionsInitialSubTab: 'plans' | 'requests';
   unseenAdminNotifications: AdminNotification[];
 
   // --- UI State ---

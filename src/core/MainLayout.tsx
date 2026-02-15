@@ -45,7 +45,7 @@ const MenuIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 
 export const MainLayout: React.FC = () => {
     const { state, dispatch } = useAppContext();
-    const { currentView, activeUser, isAdmin, showWelcomeModal, adminActiveTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, unseenAdminNotifications } = state;
+    const { currentView, activeUser, isAdmin, showWelcomeModal, adminActiveTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, adminUsersInitialSubTab, adminSubscriptionsInitialSubTab, adminEconomyInitialSubTab, unseenAdminNotifications } = state;
     const mainContentRef = useRef<HTMLElement>(null);
     const lastViewRef = useRef<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -145,7 +145,13 @@ export const MainLayout: React.FC = () => {
                                 ? adminSettingsInitialSubTab
                                 : adminActiveTab === 'queues'
                                     ? adminQueuesInitialSubTab
-                                    : undefined)
+                                    : adminActiveTab === 'users'
+                                        ? adminUsersInitialSubTab
+                                        : adminActiveTab === 'subscriptions'
+                                            ? adminSubscriptionsInitialSubTab
+                                            : adminActiveTab === 'economy_console'
+                                                ? adminEconomyInitialSubTab
+                                                : undefined)
                     : undefined,
         };
 
@@ -158,6 +164,9 @@ export const MainLayout: React.FC = () => {
         adminStoreInitialSubTab,
         adminQueuesInitialSubTab,
         adminSettingsInitialSubTab,
+        adminUsersInitialSubTab,
+        adminSubscriptionsInitialSubTab,
+        adminEconomyInitialSubTab,
     ]);
 
     // Mobile menu lock
@@ -315,6 +324,9 @@ export const MainLayout: React.FC = () => {
                     adminStoreInitialSubTab={adminStoreInitialSubTab}
                     adminQueuesInitialSubTab={adminQueuesInitialSubTab}
                     adminSettingsInitialSubTab={adminSettingsInitialSubTab}
+                    adminUsersInitialSubTab={adminUsersInitialSubTab}
+                    adminSubscriptionsInitialSubTab={adminSubscriptionsInitialSubTab}
+                    adminEconomyInitialSubTab={adminEconomyInitialSubTab}
                     onViewUserHistory={handleViewUserHistory}
                 />;
             default: return <NotFoundState onGoHome={() => dispatch({type: 'SET_VIEW', payload: 'dashboard'})} />;

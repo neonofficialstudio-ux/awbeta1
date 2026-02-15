@@ -48,18 +48,28 @@ interface AdminPanelProps {
   adminStoreInitialSubTab: AdminStoreTab;
   adminQueuesInitialSubTab: string;
   adminSettingsInitialSubTab: string;
+  adminUsersInitialSubTab?: 'list' | 'metrics' | 'leads';
+  adminSubscriptionsInitialSubTab?: 'plans' | 'requests';
+  adminEconomyInitialSubTab?: 'console' | 'pro';
   onViewUserHistory: (user: User) => void;
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = (props) => {
-    const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, onViewUserHistory } = props;
+    const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, adminUsersInitialSubTab, adminSubscriptionsInitialSubTab, adminEconomyInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
     const [adminData, setAdminData] = useState<any>(null);
+
+    const initialSettingsSubTab = adminSettingsInitialSubTab?.startsWith('notifications:')
+        ? 'notifications'
+        : adminSettingsInitialSubTab;
+    const notificationsInitialType = adminSettingsInitialSubTab?.startsWith('notifications:')
+        ? (adminSettingsInitialSubTab.split(':')[1] === 'private' ? 'private' : 'global')
+        : undefined;
     
     // Local state
-    const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(adminSettingsInitialSubTab || 'telemetry_pro');
-    const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>('console');
+    const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(initialSettingsSubTab || 'telemetry_pro');
+    const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>(adminEconomyInitialSubTab || 'console');
 
     const refreshAdminData = useCallback(async () => {
         setIsLoading(true);
@@ -151,6 +161,15 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         });
     }, [activeTab, adminSettingsInitialSubTab, activeSettingsSubTab, dispatch]);
 
+    useEffect(() => {
+        if (activeTab !== 'economy_console') return;
+
+        dispatch({
+            type: 'SET_ADMIN_TAB',
+            payload: { tab: 'economy_console', subTab: activeEconomySubTab },
+        });
+    }, [activeTab, activeEconomySubTab, dispatch]);
+
     const handleTabChange = (id: string) => {
       dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: id as AdminTab } });
     };
@@ -232,6 +251,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     <AntiCrashBoundary>
                         <ManageUsers
                             {...adminData}
+                            initialSubTab={adminUsersInitialSubTab}
                             onUpdateUser={(u: User) => handleAdminAction(api.adminUpdateUser(u))}
                             onPunishUser={(p: any) => handleAdminAction(api.punishUser(p))}
                             onUnbanUser={onUnbanUser}
@@ -306,6 +326,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return (
                     <AntiCrashBoundary>
                         <ManageSubscriptions
+                            initialSubTab={adminSubscriptionsInitialSubTab}
                             subscriptionRequests={pendingRequests}
                             subscriptionStats={adminData.subscriptionStats}
                             subscriptionHistory={adminData.subscriptionHistory}
@@ -352,6 +373,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             )}
                             {activeSettingsSubTab === 'notifications' && (
                                 <ManageNotifications 
+                                    initialType={notificationsInitialType}
                                     allUsers={adminData.allUsers} 
                                     onSend={(payload: any) => handleAdminAction(api.sendAdminNotification(payload))} 
                                 />
