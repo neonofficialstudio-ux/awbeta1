@@ -53,6 +53,12 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         if (!state.activeUser) return;
 
+        // ✅ ENTERPRISE RULE (Supabase is source of truth):
+        // Never auto-repair / dispatch "consistency fixes" in runtime when backendProvider is supabase.
+        // Background tab throttling can delay timers; when returning, late dispatches can cause global re-renders
+        // and remount-sensitive UI (like local modals) appears to "refresh".
+        const isSupabase = config.backendProvider === 'supabase';
+
         // Debounce integrity check to avoid blocking UI on rapid updates
         const timer = setTimeout(() => {
             const safeUser = SanityGuard.user(state.activeUser);
@@ -64,17 +70,19 @@ const AppContent: React.FC = () => {
             if (report.issues.length > 0) {
                 logger.warn("State repaired during runtime consistency check", report.repaired);
 
-                // Determine if we need to dispatch updates
-                const userChanged = newState.activeUser && !fastDeepEqual(newState.activeUser, state.activeUser);
-                const rankingChanged = newState.rankingGlobal && !fastDeepEqual(newState.rankingGlobal, state.rankingGlobal);
-                const queueChanged = newState.queue && !fastDeepEqual(newState.queue, state.queue);
+                // ✅ In Supabase mode, we only log (no dispatch). Backend is the authority.
+                if (isSupabase) return;
+
+                // Determine if we need to dispatch updates (mock-only)
+                const userChanged =
+                    newState.activeUser && !fastDeepEqual(newState.activeUser, state.activeUser);
+                const rankingChanged =
+                    newState.rankingGlobal && !fastDeepEqual(newState.rankingGlobal, state.rankingGlobal);
+                const queueChanged =
+                    newState.queue && !fastDeepEqual(newState.queue, state.queue);
 
                 if (userChanged) {
-                    // ✅ Em Supabase, não rodar auto-repair legado que tenta “normalizar” user local.
-                    // A fonte da verdade é o backend.
-                    if (config.backendProvider === 'mock') {
-                        dispatch({ type: 'UPDATE_USER', payload: newState.activeUser! });
-                    }
+                    dispatch({ type: 'UPDATE_USER', payload: newState.activeUser! });
                 }
                 if (rankingChanged) {
                     dispatch({ type: 'SET_RANKING_GLOBAL', payload: newState.rankingGlobal });
