@@ -8,6 +8,8 @@ import { AdsAnalytics } from '../../api/admin/ads.analytics'; // V2.1
 import AdsProAnalytics from './ads/AdsProAnalytics'; // Phase 12.2
 import AdDetailsModal from './ads/AdDetailsModal'; // Phase 12.2
 
+const UI_KEY = 'aw:admin_ads:ui_v1';
+
 interface ManageAdvertisementsProps {
   advertisements: Advertisement[];
   onSave: (ad: Advertisement) => void;
@@ -74,6 +76,28 @@ const ManageAdvertisements: React.FC<ManageAdvertisementsProps> = ({ advertiseme
   // Phase 12.2 State
   const [proDetailsAd, setProDetailsAd] = useState<Advertisement | null>(null);
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(UI_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.isModalOpen) {
+        setIsModalOpen(true);
+        setEditingAd(null);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(UI_KEY, JSON.stringify({ isModalOpen: Boolean(isModalOpen) }));
+    } catch {
+      // ignore
+    }
+  }, [isModalOpen]);
+
   const handleOpenModal = (ad: Advertisement | null = null) => {
     setEditingAd(ad);
     setIsModalOpen(true);
@@ -82,6 +106,11 @@ const ManageAdvertisements: React.FC<ManageAdvertisementsProps> = ({ advertiseme
   const handleCloseModal = () => {
     setEditingAd(null);
     setIsModalOpen(false);
+    try {
+      sessionStorage.removeItem(UI_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   const handleSaveAndClose = (ad: Advertisement) => {
