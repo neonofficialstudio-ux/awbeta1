@@ -46,6 +46,7 @@ export const MainLayout: React.FC = () => {
     const { state, dispatch } = useAppContext();
     const { currentView, activeUser, isAdmin, showWelcomeModal, adminActiveTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminQueuesInitialSubTab, adminSettingsInitialSubTab, unseenAdminNotifications } = state;
     const mainContentRef = useRef<HTMLElement>(null);
+    const lastViewRef = useRef<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Dynamic Title
@@ -78,6 +79,10 @@ export const MainLayout: React.FC = () => {
 
     // Scroll to top on view change
     useEffect(() => {
+        // Só scrolla se realmente mudou de view (evita scroll-to-top por re-render/focus resume)
+        if (lastViewRef.current === currentView) return;
+        lastViewRef.current = currentView;
+
         mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }, [currentView]);
 
