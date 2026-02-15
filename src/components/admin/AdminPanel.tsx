@@ -140,6 +140,17 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const totalPendingQueues = usableItemQueue.length + artistOfTheDayQueue.length;
 
+
+    useEffect(() => {
+        if (activeTab !== 'settings') return;
+        if ((adminSettingsInitialSubTab || '') === (activeSettingsSubTab || '')) return;
+
+        dispatch({
+            type: 'SET_ADMIN_TAB',
+            payload: { tab: 'settings', subTab: activeSettingsSubTab },
+        });
+    }, [activeTab, adminSettingsInitialSubTab, activeSettingsSubTab, dispatch]);
+
     const handleTabChange = (id: string) => {
       dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: id as AdminTab } });
     };
