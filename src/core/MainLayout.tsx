@@ -11,6 +11,7 @@ import type { User, StoreItem, UsableItem, InventoryTab } from '../types';
 import { usePageTitle } from '../components/ui/hooks/usePageTitle';
 import NotFoundState from '../components/ui/feedback/NotFoundState';
 import PageSkeleton from '../components/ui/feedback/PageSkeleton';
+import { readUrlState, writeUrlState, getStableUrlKey } from './urlState';
 
 // Modals
 import RedemptionSuccessModal from '../components/RedemptionSuccessModal';
@@ -85,6 +86,79 @@ export const MainLayout: React.FC = () => {
 
         mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }, [currentView]);
+
+    // URL <-> Store Sync
+    const lastAppliedUrlKeyRef = useRef<string>('');
+    const isApplyingUrlRef = useRef(false);
+
+    useEffect(() => {
+        const applyFromUrl = () => {
+            try {
+                const urlKey = getStableUrlKey();
+                if (urlKey === lastAppliedUrlKeyRef.current) return;
+                lastAppliedUrlKeyRef.current = urlKey;
+
+                const urlState = readUrlState();
+                if (!urlState.view) return;
+
+                isApplyingUrlRef.current = true;
+
+                if (urlState.view !== currentView) {
+                    dispatch({ type: 'SET_VIEW', payload: urlState.view });
+                }
+
+                if (urlState.view === 'admin' && urlState.adminTab) {
+                    dispatch({
+                        type: 'SET_ADMIN_TAB',
+                        payload: { tab: urlState.adminTab, subTab: urlState.adminSubTab || undefined },
+                    });
+                }
+            } finally {
+                setTimeout(() => {
+                    isApplyingUrlRef.current = false;
+                }, 0);
+            }
+        };
+
+        applyFromUrl();
+
+        const onPopState = () => applyFromUrl();
+        window.addEventListener('popstate', onPopState);
+
+        return () => window.removeEventListener('popstate', onPopState);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        if (isApplyingUrlRef.current) return;
+
+        const next = {
+            view: currentView,
+            adminTab: currentView === 'admin' ? adminActiveTab : undefined,
+            adminSubTab:
+                currentView === 'admin'
+                    ? (adminActiveTab === 'missions'
+                        ? adminMissionsInitialSubTab
+                        : adminActiveTab === 'store'
+                            ? adminStoreInitialSubTab
+                            : adminActiveTab === 'settings'
+                                ? adminSettingsInitialSubTab
+                                : adminActiveTab === 'queues'
+                                    ? adminQueuesInitialSubTab
+                                    : undefined)
+                    : undefined,
+        };
+
+        writeUrlState(next, { replace: true });
+        lastAppliedUrlKeyRef.current = getStableUrlKey();
+    }, [
+        currentView,
+        adminActiveTab,
+        adminMissionsInitialSubTab,
+        adminStoreInitialSubTab,
+        adminQueuesInitialSubTab,
+        adminSettingsInitialSubTab,
+    ]);
 
     // Mobile menu lock
     useEffect(() => {
