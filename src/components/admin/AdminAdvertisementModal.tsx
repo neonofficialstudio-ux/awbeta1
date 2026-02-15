@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Advertisement } from '../../types';
 
-const DRAFT_KEY = 'aw:admin_ads:draft_v1';
 const DEFAULT_FORM: Omit<Advertisement, 'id'> = {
   title: '',
   description: '',
@@ -19,102 +18,80 @@ interface AdminAdvertisementModalProps {
 
 const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, onClose, onSave }) => {
   const [formData, setFormData] = useState<Omit<Advertisement, 'id'>>(DEFAULT_FORM);
-  const [isDirty, setIsDirty] = useState(false);
-  const loadedAdIdRef = useRef<string | null>(null);
+  const lastSavedDraftRef = useRef<string>('');
+  const draftKey = useMemo(() => {
+    const idPart = ad?.id ? String(ad.id) : 'new';
+    return `aw:admin:advertisement_draft:${idPart}`;
+  }, [ad?.id]);
 
   useEffect(() => {
+    const base: Omit<Advertisement, 'id'> = ad
+      ? {
+          title: ad.title ?? '',
+          description: ad.description ?? '',
+          imageUrl: ad.imageUrl ?? '',
+          linkUrl: ad.linkUrl ?? '',
+          isActive: ad.isActive ?? true,
+          duration: ad.duration ?? 5,
+        }
+      : { ...DEFAULT_FORM };
+
     try {
-      if (ad) return;
-      const raw = sessionStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
+      const raw = sessionStorage.getItem(draftKey);
+      if (!raw) {
+        setFormData(base);
+        return;
+      }
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        setFormData((prev) => ({ ...prev, ...parsed }));
+        const merged = { ...base, ...parsed };
+        setFormData(merged);
+        lastSavedDraftRef.current = raw;
+        return;
       }
     } catch {
       // ignore
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  useEffect(() => {
-    const incomingId = ad?.id ?? null;
-
-    if (incomingId) {
-      if (loadedAdIdRef.current !== incomingId) {
-        loadedAdIdRef.current = incomingId;
-        setFormData({
-          title: ad?.title ?? '',
-          description: ad?.description ?? '',
-          imageUrl: ad?.imageUrl ?? '',
-          linkUrl: ad?.linkUrl ?? '',
-          isActive: ad?.isActive ?? true,
-          duration: ad?.duration ?? 5,
-        });
-        setIsDirty(false);
-        try {
-          sessionStorage.removeItem(DRAFT_KEY);
-        } catch {
-          // ignore
-        }
-      }
-      return;
-    }
-
-    if (loadedAdIdRef.current !== null) {
-      loadedAdIdRef.current = null;
-    }
-    if (!isDirty) {
-      setFormData(DEFAULT_FORM);
-    }
-  }, [ad?.id, isDirty]);
+    setFormData(base);
+  }, [ad, draftKey]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    setIsDirty(true);
-    if (type === 'checkbox') {
+    setFormData((prev) => {
+      let next = prev;
+
+      if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
-        setFormData(prev => {
-          const next = { ...prev, [name]: checked };
-          try {
-            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-          } catch {
-            // ignore
-          }
-          return next;
-        });
-    } else if (type === 'number') {
-        setFormData(prev => {
-          const next = { ...prev, [name]: Math.max(1, parseInt(value, 10) || 1) };
-          try {
-            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-          } catch {
-            // ignore
-          }
-          return next;
-        });
-    } else {
-        setFormData(prev => {
-          const next = { ...prev, [name]: value };
-          try {
-            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-          } catch {
-            // ignore
-          }
-          return next;
-        });
-    }
+        next = { ...prev, [name]: checked };
+      } else if (type === 'number') {
+        next = { ...prev, [name]: Math.max(1, parseInt(value, 10) || 1) };
+      } else {
+        next = { ...prev, [name]: value };
+      }
+
+      try {
+        const raw = JSON.stringify(next);
+        if (raw !== lastSavedDraftRef.current) {
+          sessionStorage.setItem(draftKey, raw);
+          lastSavedDraftRef.current = raw;
+        }
+      } catch {
+        // ignore
+      }
+
+      return next;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ ...formData, id: ad?.id || '' });
-    setIsDirty(false);
     try {
-      sessionStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(draftKey);
     } catch {
       // ignore
     }
+    onSave({ ...formData, id: ad?.id || '' });
   };
 
   const handleClose = () => {
