@@ -1,34 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Advertisement } from '../../types';
 
-const AD_DRAFT_KEY = 'aw_admin_ad_draft_v1';
-
-const safeLoadDraft = () => {
-  try {
-    const raw = sessionStorage.getItem(AD_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-const safeSaveDraft = (draft: any) => {
-  try {
-    sessionStorage.setItem(AD_DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    // ignore
-  }
-};
-
-const safeClearDraft = () => {
-  try {
-    sessionStorage.removeItem(AD_DRAFT_KEY);
-  } catch {
-    // ignore
-  }
-};
+const DRAFT_KEY = 'aw:admin_ads:draft_v1';
 
 interface AdminAdvertisementModalProps {
   ad: Advertisement | null;
@@ -47,59 +20,87 @@ const AdminAdvertisementModal: React.FC<AdminAdvertisementModalProps> = ({ ad, o
   });
 
   useEffect(() => {
-    if (ad) {
-      setFormData(ad);
-    } else {
-      // Novo anúncio: tenta restaurar draft da sessão
-      const draft = safeLoadDraft();
-      if (draft) {
-        setFormData({
-          title: String(draft.title ?? ''),
-          description: String(draft.description ?? ''),
-          imageUrl: String(draft.imageUrl ?? ''),
-          linkUrl: String(draft.linkUrl ?? ''),
-          isActive: Boolean(draft.isActive ?? true),
-          duration: Math.max(1, Number(draft.duration ?? 5)),
-        });
-      } else {
-        setFormData({
-          title: '',
-          description: '',
-          imageUrl: '',
-          linkUrl: '',
-          isActive: true,
-          duration: 5,
-        });
+    try {
+      if (ad) return;
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        setFormData((prev) => ({ ...prev, ...parsed }));
       }
+    } catch {
+      // ignore
     }
-  }, [ad]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    // Só salva draft quando é "novo anúncio"
-    if (ad) return;
-    safeSaveDraft(formData);
-  }, [ad, formData]);
+    if (ad) {
+      setFormData(ad);
+      try {
+        sessionStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // ignore
+      }
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        imageUrl: '',
+        linkUrl: '',
+        isActive: true,
+        duration: 5,
+      });
+    }
+  }, [ad]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
         const { checked } = e.target as HTMLInputElement;
-        setFormData(prev => ({ ...prev, [name]: checked }));
+        setFormData(prev => {
+          const next = { ...prev, [name]: checked };
+          try {
+            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
     } else if (type === 'number') {
-        setFormData(prev => ({ ...prev, [name]: Math.max(1, parseInt(value, 10) || 1) }));
+        setFormData(prev => {
+          const next = { ...prev, [name]: Math.max(1, parseInt(value, 10) || 1) };
+          try {
+            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
     } else {
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+          const next = { ...prev, [name]: value };
+          try {
+            if (!ad) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ad) safeClearDraft();
     onSave({ ...formData, id: ad?.id || '' });
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   const handleClose = () => {
-    if (!ad) safeClearDraft();
     onClose();
   };
 
