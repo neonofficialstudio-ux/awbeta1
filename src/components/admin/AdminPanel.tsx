@@ -119,6 +119,27 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             console.error("Admin action failed:", e);
         }
     };
+
+    useEffect(() => {
+        if (!adminData) return;
+        if (activeTab !== 'settings') return;
+        if ((adminSettingsInitialSubTab || '') === (activeSettingsSubTab || '')) return;
+
+        dispatch({
+            type: 'SET_ADMIN_TAB',
+            payload: { tab: 'settings', subTab: activeSettingsSubTab },
+        });
+    }, [adminData, activeTab, adminSettingsInitialSubTab, activeSettingsSubTab, dispatch]);
+
+    useEffect(() => {
+        if (!adminData) return;
+        if (activeTab !== 'economy_console') return;
+
+        dispatch({
+            type: 'SET_ADMIN_TAB',
+            payload: { tab: 'economy_console', subTab: activeEconomySubTab },
+        });
+    }, [adminData, activeTab, activeEconomySubTab, dispatch]);
     
     const onUnbanUser = (userId: string) => handleAdminAction(api.unbanUser(userId));
 
@@ -149,27 +170,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const pendingRequestsCount = pendingRequests.length;
 
     const totalPendingQueues = usableItemQueue.length + artistOfTheDayQueue.length;
-
-
-    useEffect(() => {
-        if (activeTab !== 'settings') return;
-        if ((adminSettingsInitialSubTab || '') === (activeSettingsSubTab || '')) return;
-
-        dispatch({
-            type: 'SET_ADMIN_TAB',
-            payload: { tab: 'settings', subTab: activeSettingsSubTab },
-        });
-    }, [activeTab, adminSettingsInitialSubTab, activeSettingsSubTab, dispatch]);
-
-    useEffect(() => {
-        if (activeTab !== 'economy_console') return;
-
-        dispatch({
-            type: 'SET_ADMIN_TAB',
-            payload: { tab: 'economy_console', subTab: activeEconomySubTab },
-        });
-    }, [activeTab, activeEconomySubTab, dispatch]);
-
     const handleTabChange = (id: string) => {
       dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: id as AdminTab } });
     };
