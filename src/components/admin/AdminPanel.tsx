@@ -65,6 +65,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
         try {
             const res = await Promise.resolve(AdminEngine.getDashboardData());
+            if (!res) {
+                console.warn('[AdminPanel] refresh returned undefined (ignored)');
+                return;
+            }
             if (res?.success) {
                 const data = res.data || {};
                 setAdminData((prev: any) => ({
