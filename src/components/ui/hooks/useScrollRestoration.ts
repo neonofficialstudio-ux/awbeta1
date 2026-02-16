@@ -20,44 +20,61 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
 
     let t: ReturnType<typeof setTimeout> | null = null;
 
+    // ✅ memória local (não depende de storage)
+    let lastKnownTop = 0;
+
     const save = () => {
       try {
         const top = el.scrollTop || 0;
+        lastKnownTop = top;
         sessionStorage.setItem(storageKey, String(top));
       } catch {}
     };
 
     const onScroll = () => {
+      lastKnownTop = el.scrollTop || 0;
       if (t) clearTimeout(t);
       t = setTimeout(save, saveDebounceMs);
     };
 
-    const restore = () => {
+    const restoreFromStorage = () => {
       try {
         const raw = sessionStorage.getItem(storageKey);
         const top = raw ? Number(raw) : 0;
 
-        // Só restaura se realmente existir posição > 0 (evita "teleport" pro topo)
         if (Number.isFinite(top) && top > 0) {
           el.scrollTo({ top, behavior: 'auto' });
+          lastKnownTop = top;
+        } else {
+          // se não tem nada salvo, mantém lastKnownTop conforme estado atual
+          lastKnownTop = el.scrollTop || 0;
         }
       } catch {}
     };
 
-    // ✅ Restore apenas no mount / mudança de key (navegação real dentro do app)
-    restore();
+    // ✅ restore só no mount / troca de key
+    restoreFromStorage();
 
     el.addEventListener('scroll', onScroll, { passive: true });
 
-    // ✅ Enterprise: no retorno da aba NÃO restaurar (isso causa pulo).
-    // Apenas salvar quando esconder.
     const onVis = () => {
-      if (document.visibilityState === 'hidden') save();
+      if (document.visibilityState === 'hidden') {
+        // salva ao sair
+        save();
+        return;
+      }
+
+      // ✅ ao voltar: só “corrige” se detectarmos reset involuntário pro topo
+      // (não teleporta se o usuário realmente estava no topo)
+      if (document.visibilityState === 'visible') {
+        const currentTop = el.scrollTop || 0;
+        if (currentTop === 0 && lastKnownTop > 0) {
+          el.scrollTo({ top: lastKnownTop, behavior: 'auto' });
+        }
+      }
     };
 
     document.addEventListener('visibilitychange', onVis);
-
-    // (sem window.focus)
 
     return () => {
       if (t) clearTimeout(t);
