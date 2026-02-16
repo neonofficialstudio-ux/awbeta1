@@ -36,29 +36,33 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
       try {
         const raw = sessionStorage.getItem(storageKey);
         const top = raw ? Number(raw) : 0;
+
+        // Só restaura se realmente existir posição > 0 (evita "teleport" pro topo)
         if (Number.isFinite(top) && top > 0) {
           el.scrollTo({ top, behavior: 'auto' });
         }
       } catch {}
     };
 
+    // ✅ Restore apenas no mount / mudança de key (navegação real dentro do app)
     restore();
 
     el.addEventListener('scroll', onScroll, { passive: true });
 
+    // ✅ Enterprise: no retorno da aba NÃO restaurar (isso causa pulo).
+    // Apenas salvar quando esconder.
     const onVis = () => {
-      if (document.visibilityState === 'visible') restore();
+      if (document.visibilityState === 'hidden') save();
     };
-    const onFocus = () => restore();
 
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', onFocus);
+
+    // (sem window.focus)
 
     return () => {
       if (t) clearTimeout(t);
       el.removeEventListener('scroll', onScroll);
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', onFocus);
       save();
     };
   }, [getEl, storageKey, saveDebounceMs]);
