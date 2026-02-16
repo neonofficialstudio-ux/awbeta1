@@ -20,57 +20,81 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
 
     let t: ReturnType<typeof setTimeout> | null = null;
 
-    // ✅ memória local (não depende de storage)
-    let lastKnownTop = 0;
+    // ✅ guarda o último scroll “válido” (não-zero)
+    let lastNonZeroTop = 0;
 
-    const save = () => {
+    const readStoredTop = () => {
       try {
-        const top = el.scrollTop || 0;
-        lastKnownTop = top;
+        const raw = sessionStorage.getItem(storageKey);
+        const top = raw ? Number(raw) : 0;
+        return Number.isFinite(top) ? top : 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const writeStoredTop = (top: number) => {
+      try {
         sessionStorage.setItem(storageKey, String(top));
       } catch {}
     };
 
+    const save = () => {
+      const currentTop = el.scrollTop || 0;
+
+      // ✅ nunca “mata” um valor bom salvando 0
+      const topToPersist =
+        currentTop > 0 ? currentTop : lastNonZeroTop > 0 ? lastNonZeroTop : 0;
+
+      if (topToPersist > 0) {
+        writeStoredTop(topToPersist);
+      }
+    };
+
     const onScroll = () => {
-      lastKnownTop = el.scrollTop || 0;
+      const currentTop = el.scrollTop || 0;
+      if (currentTop > 0) lastNonZeroTop = currentTop;
+
       if (t) clearTimeout(t);
       t = setTimeout(save, saveDebounceMs);
     };
 
-    const restoreFromStorage = () => {
-      try {
-        const raw = sessionStorage.getItem(storageKey);
-        const top = raw ? Number(raw) : 0;
+    const restore = (reason: 'mount' | 'visible') => {
+      const storedTop = readStoredTop();
 
-        if (Number.isFinite(top) && top > 0) {
-          el.scrollTo({ top, behavior: 'auto' });
-          lastKnownTop = top;
-        } else {
-          // se não tem nada salvo, mantém lastKnownTop conforme estado atual
-          lastKnownTop = el.scrollTop || 0;
-        }
-      } catch {}
+      // mantém memória coerente
+      if (storedTop > 0) lastNonZeroTop = storedTop;
+
+      const currentTop = el.scrollTop || 0;
+
+      // ✅ restore só se o container estiver no topo (reset involuntário)
+      // e existir posição válida salva
+      if (storedTop > 0 && currentTop === 0) {
+        el.scrollTo({ top: storedTop, behavior: 'auto' });
+      }
+
+      // se o usuário já está em algum lugar, atualiza lastNonZeroTop
+      const afterTop = el.scrollTop || 0;
+      if (afterTop > 0) lastNonZeroTop = afterTop;
+
+      // (reason só para debug futuro; não loga em produção)
+      void reason;
     };
 
-    // ✅ restore só no mount / troca de key
-    restoreFromStorage();
+    // ✅ restore no mount / troca de key
+    restore('mount');
 
     el.addEventListener('scroll', onScroll, { passive: true });
 
     const onVis = () => {
       if (document.visibilityState === 'hidden') {
-        // salva ao sair
+        // ✅ salva ao sair sem sobrescrever por 0
         save();
         return;
       }
-
-      // ✅ ao voltar: só “corrige” se detectarmos reset involuntário pro topo
-      // (não teleporta se o usuário realmente estava no topo)
       if (document.visibilityState === 'visible') {
-        const currentTop = el.scrollTop || 0;
-        if (currentTop === 0 && lastKnownTop > 0) {
-          el.scrollTo({ top: lastKnownTop, behavior: 'auto' });
-        }
+        // ✅ repara reset involuntário quando volta
+        restore('visible');
       }
     };
 
