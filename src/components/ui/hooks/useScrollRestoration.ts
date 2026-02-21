@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 type Options = {
   /** Elemento que realmente scrolla (ex: main content div). Se null, não faz nada. */
@@ -11,33 +11,19 @@ type Options = {
 
 const NS = 'aw:scroll';
 
-/**
- * Restauro de scroll robusto para containers com conteúdo assíncrono.
- *
- * Problema que resolve:
- * - Em remount, muitas telas mostram um spinner (conteúdo baixo).
- * - O restore rodava cedo demais e era "clampado" para 0.
- * - Depois que o conteúdo real carregava, não havia novo restore.
- *
- * Solução:
- * - Tenta restore em rAF algumas vezes.
- * - Usa ResizeObserver para restaurar quando o scrollHeight aumentar.
- * - Não sobrescreve posição salva com 0 (mantém lastNonZeroTop).
- */
 export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Options) {
   const storageKey = useMemo(() => `${NS}:${key}`, [key]);
+
+  // mantém em memória pra não depender 100% do timer gravar no storage
+  const lastNonZeroTopRef = useRef(0);
+  const lastSavedTopRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const el = getEl();
     if (!el) return;
 
-    let t: ReturnType<typeof setTimeout> | null = null;
-    let raf: number | null = null;
-
-    // Mantém o último top > 0 para não "matar" o scroll salvo quando a tela volta pro topo temporariamente.
-    let lastNonZeroTop = 0;
-
-    const readStoredTop = (): number => {
+    const readStoredTop = () => {
       try {
         const raw = sessionStorage.getItem(storageKey);
         const top = raw ? Number(raw) : 0;
@@ -47,89 +33,93 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
       }
     };
 
-    const save = () => {
+    const writeStoredTop = (top: number) => {
       try {
-        const top = el.scrollTop || 0;
-        if (top > 0) lastNonZeroTop = top;
-        // Evita gravar 0 se já tivemos uma posição válida.
-        const valueToSave = top > 0 ? top : lastNonZeroTop;
-        sessionStorage.setItem(storageKey, String(valueToSave || 0));
+        sessionStorage.setItem(storageKey, String(top));
       } catch {}
     };
 
-    const onScroll = () => {
-      if (t) clearTimeout(t);
-      t = setTimeout(save, saveDebounceMs);
+    const saveNow = () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+
+      const currentTop = el.scrollTop || 0;
+
+      // atualiza o “último scroll válido”
+      if (currentTop > 0) lastNonZeroTopRef.current = currentTop;
+
+      // nunca salva 0 se já tivemos um scroll > 0 nessa tela
+      const toSave = currentTop > 0 ? currentTop : lastNonZeroTopRef.current;
+
+      if (toSave > 0 && lastSavedTopRef.current !== toSave) {
+        lastSavedTopRef.current = toSave;
+        writeStoredTop(toSave);
+      }
     };
 
-    const clampTop = (wantedTop: number) => {
-      const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
-      return Math.max(0, Math.min(wantedTop, maxTop));
+    const scheduleSave = () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveNow();
+      }, saveDebounceMs);
     };
 
-    // Restore com tentativas para casos em que o conteúdo ainda não foi montado (spinner/async).
-    const restore = (attempt = 0) => {
+    const restore = () => {
       const storedTop = readStoredTop();
-      if (!storedTop || storedTop <= 0) return;
+      if (!(storedTop > 0)) return;
 
-      const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      // ✅ enterprise: só restaura se estamos no topo (evita “teleporte” agressivo)
+      if ((el.scrollTop || 0) <= 1) {
+        el.scrollTo({ top: storedTop, behavior: 'auto' });
+      }
+    };
 
-      // Ainda não tem conteúdo suficiente para rolar até o ponto salvo.
-      // Aguarda alguns frames para o conteúdo montar.
-      if (maxTop <= 0 || maxTop < Math.min(storedTop, 20)) {
-        if (attempt < 16) {
-          raf = window.requestAnimationFrame(() => restore(attempt + 1));
-        }
+    const onScroll = () => {
+      // mantém memória atualizada imediatamente (mesmo se timer for throttled)
+      const top = el.scrollTop || 0;
+      if (top > 0) lastNonZeroTopRef.current = top;
+
+      scheduleSave();
+    };
+
+    const onVisibilityChange = () => {
+      // ✅ CRÍTICO: quando vai pra background, flush do save (não depende do debounce)
+      if (document.visibilityState === 'hidden') {
+        saveNow();
         return;
       }
 
-      const target = clampTop(storedTop);
-
-      // Só aplica se estivermos no topo (ou muito longe do alvo)
-      // para não "brigar" com o usuário.
-      const diff = Math.abs((el.scrollTop || 0) - target);
-      if ((el.scrollTop || 0) === 0 || diff > 8) {
-        el.scrollTo({ top: target, behavior: 'auto' });
-      }
+      // quando volta, restaura após o layout estabilizar
+      requestAnimationFrame(() => requestAnimationFrame(() => restore()));
     };
 
-    // 1) Restore inicial (agora + próximo tick)
-    restore();
-    setTimeout(() => restore(0), 0);
+    const onBlur = () => {
+      // troca de aba/janela: flush imediato
+      saveNow();
+    };
 
-    // 2) Salvar ao rolar
+    const onPageHide = () => {
+      // bfcache / page lifecycle: flush imediato
+      saveNow();
+    };
+
+    // restaura no mount (depois de 2 frames pra evitar competir com render)
+    requestAnimationFrame(() => requestAnimationFrame(() => restore()));
+
     el.addEventListener('scroll', onScroll, { passive: true });
-
-    // 3) Ao voltar para a aba: tentar restore (mas sem agressividade)
-    const onVis = () => {
-      if (document.visibilityState === 'visible') restore(0);
-    };
-    const onFocus = () => restore(0);
-
-    document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', onFocus);
-
-    // 4) Quando o conteúdo do container muda (async data), restaurar novamente.
-    // Isso resolve o caso clássico: mount com spinner (altura pequena) -> clamp 0 -> conteúdo cresce.
-    let ro: ResizeObserver | null = null;
-    try {
-      ro = new ResizeObserver(() => {
-        // Só tenta restaurar quando existe chance de scroll > 0.
-        restore(0);
-      });
-      ro.observe(el);
-    } catch {
-      // ResizeObserver pode não existir em alguns ambientes; ok.
-    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('pagehide', onPageHide);
 
     return () => {
-      if (t) clearTimeout(t);
-      if (raf) cancelAnimationFrame(raf);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       el.removeEventListener('scroll', onScroll);
-      document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', onFocus);
-      if (ro) ro.disconnect();
-      save();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pagehide', onPageHide);
+      saveNow();
     };
   }, [getEl, storageKey, saveDebounceMs]);
 }
