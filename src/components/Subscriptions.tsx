@@ -254,6 +254,7 @@ const Subscriptions: React.FC = () => {
     : 'Para trocar de plano, cancele sua assinatura atual primeiro.';
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
@@ -266,6 +267,11 @@ const Subscriptions: React.FC = () => {
   const [pendingCheckout, setPendingCheckout] = useState<{ checkoutId: string; referenceId: string } | null>(null);
   const [myBenefits, setMyBenefits] = useState<MyPlanBenefits | null>(null);
   const [planOffers, setPlanOffers] = useState<PlanOffer[]>([]);
+
+  const cacheKey = useMemo(
+    () => `aw:cache:subscriptions:${currentUser?.id || 'anon'}`,
+    [currentUser?.id]
+  );
 
   const faqItems = [
     {
@@ -292,6 +298,9 @@ const Subscriptions: React.FC = () => {
 
   const fetchData = async () => {
     if (!currentUser) return;
+    const hasContent = plans.length > 0;
+    if (!hasContent) setIsLoading(true);
+    else setIsRefreshing(true);
     try {
       const [{ plans: plansData }, myB, offers] = await Promise.all([
         api.fetchSubscriptionsPageData(currentUser.id),
@@ -410,19 +419,45 @@ const Subscriptions: React.FC = () => {
       setMyBenefits(myB);
       setPlanOffers(offers);
       setPlans(enrichedPlans);
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+          at: Date.now(),
+          data: {
+            plans: enrichedPlans,
+            myBenefits: myB,
+            planOffers: offers,
+          },
+        }));
+      } catch {
+        // noop
+      }
     } catch (error) {
       console.error("Failed to fetch subscription data:", error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser) {
-        setIsLoading(true);
-        fetchData();
+    if (!currentUser?.id) return;
+
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.at && Date.now() - parsed.at <= 60_000) {
+          if (Array.isArray(parsed?.data?.plans)) setPlans(parsed.data.plans);
+          if (parsed?.data?.myBenefits) setMyBenefits(parsed.data.myBenefits);
+          if (Array.isArray(parsed?.data?.planOffers)) setPlanOffers(parsed.data.planOffers);
+        }
+      }
+    } catch {
+      // noop
     }
-  }, [currentUser]);
+
+    fetchData();
+  }, [cacheKey, currentUser?.id]);
   
   const processApiResponse = (response: any) => {
     if (response.updatedUser) {
@@ -622,7 +657,16 @@ const Subscriptions: React.FC = () => {
     }
   };
 
-  if (isLoading || !currentUser) {
+  if (!currentUser) {
+    return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD36A] shadow-[0_0_20px_rgba(255,211,106,0.4)]"></div>
+        </div>
+    );
+  }
+
+  const hasContent = plans.length > 0;
+  if (isLoading && !hasContent) {
     return (
         <div className="flex items-center justify-center min-h-[60vh]">
             <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD36A] shadow-[0_0_20px_rgba(255,211,106,0.4)]"></div>
@@ -636,6 +680,13 @@ const Subscriptions: React.FC = () => {
 
   return (
       <div className="animate-fade-in-up pb-32 relative">
+        {isRefreshing && (
+          <div className="absolute inset-0 z-40 pointer-events-none">
+            <div className="absolute top-4 right-4 text-xs text-gray-400 bg-black/40 border border-white/10 rounded-lg px-3 py-2">
+              Atualizando…
+            </div>
+          </div>
+        )}
         
         {/* 1. HERO SECTION */}
         <div className="text-center max-w-5xl mx-auto pt-6 mb-16 relative">
