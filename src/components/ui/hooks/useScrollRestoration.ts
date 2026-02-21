@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 
 type Options = {
-  /** Elemento que realmente scrolla (ex: main content div). Se null, não faz nada. */
+  /** Elemento preferido (ex: main content). Pode ser null. */
   getEl: () => HTMLElement | null;
   /** Chave única por “tela lógica” (ex: admin:missions:review) */
   key: string;
@@ -11,16 +11,36 @@ type Options = {
 
 const NS = 'aw:scroll';
 
+function getWindowScrollEl(): HTMLElement | null {
+  return (document.scrollingElement as HTMLElement) || document.documentElement || document.body;
+}
+
+function isWindowScrollEl(el: HTMLElement) {
+  const w = getWindowScrollEl();
+  return !!w && (el === w || el === document.documentElement || el === document.body);
+}
+
 export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Options) {
   const storageKey = useMemo(() => `${NS}:${key}`, [key]);
 
   useEffect(() => {
-    const el = getEl();
+    const preferred = getEl();
+    const windowEl = getWindowScrollEl();
+
+    // Decide qual “scroll root” usar:
+    // - se preferred não existe, usa window
+    // - se preferred existe e realmente scrolla, usa preferred
+    // - se preferred existe mas não scrolla, usa window
+    const el =
+      preferred && preferred.scrollHeight > preferred.clientHeight + 2
+        ? preferred
+        : windowEl;
+
     if (!el) return;
 
-    let t: ReturnType<typeof setTimeout> | null = null;
+    const useWindow = isWindowScrollEl(el);
 
-    // ✅ guarda o último scroll “válido” (não-zero)
+    let t: ReturnType<typeof setTimeout> | null = null;
     let lastNonZeroTop = 0;
 
     const readStoredTop = () => {
@@ -39,62 +59,75 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
       } catch {}
     };
 
-    const save = () => {
-      const currentTop = el.scrollTop || 0;
+    const getTop = () => {
+      if (useWindow) {
+        const w = getWindowScrollEl();
+        return (w?.scrollTop || 0) | 0;
+      }
+      return (el.scrollTop || 0) | 0;
+    };
 
-      // ✅ nunca “mata” um valor bom salvando 0
+    const setTop = (top: number) => {
+      if (top <= 0) return;
+      if (useWindow) {
+        const w = getWindowScrollEl();
+        if (!w) return;
+        w.scrollTo({ top, behavior: 'auto' });
+        return;
+      }
+      el.scrollTo({ top, behavior: 'auto' });
+    };
+
+    const save = () => {
+      const currentTop = getTop();
+
+      // ✅ não sobrescrever por 0
       const topToPersist =
         currentTop > 0 ? currentTop : lastNonZeroTop > 0 ? lastNonZeroTop : 0;
 
-      if (topToPersist > 0) {
-        writeStoredTop(topToPersist);
-      }
+      if (topToPersist > 0) writeStoredTop(topToPersist);
     };
 
     const onScroll = () => {
-      const currentTop = el.scrollTop || 0;
+      const currentTop = getTop();
       if (currentTop > 0) lastNonZeroTop = currentTop;
 
       if (t) clearTimeout(t);
       t = setTimeout(save, saveDebounceMs);
     };
 
-    const restore = (reason: 'mount' | 'visible') => {
+    const restore = () => {
       const storedTop = readStoredTop();
-
-      // mantém memória coerente
       if (storedTop > 0) lastNonZeroTop = storedTop;
 
-      const currentTop = el.scrollTop || 0;
+      const currentTop = getTop();
 
-      // ✅ restore só se o container estiver no topo (reset involuntário)
-      // e existir posição válida salva
+      // ✅ só restaura se o scroll real estiver no topo
       if (storedTop > 0 && currentTop === 0) {
-        el.scrollTo({ top: storedTop, behavior: 'auto' });
+        setTop(storedTop);
       }
 
-      // se o usuário já está em algum lugar, atualiza lastNonZeroTop
-      const afterTop = el.scrollTop || 0;
+      const afterTop = getTop();
       if (afterTop > 0) lastNonZeroTop = afterTop;
-
-      // (reason só para debug futuro; não loga em produção)
-      void reason;
     };
 
-    // ✅ restore no mount / troca de key
-    restore('mount');
+    // mount
+    restore();
 
-    el.addEventListener('scroll', onScroll, { passive: true });
+    // listener de scroll correto
+    if (useWindow) {
+      window.addEventListener('scroll', onScroll, { passive: true });
+    } else {
+      el.addEventListener('scroll', onScroll, { passive: true });
+    }
 
     const onVis = () => {
       if (document.visibilityState === 'hidden') {
-        // ✅ salva ao sair sem sobrescrever por 0
         save();
         return;
       }
       if (document.visibilityState === 'visible') {
-        // ✅ repara reset involuntário quando volta
-        restore('visible');
+        restore();
       }
     };
 
@@ -102,8 +135,9 @@ export function useScrollRestoration({ getEl, key, saveDebounceMs = 120 }: Optio
 
     return () => {
       if (t) clearTimeout(t);
-      el.removeEventListener('scroll', onScroll);
       document.removeEventListener('visibilitychange', onVis);
+      if (useWindow) window.removeEventListener('scroll', onScroll);
+      else el.removeEventListener('scroll', onScroll);
       save();
     };
   }, [getEl, storageKey, saveDebounceMs]);
