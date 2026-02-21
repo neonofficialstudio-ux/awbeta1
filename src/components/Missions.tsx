@@ -549,10 +549,39 @@ const Missions: React.FC = () => {
     const [hasReachedDailyLimit, setHasReachedDailyLimit] = useState(false);
     const [planBenefits, setPlanBenefits] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [submissionSuccessInfo, setSubmissionSuccessInfo] = useState<{ missionTitle: string } | null>(null);
     const lastLoadRef = useRef<number>(0);
-    const CACHE_TTL_MS = 30_000; // 30s
+    const hasMissionsRef = useRef(false);
+
+    const CACHE_NS = 'aw:cache:missions';
+    const CACHE_TTL_MS = 60_000;
+    const cacheKey = useMemo(() => `${CACHE_NS}:${user?.id || 'anon'}`, [user?.id]);
+
+    useEffect(() => {
+        hasMissionsRef.current = Array.isArray(missions) && missions.length > 0;
+    }, [missions]);
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(cacheKey);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (!parsed?.at || Date.now() - parsed.at > CACHE_TTL_MS) return;
+
+            if (Array.isArray(parsed?.data?.missions)) setMissions(parsed.data.missions);
+            if (Array.isArray(parsed?.data?.submissions)) setMissionSubmissions(parsed.data.submissions);
+            if (parsed?.data?.missionQuota) {
+                setMissionQuota(parsed.data.missionQuota);
+                setHasReachedDailyLimit(parsed.data.missionQuota.remaining === 0);
+            }
+            if (parsed?.data?.planBenefits) setPlanBenefits(parsed.data.planBenefits);
+        } catch {
+            // noop
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cacheKey]);
 
     const fetchData = useCallback(async (force = false) => {
         if (!user) return;
@@ -561,14 +590,17 @@ const Missions: React.FC = () => {
             return;
         }
         lastLoadRef.current = now;
-        setIsLoading(true);
+        const hasContent = hasMissionsRef.current;
+        if (!hasContent) setIsLoading(true);
+        else setIsRefreshing(true);
         setError(null);
         Perf.mark('missions_data_fetch');
         try {
             const data = await api.fetchMissions(user.id);
+            let nextPlanBenefits: any = null;
             try {
-                const b = await getMyPlanBenefits();
-                setPlanBenefits(b);
+                nextPlanBenefits = await getMyPlanBenefits();
+                setPlanBenefits(nextPlanBenefits);
             } catch {
                 setPlanBenefits(null);
             }
@@ -577,14 +609,28 @@ const Missions: React.FC = () => {
             setHasReachedDailyLimit(quota.remaining === 0);
             setMissions(data.missions);
             setMissionSubmissions(data.submissions);
+            try {
+                sessionStorage.setItem(cacheKey, JSON.stringify({
+                    at: Date.now(),
+                    data: {
+                        missions: data.missions,
+                        submissions: data.submissions,
+                        missionQuota: quota,
+                        planBenefits: nextPlanBenefits,
+                    },
+                }));
+            } catch {
+                // noop
+            }
         } catch (error) {
             console.error("Failed to fetch missions data:", error);
             setError("Não foi possível carregar as missões. Por favor, tente novamente mais tarde.");
         } finally {
             setIsLoading(false);
+            setIsRefreshing(false);
             Perf.end('missions_data_fetch');
         }
-    }, [user]);
+    }, [CACHE_TTL_MS, cacheKey, user]);
 
     useEffect(() => {
         fetchData(false);
@@ -617,7 +663,9 @@ const Missions: React.FC = () => {
         }
     }, [user, missions, dispatch, fetchData]);
 
-    if (isLoading || !user) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD86B]"></div></div>;
+    if (!user) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD86B]"></div></div>;
+    const hasContent = Array.isArray(missions) && missions.length > 0;
+    if (isLoading && !hasContent) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-[#FFD86B]"></div></div>;
     if (error) return <div className="flex flex-col items-center justify-center min-h-[60vh] bg-red-900/5 border border-red-500/20 rounded-xl p-8 text-center"><h3 className="text-2xl font-bold text-red-500 mb-2">Ocorreu um Erro</h3><p className="text-gray-400">{error}</p></div>;
 
     const getMissionStatus = (missionId: string) => {
@@ -640,7 +688,14 @@ const Missions: React.FC = () => {
     const coinsMultiplier = Number(planBenefits?.coins_multiplier ?? 1);
 
     return (
-        <div className="space-y-10 md:space-y-14 pb-12 animate-fade-in-up">
+        <div className="space-y-10 md:space-y-14 pb-12 animate-fade-in-up relative">
+            {isRefreshing && (
+                <div className="absolute inset-0 z-40 pointer-events-none">
+                    <div className="absolute top-4 right-4 text-xs text-gray-400 bg-black/40 border border-white/10 rounded-lg px-3 py-2">
+                        Atualizando…
+                    </div>
+                </div>
+            )}
             <div className="text-center max-w-3xl mx-auto mb-10 md:mb-16">
                 <h2 className="text-4xl md:text-5xl font-black text-[#FFD86B] font-chakra tracking-tight mb-4 text-shadow-glow">SUAS MISSÕES</h2>
                 <p className="text-base md:text-lg text-gray-400 max-w-xl mx-auto leading-relaxed">Complete tarefas para ganhar XP, subir de nível e acumular Coins para a loja.</p>

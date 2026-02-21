@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { RankingUser } from '../types';
 import { CrownIcon, SpotifyIcon, YoutubeIcon, MissionIcon, InstagramIcon, StarIcon, HistoryIcon as ClockIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
@@ -181,12 +181,17 @@ const Ranking: React.FC = () => {
     const { activeUser } = state;
     const [ranking, setRanking] = useState<RankingUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [timeFilter, setTimeFilter] = useState<'mensal' | 'geral'>('mensal');
     const [latestCycle, setLatestCycle] = useState<any | null>(null);
     const [currentOpenCycle, setCurrentOpenCycle] = useState<any | null>(null);
     const [lastClosedCycle, setLastClosedCycle] = useState<any | null>(null);
     const [latestWinners, setLatestWinners] = useState<any[]>([]);
+    const cacheKey = useMemo(
+        () => `aw:cache:ranking:${activeUser?.id || 'anon'}:${timeFilter}`,
+        [activeUser?.id, timeFilter]
+    );
     const formatDateRange = (start?: string, end?: string) => {
         if (!start || !end) return '';
         const fmt = (value: string) => new Date(value).toLocaleDateString('pt-BR');
@@ -210,9 +215,27 @@ const Ranking: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        if (!activeUser?.id) return;
+
+        try {
+            const raw = sessionStorage.getItem(cacheKey);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed?.at && Date.now() - parsed.at <= 60_000) {
+                    setRanking(Array.isArray(parsed?.data?.ranking) ? parsed.data.ranking : []);
+                    setLatestCycle(parsed?.data?.latestCycle || null);
+                    setLatestWinners(Array.isArray(parsed?.data?.latestWinners) ? parsed.data.latestWinners : []);
+                }
+            }
+        } catch {
+            // noop
+        }
+
         const fetchRanking = async () => {
             Perf.mark('ranking_fetch');
-            setIsLoading(true);
+            const hasContent = ranking.length > 0;
+            if (!hasContent) setIsLoading(true);
+            else setIsRefreshing(true);
             try {
                 // PATCH: Pass timeFilter to API to fetch correct ranking type (mensal vs geral)
                 const rankingDataRaw = await api.fetchRankingData(timeFilter);
@@ -225,27 +248,47 @@ const Ranking: React.FC = () => {
                     }));
                 }
                 setRanking(rankingData);
+
+                let nextLatestCycle: any | null = null;
+                let nextLatestWinners: any[] = [];
                 if (timeFilter === 'mensal') {
                     const hist = await (api as any).fetchLatestMonthlyWinnersHistory?.();
-                    setLatestCycle(hist?.cycle || null);
-                    setLatestWinners(Array.isArray(hist?.winners) ? hist.winners : []);
+                    nextLatestCycle = hist?.cycle || null;
+                    nextLatestWinners = Array.isArray(hist?.winners) ? hist.winners : [];
+                    setLatestCycle(nextLatestCycle);
+                    setLatestWinners(nextLatestWinners);
                 } else {
                     setLatestCycle(null);
                     setLatestWinners([]);
+                }
+
+                try {
+                    sessionStorage.setItem(cacheKey, JSON.stringify({
+                        at: Date.now(),
+                        data: {
+                            ranking: rankingData,
+                            latestCycle: nextLatestCycle,
+                            latestWinners: nextLatestWinners,
+                        },
+                    }));
+                } catch {
+                    // noop
                 }
             } catch (err) {
                 console.error("Failed to fetch ranking:", err);
                 setError("Não foi possível carregar o Hall of Fame.");
             } finally {
                 setIsLoading(false);
+                setIsRefreshing(false);
                 Perf.end('ranking_fetch');
                 Perf.end('ranking_mount'); // End initial mount measure on data load
             }
         };
         fetchRanking();
-    }, [activeUser, timeFilter]); 
+    }, [activeUser?.id, cacheKey, timeFilter]); 
 
-    if (isLoading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-[#FFD65A]"></div></div>;
+    const hasContent = ranking.length > 0;
+    if (isLoading && !hasContent) return <div className="flex items-center justify-center min-h-[60vh]"><div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-[#FFD65A]"></div></div>;
     if (error) return <div className="text-center text-red-500 p-10 font-bold bg-red-900/10 rounded-xl border border-red-500/30">{error}</div>;
 
     const rankOne = ranking.length > 0 ? ranking[0] : null;
@@ -253,6 +296,13 @@ const Ranking: React.FC = () => {
 
     return (
         <div className="pb-24 min-h-screen -mx-4 md:-mx-8 px-4 md:px-8 pt-0 relative overflow-x-hidden bg-[#050505]">
+            {isRefreshing && (
+                <div className="absolute inset-0 z-40 pointer-events-none">
+                    <div className="absolute top-4 right-4 text-xs text-gray-400 bg-black/40 border border-white/10 rounded-lg px-3 py-2">
+                        Atualizando…
+                    </div>
+                </div>
+            )}
             
             {/* HERO SECTION */}
             <div className="text-center max-w-5xl mx-auto pt-6 mb-8 relative animate-fade-in-up">
