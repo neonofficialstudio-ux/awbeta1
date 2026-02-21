@@ -60,6 +60,20 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [isLoading, setIsLoading] = useState(true);
     const [adminData, setAdminData] = useState<any>(null);
 
+    // Normalize helper: AdminEngine.getDashboardData() may return:
+    // (A) data object directly OR (B) an envelope { success, data, error } depending on provider/legacy paths.
+    const unwrapDashboard = (res: any) => {
+        if (!res) return null;
+
+        // envelope shape
+        if (typeof res === 'object' && 'success' in res && 'data' in res) {
+            return res.success ? (res.data || null) : null;
+        }
+
+        // data-only shape
+        return res;
+    };
+
     const initialSettingsSubTab = adminSettingsInitialSubTab?.startsWith('notifications:')
         ? 'notifications'
         : adminSettingsInitialSubTab;
@@ -75,51 +89,21 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
 
         try {
-            const res: any = await Promise.resolve(AdminEngine.getDashboardData());
+            const res = await Promise.resolve(AdminEngine.getDashboardData());
+            const data = unwrapDashboard(res);
 
-            // 1) Se vier undefined/null: não deixa adminData nulo (evita spinner infinito)
-            if (!res) {
-                console.warn('[AdminPanel] refresh returned undefined/null (fallback to empty)');
-                setAdminData((prev: any) => ({
-                    ...emptyAdminDashboard,
-                    ...(prev || {}),
-                }));
+            if (!data) {
+                console.warn('[AdminPanel] refresh returned undefined (ignored)');
                 return;
             }
 
-            // 2) Caso padrão: retorno wrapper { success, data, error }
-            if (typeof res === 'object' && 'success' in res) {
-                if (res.success) {
-                    const data = res.data || {};
-                    setAdminData((prev: any) => ({
-                        ...emptyAdminDashboard,
-                        ...(prev || {}),
-                        ...data,
-                    }));
-                } else {
-                    console.warn('[AdminPanel] refresh failed:', res?.error);
-                    // mantém UI estável com fallback (sem voltar adminData pra null)
-                    setAdminData((prev: any) => ({
-                        ...emptyAdminDashboard,
-                        ...(prev || {}),
-                    }));
-                }
-                return;
-            }
-
-            // 3) Caso alternativo: retorno “cru” (ex: emptyAdminDashboard direto)
             setAdminData((prev: any) => ({
                 ...emptyAdminDashboard,
                 ...(prev || {}),
-                ...(res || {}),
+                ...(data || {}),
             }));
         } catch (error) {
             console.warn('[AdminPanel] refresh threw:', error);
-            // fallback seguro: não derruba tela
-            setAdminData((prev: any) => ({
-                ...emptyAdminDashboard,
-                ...(prev || {}),
-            }));
         } finally {
             setIsLoading(false);
         }
@@ -180,35 +164,31 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         );
     }
 
-    // Safe destructuring with defaults
-    const { 
-        missionSubmissions = [], 
-        coinPurchaseRequests = [], 
-        subscriptionRequests = [], 
-        usableItemQueue = [], 
-        artistOfTheDayQueue = [] 
-    } = adminData;
+    // Safe destructuring + hard normalization (prevents ".filter is not a function" crashes)
+    const missionSubmissions = Array.isArray(adminData?.missionSubmissions) ? adminData.missionSubmissions : [];
+    const coinPurchaseRequests = Array.isArray(adminData?.coinPurchaseRequests) ? adminData.coinPurchaseRequests : [];
+    const subscriptionRequests = Array.isArray(adminData?.subscriptionRequests) ? adminData.subscriptionRequests : [];
+    const usableItemQueue = Array.isArray(adminData?.usableItemQueue) ? adminData.usableItemQueue : [];
+    const artistOfTheDayQueue = Array.isArray(adminData?.artistOfTheDayQueue) ? adminData.artistOfTheDayQueue : [];
     
-    // Notification Counts
+    // Notification Counts (memoized + safe)
     const pendingSubmissionsCount = useMemo(() => {
-        return (missionSubmissions || []).reduce((acc: number, s: MissionSubmission) => acc + (s?.status === 'pending' ? 1 : 0), 0);
+        return missionSubmissions.filter((s: MissionSubmission) => s?.status === 'pending').length;
     }, [missionSubmissions]);
 
     const pendingCoinPurchases = useMemo(() => {
-        return (coinPurchaseRequests || []).reduce((acc: number, req: CoinPurchaseRequest) => {
-            const st = (req as any)?.status;
-            return acc + ((st === 'pending_approval' || st === 'pending_link_generation') ? 1 : 0);
-        }, 0);
+        return coinPurchaseRequests.filter((req: CoinPurchaseRequest) =>
+            req?.status === 'pending_approval' || req?.status === 'pending_link_generation'
+        ).length;
     }, [coinPurchaseRequests]);
 
     const pendingRequestsCount = useMemo(() => {
-        const normalized = Array.isArray(subscriptionRequests) ? subscriptionRequests : [];
-        return normalized.reduce((acc: number, r: any) => acc + (r?.status === 'pending_approval' ? 1 : 0), 0);
+        return subscriptionRequests.filter((r: any) => r?.status === 'pending_approval').length;
     }, [subscriptionRequests]);
 
     const totalPendingQueues = useMemo(() => {
-        return (usableItemQueue?.length || 0) + (artistOfTheDayQueue?.length || 0);
-    }, [usableItemQueue, artistOfTheDayQueue]);
+        return usableItemQueue.length + artistOfTheDayQueue.length;
+    }, [usableItemQueue.length, artistOfTheDayQueue.length]);
     const handleTabChange = (id: string) => {
       dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: id as AdminTab } });
     };
