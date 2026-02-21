@@ -78,9 +78,37 @@ export const MainLayout: React.FC = () => {
     const [currentAdminNotification, setCurrentAdminNotification] = useState<any | null>(null);
     const [unseenAchievementId, setUnseenAchievementId] = useState<string | null>(null);
 
+    const getAdminScrollSubKey = () => {
+        // Usa apenas o subtab relevante para a aba ativa do Admin.
+        // Isso evita que o scrollKey mude quando subtabs de outras seções mudam.
+        switch (adminActiveTab) {
+            case 'missions':
+                return adminMissionsInitialSubTab || '';
+            case 'store':
+                return adminStoreInitialSubTab || '';
+            case 'queues':
+                return adminQueuesInitialSubTab || '';
+            case 'settings':
+                return adminSettingsInitialSubTab || '';
+            case 'economy_console':
+                // Se você tiver adminEconomyInitialSubTab no estado global,
+                // pode trocar aqui para ele. Se não tiver, deixa vazio.
+                return '';
+            case 'subscriptions':
+                // Se existir adminSubscriptionsInitialSubTab no estado global, use.
+                // Por enquanto, vazio para manter chave estável.
+                return '';
+            case 'users':
+                // Se existir adminUsersInitialSubTab no estado global, use.
+                return '';
+            default:
+                return '';
+        }
+    };
+
     const scrollKey =
         currentView === 'admin'
-            ? `admin:${adminActiveTab}:${adminMissionsInitialSubTab || ''}:${adminStoreInitialSubTab || ''}:${adminQueuesInitialSubTab || ''}:${adminSettingsInitialSubTab || ''}`
+            ? `admin:${adminActiveTab}:${getAdminScrollSubKey()}`
             : `view:${currentView}`;
 
     useScrollRestoration({
