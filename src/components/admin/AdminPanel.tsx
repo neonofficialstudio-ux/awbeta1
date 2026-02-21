@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
 import { useAppContext } from '../../constants';
@@ -190,15 +190,25 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     } = adminData;
     
     // Notification Counts
-    const pendingSubmissionsCount = missionSubmissions.filter((s: MissionSubmission) => s.status === 'pending').length;
-    const pendingCoinPurchases = coinPurchaseRequests.filter((req: CoinPurchaseRequest) => req.status === 'pending_approval' || req.status === 'pending_link_generation').length;
-    
-    // Normalize requests list and filter for pending count (Also used for passing to ManageSubscriptions)
-    const normalizedRequests = Array.isArray(subscriptionRequests) ? subscriptionRequests : [];
-    const pendingRequests = normalizedRequests.filter((r: any) => r.status === 'pending_approval');
-    const pendingRequestsCount = pendingRequests.length;
+    const pendingSubmissionsCount = useMemo(() => {
+        return (missionSubmissions || []).reduce((acc: number, s: MissionSubmission) => acc + (s?.status === 'pending' ? 1 : 0), 0);
+    }, [missionSubmissions]);
 
-    const totalPendingQueues = usableItemQueue.length + artistOfTheDayQueue.length;
+    const pendingCoinPurchases = useMemo(() => {
+        return (coinPurchaseRequests || []).reduce((acc: number, req: CoinPurchaseRequest) => {
+            const st = (req as any)?.status;
+            return acc + ((st === 'pending_approval' || st === 'pending_link_generation') ? 1 : 0);
+        }, 0);
+    }, [coinPurchaseRequests]);
+
+    const pendingRequestsCount = useMemo(() => {
+        const normalized = Array.isArray(subscriptionRequests) ? subscriptionRequests : [];
+        return normalized.reduce((acc: number, r: any) => acc + (r?.status === 'pending_approval' ? 1 : 0), 0);
+    }, [subscriptionRequests]);
+
+    const totalPendingQueues = useMemo(() => {
+        return (usableItemQueue?.length || 0) + (artistOfTheDayQueue?.length || 0);
+    }, [usableItemQueue, artistOfTheDayQueue]);
     const handleTabChange = (id: string) => {
       dispatch({ type: 'SET_ADMIN_TAB', payload: { tab: id as AdminTab } });
     };

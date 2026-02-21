@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getPerformanceLogs, clearPerformanceLogs, type PerformanceLogEntry } from '../../api/logs/performance';
 import { SearchIcon, FilterIcon, DeleteIcon } from '../../constants';
 
@@ -27,6 +27,7 @@ const PerformanceLogs: React.FC = () => {
     const [logs, setLogs] = useState<PerformanceLogEntry[]>([]);
     const [filterType, setFilterType] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [autoRefresh, setAutoRefresh] = useState(true);
 
     const refreshLogs = () => {
@@ -34,15 +35,50 @@ const PerformanceLogs: React.FC = () => {
     };
 
     useEffect(() => {
-        refreshLogs();
-        let interval: number | undefined;
-        
-        if (autoRefresh) {
-             interval = window.setInterval(refreshLogs, 2000);
+        const t = setTimeout(() => setDebouncedSearch(searchTerm || ''), 200);
+        return () => clearTimeout(t);
+    }, [searchTerm]);
+
+    const intervalRef = useRef<number | null>(null);
+    const POLL_MS = 8000;
+
+    const stop = () => {
+        if (intervalRef.current) {
+            window.clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    };
+
+    const start = () => {
+        stop();
+        intervalRef.current = window.setInterval(() => {
+            if (document.visibilityState !== 'visible') return;
+            refreshLogs();
+        }, POLL_MS);
+    };
+
+    useEffect(() => {
+        if (!autoRefresh) {
+            stop();
+            return;
         }
 
+        if (document.visibilityState === 'visible') refreshLogs();
+        start();
+
+        const onVis = () => {
+            if (document.visibilityState === 'visible') {
+                refreshLogs();
+                start();
+            } else {
+                stop();
+            }
+        };
+
+        document.addEventListener('visibilitychange', onVis);
         return () => {
-            if (interval) clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVis);
+            stop();
         };
     }, [autoRefresh]);
 
@@ -53,13 +89,14 @@ const PerformanceLogs: React.FC = () => {
         }
     };
 
-    const filteredLogs = logs.filter(log => {
+    const filteredLogs = useMemo(() => logs.filter(log => {
         const matchesType = filterType === 'all' || log.type === filterType;
-        const matchesSearch = !searchTerm || 
-            log.source.toLowerCase().includes(searchTerm.toLowerCase()) || 
-            JSON.stringify(log.details).toLowerCase().includes(searchTerm.toLowerCase());
+        const term = debouncedSearch.toLowerCase();
+        const matchesSearch = !term ||
+            log.source.toLowerCase().includes(term) ||
+            JSON.stringify(log.details).toLowerCase().includes(term);
         return matchesType && matchesSearch;
-    });
+    }), [logs, filterType, debouncedSearch]);
 
     return (
         <div className="animate-fade-in-up space-y-6">
