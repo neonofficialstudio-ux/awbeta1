@@ -4,7 +4,6 @@ import type { Mission, StoreItem, UsableItem, User, MissionSubmission, Submissio
 import * as api from '../../api/index'; 
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
-import type { AdminDashboardMode } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
 import { emptyAdminDashboard } from '../../api/supabase/supabase.repositories.admin';
 
@@ -59,9 +58,22 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, adminUsersInitialSubTab, adminSubscriptionsInitialSubTab, adminEconomyInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
-    // Never null => avoids full-tree swap that can trigger scroll/paint jank
+    // Nunca null: evita return condicional antes de hooks (React error #310)
     const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
-    const [loadedMode, setLoadedMode] = useState<AdminDashboardMode>('light');
+
+    // Normalize helper: AdminEngine.getDashboardData() may return:
+    // (A) data object directly OR (B) an envelope { success, data, error } depending on provider/legacy paths.
+    const unwrapDashboard = (res: any) => {
+        if (!res) return null;
+
+        // envelope shape
+        if (typeof res === 'object' && 'success' in res && 'data' in res) {
+            return res.success ? (res.data || null) : null;
+        }
+
+        // data-only shape
+        return res;
+    };
 
     const initialSettingsSubTab = adminSettingsInitialSubTab?.startsWith('notifications:')
         ? 'notifications'
@@ -74,17 +86,23 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(initialSettingsSubTab || 'telemetry_pro');
     const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>(adminEconomyInitialSubTab || 'console');
 
-    const refreshAdminData = useCallback(async (mode: AdminDashboardMode = 'full') => {
+    const refreshAdminData = useCallback(async () => {
         setIsLoading(true);
 
         try {
-            const data = await Promise.resolve(AdminEngine.getDashboardData(mode));
+            const res = await Promise.resolve(AdminEngine.getDashboardData());
+            const data = unwrapDashboard(res);
+
+            if (!data) {
+                console.warn('[AdminPanel] refresh returned undefined (ignored)');
+                return;
+            }
+
             setAdminData((prev: any) => ({
                 ...emptyAdminDashboard,
                 ...(prev || {}),
                 ...(data || {}),
             }));
-            setLoadedMode(mode);
         } catch (error) {
             console.warn('[AdminPanel] refresh threw:', error);
         } finally {
@@ -93,18 +111,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     }, []);
 
     useEffect(() => {
-        // Initial load: light mode for fast first paint
-        refreshAdminData('light');
+        // Initial load only
+        refreshAdminData();
     }, [refreshAdminData]);
-
-    // Upgrade to full only when user navigates to heavy tabs
-    useEffect(() => {
-        const heavyTabs: AdminTab[] = ['economy_console', 'missions', 'users', 'store', 'queues', 'raffles', 'subscriptions', 'settings', 'behavior', 'insights', 'economics'];
-        if (!heavyTabs.includes(activeTab)) return;
-        if (loadedMode === 'full') return;
-        // fire-and-forget upgrade; keep UI stable (no early-return)
-        void refreshAdminData('full');
-    }, [activeTab, loadedMode, refreshAdminData]);
 
     // Updated to handle sync/async returns
     const handleAdminAction = async (actionResult: any | Promise<any>) => {
