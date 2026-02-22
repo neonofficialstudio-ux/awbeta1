@@ -12,7 +12,6 @@ import { DataConsistency } from './services/data.consistency';
 import { detectDOMTampering } from "./api/anticheat/domTamper";
 import { createHoneypots } from "./api/anticheat/honeypots";
 import { getDeviceFingerprint } from "./api/anticheat/deviceFingerprint";
-import { LegacyUserNormalizer } from './api/migration/legacyUserNormalizer';
 import { fastDeepEqual } from './api/utils/equality';
 import { logger } from './core/logger';
 import { config } from './core/config';
@@ -37,15 +36,6 @@ const AppContent: React.FC = () => {
                 }, 1000);
             }
 
-            // System Integrity Checks
-            if (config.backendProvider === 'mock') {
-                setTimeout(async () => {
-                    const { runMockIntegrityScan } = await import('./api/diagnostics/mockIntegrity');
-                    const report = runMockIntegrityScan();
-                    logger.info("Startup Integrity Scan", report.summary);
-                    LegacyUserNormalizer.run();
-                }, 500);
-            }
         }
     }, []);
 
