@@ -5,7 +5,6 @@ import { mapInventoryToRedeemedItem, mapMissionToApp, mapProfileToUser, mapStore
 import { missionsAdminRepository } from './repositories/admin/missions';
 import { MISSION_SUBMISSION_LIGHT_SELECT } from './selects';
 import type { CoinTransaction, Mission, MissionSubmission, SubmissionStatus, User } from '../../types';
-import type { AdminDashboardMode } from '../admin/AdminEngine';
 
 type AdvertisementRow = {
   id: string;
@@ -169,7 +168,7 @@ export const emptyAdminDashboard = {
 };
 
 export const supabaseAdminRepository = {
-  async fetchAdminDashboard(mode: AdminDashboardMode = 'full') {
+  async fetchAdminDashboard() {
     const supabase = await ensureAdminClient();
     if (!supabase) {
       return { success: false as const, data: emptyAdminDashboard, error: 'Supabase provider not enabled' };
@@ -177,16 +176,6 @@ export const supabaseAdminRepository = {
 
     try {
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-      // Light mode: fetch only what is needed for fast first paint + badges.
-      const isLight = mode === 'light';
-
-      // For light mode, we hard-limit potentially huge tables.
-      // (Full mode remains compatible with current behavior.)
-      const LIGHT_PROFILES_LIMIT = 250;
-      const LIGHT_MISSIONS_LIMIT = 120;
-      const LIGHT_STORE_ITEMS_LIMIT = 120;
-      const LIGHT_COIN_PACKS_LIMIT = 50;
 
       const [
         profilesRes,
@@ -202,22 +191,8 @@ export const supabaseAdminRepository = {
         statsRes,
         adsRes,
       ] = await Promise.all([
-        // profiles (light projection)
-        isLight
-          ? supabase
-              .from('profiles')
-              .select('id, display_name, name, artistic_name, avatar_url, level, coins, role, plan')
-              .order('created_at', { ascending: false })
-              .limit(LIGHT_PROFILES_LIMIT)
-          : supabase.from('profiles').select('id, display_name, name, artistic_name, avatar_url, level, coins, role, plan'),
-        // missions (avoid * in light; keep * in full to preserve current behavior)
-        isLight
-          ? supabase
-              .from('missions')
-              .select('id, title, type, status, is_active, active, scheduled_for, created_at')
-              .order('created_at', { ascending: false })
-              .limit(LIGHT_MISSIONS_LIMIT)
-          : supabase.from('missions').select('*'),
+        supabase.from('profiles').select('id, display_name, avatar_url, level, coins'),
+        supabase.from('missions').select('*'),
         supabase
           .from('mission_submissions')
           .select(`
@@ -227,30 +202,13 @@ export const supabaseAdminRepository = {
           `)
           .order('created_at', { ascending: false })
           .limit(50),
-        // ledger: skip in light (economy tabs will trigger full)
-        isLight
-          ? Promise.resolve({ data: [], error: null } as any)
-          : supabase
-              .from('economy_ledger')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .limit(100),
-        // store items / coin packs: optional for light; keep minimal list for faster Admin navigation
-        isLight
-          ? supabase
-              .from('store_items')
-              .select('id, name, type, price_coins, is_active, created_at')
-              .order('created_at', { ascending: false })
-              .limit(LIGHT_STORE_ITEMS_LIMIT)
-          : supabase.from('store_items').select('*'),
-        isLight
-          ? supabase
-              .from('coin_packs')
-              .select('id, title, coins, price_brl, sort_order, created_at, is_active')
-              .order('sort_order', { ascending: true })
-              .order('created_at', { ascending: false })
-              .limit(LIGHT_COIN_PACKS_LIMIT)
-          : supabase.from('coin_packs').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
+        supabase
+          .from('economy_ledger')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase.from('store_items').select('*'),
+        supabase.from('coin_packs').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
         supabase
           .from('coin_purchase_requests')
           // NOTE: coin_purchase_requests.user_id references auth.users, not profiles.
