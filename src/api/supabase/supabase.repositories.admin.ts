@@ -37,6 +37,26 @@ const mapAdRowToApp = (row: AdvertisementRow) => ({
 
 export type AdminMissionFilter = 'active' | 'expired' | 'all';
 
+const PROFILE_ADMIN_SELECT =
+  'id, name, display_name, artistic_name, avatar_url, plan, coins, xp, level, created_at, updated_at';
+
+const MISSION_ADMIN_SELECT =
+  'id, scope, title, description, xp_reward, coins_reward, action_url, deadline, is_active, active, format, meta, created_at, updated_at';
+
+const STORE_ITEM_ADMIN_SELECT =
+  'id, name, description, price_coins, item_type, rarity, image_url, is_active, meta, created_at';
+
+const COIN_PACK_ADMIN_SELECT =
+  'id, title, description, coins, bonus_coins, price_cents, currency, is_active, in_stock, sort_order, meta, created_at, updated_at';
+
+const derivePriceBRLFromPack = (pack: any) => {
+  const cents = Number(pack?.price_cents);
+  const currency = String(pack?.currency || '').toUpperCase();
+
+  if (Number.isFinite(cents) && cents >= 0 && currency === 'BRL') return cents / 100;
+  return null;
+};
+
 const ensureAdminClient = async () => {
   if (config.backendProvider !== 'supabase') return null;
   if (!supabaseClient) throw new Error('[SupabaseAdminRepo] Supabase client not initialized');
@@ -206,18 +226,18 @@ export const supabaseAdminRepository = {
         isLight
           ? supabase
               .from('profiles')
-              .select('id, display_name, name, artistic_name, avatar_url, level, coins, role, plan')
+              .select(PROFILE_ADMIN_SELECT)
               .order('created_at', { ascending: false })
               .limit(LIGHT_PROFILES_LIMIT)
-          : supabase.from('profiles').select('id, display_name, name, artistic_name, avatar_url, level, coins, role, plan'),
+          : supabase.from('profiles').select(PROFILE_ADMIN_SELECT),
         // missions (avoid * in light; keep * in full to preserve current behavior)
         isLight
           ? supabase
               .from('missions')
-              .select('id, title, type, status, is_active, active, scheduled_for, created_at')
+              .select(MISSION_ADMIN_SELECT)
               .order('created_at', { ascending: false })
               .limit(LIGHT_MISSIONS_LIMIT)
-          : supabase.from('missions').select('*'),
+          : supabase.from('missions').select(MISSION_ADMIN_SELECT),
         supabase
           .from('mission_submissions')
           .select(`
@@ -239,18 +259,18 @@ export const supabaseAdminRepository = {
         isLight
           ? supabase
               .from('store_items')
-              .select('id, name, type, price_coins, is_active, created_at')
+              .select(STORE_ITEM_ADMIN_SELECT)
               .order('created_at', { ascending: false })
               .limit(LIGHT_STORE_ITEMS_LIMIT)
-          : supabase.from('store_items').select('*'),
+          : supabase.from('store_items').select(STORE_ITEM_ADMIN_SELECT),
         isLight
           ? supabase
               .from('coin_packs')
-              .select('id, title, coins, price_brl, sort_order, created_at, is_active')
+              .select(COIN_PACK_ADMIN_SELECT)
               .order('sort_order', { ascending: true })
               .order('created_at', { ascending: false })
               .limit(LIGHT_COIN_PACKS_LIMIT)
-          : supabase.from('coin_packs').select('*').order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
+          : supabase.from('coin_packs').select(COIN_PACK_ADMIN_SELECT).order('sort_order', { ascending: true }).order('created_at', { ascending: false }),
         supabase
           .from('coin_purchase_requests')
           // NOTE: coin_purchase_requests.user_id references auth.users, not profiles.
@@ -299,10 +319,16 @@ export const supabaseAdminRepository = {
         const name = p?.display_name || p?.name || '';
         if (p?.id && name) profileNameById.set(p.id, name);
       });
-      const missions = (missionsRes.data || []).map((m: any) => mapMissionToApp(m));
+      const missions = (missionsRes.data || []).map((m: any) => mapMissionToApp({
+        ...m,
+        type: m?.type ?? m?.format ?? null,
+      }));
       const missionSubmissions = (submissionsRes.data || []).map((s: any) => mapSubmission(s));
       const allTransactions = (ledgerRes.data || []).map((l: any) => mapLedgerToTransaction(l));
-      const rawStore = storeItemsRes.data || [];
+      const rawStore = (storeItemsRes.data || []).map((item: any) => ({
+        ...item,
+        type: item?.type ?? item?.item_type ?? null,
+      }));
 
       const storeItems = rawStore
         .filter((i: any) => (i.item_type ?? 'visual') !== 'usable')
@@ -326,6 +352,7 @@ export const supabaseAdminRepository = {
         name: p.title ?? 'Pacote',
         coins: Number(p.coins ?? 0) + Number(p.bonus_coins ?? 0),
         price: Number(p.price_cents ?? 0) / 100,
+        price_brl: derivePriceBRLFromPack(p),
         paymentLink: String(p?.meta?.paymentLink ?? ''),
         isOutOfStock: !(p.in_stock === true),
         imageUrl: p?.meta?.imageUrl ?? '',
