@@ -58,7 +58,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const { activeTab, adminMissionsInitialSubTab, adminStoreInitialSubTab, adminSettingsInitialSubTab, adminUsersInitialSubTab, adminSubscriptionsInitialSubTab, adminEconomyInitialSubTab, onViewUserHistory } = props;
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
-    const [adminData, setAdminData] = useState<any>(null);
+    // Nunca null: evita return condicional antes de hooks (React error #310)
+    const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
 
     // Normalize helper: AdminEngine.getDashboardData() may return:
     // (A) data object directly OR (B) an envelope { success, data, error } depending on provider/legacy paths.
@@ -156,20 +157,28 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     
     const onUnbanUser = (userId: string) => handleAdminAction(api.unbanUser(userId));
 
-    if (!adminData) {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-gold-cinematic shadow-[0_0_20px_rgba(246,197,96,0.5)]"></div>
-            </div>
-        );
-    }
-
     // Safe destructuring + hard normalization (prevents ".filter is not a function" crashes)
-    const missionSubmissions = Array.isArray(adminData?.missionSubmissions) ? adminData.missionSubmissions : [];
-    const coinPurchaseRequests = Array.isArray(adminData?.coinPurchaseRequests) ? adminData.coinPurchaseRequests : [];
-    const subscriptionRequests = Array.isArray(adminData?.subscriptionRequests) ? adminData.subscriptionRequests : [];
-    const usableItemQueue = Array.isArray(adminData?.usableItemQueue) ? adminData.usableItemQueue : [];
-    const artistOfTheDayQueue = Array.isArray(adminData?.artistOfTheDayQueue) ? adminData.artistOfTheDayQueue : [];
+    // Hooks abaixo agora sempre rodam (adminData nunca é null)
+    const missionSubmissions = useMemo(
+        () => (Array.isArray(adminData?.missionSubmissions) ? adminData.missionSubmissions : []),
+        [adminData?.missionSubmissions]
+    );
+    const coinPurchaseRequests = useMemo(
+        () => (Array.isArray(adminData?.coinPurchaseRequests) ? adminData.coinPurchaseRequests : []),
+        [adminData?.coinPurchaseRequests]
+    );
+    const subscriptionRequests = useMemo(
+        () => (Array.isArray(adminData?.subscriptionRequests) ? adminData.subscriptionRequests : []),
+        [adminData?.subscriptionRequests]
+    );
+    const usableItemQueue = useMemo(
+        () => (Array.isArray(adminData?.usableItemQueue) ? adminData.usableItemQueue : []),
+        [adminData?.usableItemQueue]
+    );
+    const artistOfTheDayQueue = useMemo(
+        () => (Array.isArray(adminData?.artistOfTheDayQueue) ? adminData.artistOfTheDayQueue : []),
+        [adminData?.artistOfTheDayQueue]
+    );
     
     // Notification Counts (memoized + safe)
     const pendingSubmissionsCount = useMemo(() => {
@@ -184,6 +193,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const pendingRequestsCount = useMemo(() => {
         return subscriptionRequests.filter((r: any) => r?.status === 'pending_approval').length;
+    }, [subscriptionRequests]);
+
+    const pendingRequests = useMemo(() => {
+        return subscriptionRequests.filter((r: any) => r?.status === 'pending_approval');
     }, [subscriptionRequests]);
 
     const totalPendingQueues = useMemo(() => {
@@ -419,6 +432,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 className="pb-20 bg-navy-deep/30"
             >
                 <Container fluid className="px-0 sm:px-4 lg:px-8">
+                    {isLoading && (
+                        <div className="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center">
+                            <div className="w-12 h-12 border-4 border-dashed rounded-full animate-spin border-gold-cinematic shadow-[0_0_20px_rgba(246,197,96,0.35)]"></div>
+                        </div>
+                    )}
                     <div className="mb-8 sticky top-0 bg-navy-deep/95 backdrop-blur-md z-30 py-3 -mx-4 px-4 md:mx-0 md:px-0 border-b border-neon-cyan/20 shadow-lg">
                         <Tabs 
                             items={mainTabs} 
