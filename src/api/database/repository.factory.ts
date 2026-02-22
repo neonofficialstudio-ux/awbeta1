@@ -1,6 +1,4 @@
 
-import { config } from "../../core/config";
-import { mockDB } from "./mock-db";
 import { supabaseRepository } from "../supabase/supabase.repositories";
 import { supabaseClient } from "../supabase/client"; // Check if client exists
 
@@ -23,16 +21,9 @@ export interface Repository {
 }
 
 export function getRepository(): Repository {
-  if (config.backendProvider === 'supabase') {
-      if (!supabaseClient) {
-          throw new Error("[Repository] Supabase provider selected but client is not initialized. Check environment variables.");
-      }
-      return supabaseRepository as Repository;
+  if (!supabaseClient) {
+      throw new Error("[Repository] Supabase client is not initialized. Check environment variables.");
   }
 
-  if (config.backendProvider === 'mock') {
-      return mockDB as Repository;
-  }
-
-  throw new Error(`[Repository] Unknown backend provider: ${config.backendProvider}`);
+  return supabaseRepository as Repository;
 }
