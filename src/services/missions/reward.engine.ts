@@ -5,7 +5,7 @@ import { CurrencySyncEngine } from "../economy/sync.engine";
 import { createNotification } from "../../api/helpers";
 import { RankingEngine } from "../ranking/ranking.engine";
 import type { Mission, User } from "../../types";
-import { EventSessionEngine } from "../../api/events/session";
+import { EventSessionEngine } from "../events/eventSession.engine";
 
 const repo = getRepository();
 

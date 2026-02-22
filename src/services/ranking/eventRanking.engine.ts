@@ -1,7 +1,7 @@
 
 import { getRepository } from "../../api/database/repository.factory";
 import type { User, Participation, EventRankingEntry } from "../../types";
-import { EventSessionEngine } from "../../api/events/session";
+import { EventSessionEngine } from "../events/eventSession.engine";
 
 const repo = getRepository();
 
