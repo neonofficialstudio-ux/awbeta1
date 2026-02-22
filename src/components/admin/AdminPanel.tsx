@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
 import { useAppContext } from '../../constants';
@@ -62,6 +62,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     // Never null => avoids full-tree swap that can trigger scroll/paint jank
     const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
     const [loadedMode, setLoadedMode] = useState<AdminDashboardMode>('light');
+    const didInitialLoadRef = useRef(false);
+    const lastFetchAtRef = useRef<number>(0);
+    const inFlightRef = useRef<Promise<void> | null>(null);
+    const lastRequestedModeRef = useRef<AdminDashboardMode>('light');
 
     const initialSettingsSubTab = adminSettingsInitialSubTab?.startsWith('notifications:')
         ? 'notifications'
@@ -74,37 +78,83 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [activeSettingsSubTab, setActiveSettingsSubTab] = useState(initialSettingsSubTab || 'telemetry_pro');
     const [activeEconomySubTab, setActiveEconomySubTab] = useState<'console' | 'pro'>(adminEconomyInitialSubTab || 'console');
 
-    const refreshAdminData = useCallback(async (mode: AdminDashboardMode = 'full') => {
-        setIsLoading(true);
+    const refreshAdminData = useCallback(async (mode: AdminDashboardMode = 'full', opts?: { force?: boolean }) => {
+        const force = !!opts?.force;
+        lastRequestedModeRef.current = mode;
+
+        void force;
+
+        // Dedupe local (além do dedupe do engine)
+        if (inFlightRef.current) {
+            await inFlightRef.current;
+            return;
+        }
+
+        const run = (async () => {
+            try {
+                setIsLoading(true);
+
+                const data = await Promise.resolve(AdminEngine.getDashboardData(mode));
+                setAdminData(data);
+                setLoadedMode(mode);
+                lastFetchAtRef.current = Date.now();
+            } finally {
+                setIsLoading(false);
+            }
+        })();
+
+        inFlightRef.current = run;
 
         try {
-            const data = await Promise.resolve(AdminEngine.getDashboardData(mode));
-            setAdminData((prev: any) => ({
-                ...emptyAdminDashboard,
-                ...(prev || {}),
-                ...(data || {}),
-            }));
-            setLoadedMode(mode);
-        } catch (error) {
-            console.warn('[AdminPanel] refresh threw:', error);
+            await run;
         } finally {
-            setIsLoading(false);
+            inFlightRef.current = null;
         }
-    }, []);
+    }, [setIsLoading, setAdminData, setLoadedMode]);
 
     useEffect(() => {
-        // Initial load: light mode for fast first paint
-        refreshAdminData('light');
+        if (didInitialLoadRef.current) return;
+        didInitialLoadRef.current = true;
+        refreshAdminData('light', { force: true });
     }, [refreshAdminData]);
 
     // Upgrade to full only when user navigates to heavy tabs
     useEffect(() => {
         const heavyTabs: AdminTab[] = ['economy_console', 'missions', 'users', 'store', 'queues', 'raffles', 'subscriptions', 'settings', 'behavior', 'insights', 'economics'];
-        if (!heavyTabs.includes(activeTab)) return;
         if (loadedMode === 'full') return;
-        // fire-and-forget upgrade; keep UI stable (no early-return)
-        void refreshAdminData('full');
+        if (!heavyTabs.includes(activeTab)) return;
+        if (inFlightRef.current) return;
+
+        refreshAdminData('full');
     }, [activeTab, loadedMode, refreshAdminData]);
+
+    useEffect(() => {
+        const STALE_MS = 30_000; // alinhado com TTL do AdminEngine
+
+        const maybeRefreshOnReturn = () => {
+            // só quando visível
+            if (document.visibilityState !== 'visible') return;
+
+            // se nunca carregou ainda, não inventa nada
+            if (!lastFetchAtRef.current) return;
+
+            // se ainda está fresco, não refaz
+            const age = Date.now() - lastFetchAtRef.current;
+            if (age < STALE_MS) return;
+
+            // se já está full, mantém; se está light, mantém light (evita rajada desnecessária)
+            const targetMode = loadedMode === 'full' ? 'full' : 'light';
+            refreshAdminData(targetMode);
+        };
+
+        document.addEventListener('visibilitychange', maybeRefreshOnReturn);
+        window.addEventListener('focus', maybeRefreshOnReturn);
+
+        return () => {
+            document.removeEventListener('visibilitychange', maybeRefreshOnReturn);
+            window.removeEventListener('focus', maybeRefreshOnReturn);
+        };
+    }, [loadedMode, refreshAdminData]);
 
     // Updated to handle sync/async returns
     const handleAdminAction = async (actionResult: any | Promise<any>) => {
