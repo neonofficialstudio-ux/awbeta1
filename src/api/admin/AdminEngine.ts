@@ -58,18 +58,37 @@ const normalizeMissionScope = (value: any): 'weekly' | 'event' => {
 const repo = getRepository();
 const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
 
+export type AdminDashboardMode = 'light' | 'full';
+
 // Cache in-memory para evitar burst de requests quando AdminPanel remonta
-let adminDashboardCache: any | null = null;
-let adminDashboardCacheAt = 0;
-let adminDashboardInFlight: Promise<any> | null = null;
+type CacheEntry = {
+    at: number;
+    data: any;
+};
+
+const cacheByMode: Record<AdminDashboardMode, CacheEntry | null> = {
+    light: null,
+    full: null,
+};
+
+const inFlightByMode: Record<AdminDashboardMode, Promise<any> | null> = {
+    light: null,
+    full: null,
+};
 
 // Ajuste fino: 30s já elimina o “voltei pra pegar link e recarregou tudo”
 const ADMIN_DASHBOARD_TTL_MS = 30_000;
 
-export const invalidateAdminDashboardCache = () => {
-    adminDashboardCache = null;
-    adminDashboardCacheAt = 0;
-    adminDashboardInFlight = null;
+export const invalidateAdminDashboardCache = (mode?: AdminDashboardMode) => {
+    if (mode) {
+        cacheByMode[mode] = null;
+        inFlightByMode[mode] = null;
+        return;
+    }
+    cacheByMode.light = null;
+    cacheByMode.full = null;
+    inFlightByMode.light = null;
+    inFlightByMode.full = null;
 };
 
 const AdminAudit = {
@@ -140,40 +159,37 @@ export const AdminService = {
         return AdminAwardsEngine.getUnifiedAwardHistory();
     },
 
-    getDashboardData: async () => {
+    getDashboardData: async (mode: AdminDashboardMode = 'full') => {
         if (config.backendProvider === 'supabase') {
             try {
                 const now = Date.now();
+                const cached = cacheByMode[mode];
 
                 // 1) Cache hit
-                if (adminDashboardCache && now - adminDashboardCacheAt < ADMIN_DASHBOARD_TTL_MS) {
-                    return adminDashboardCache;
+                if (cached && now - cached.at < ADMIN_DASHBOARD_TTL_MS) {
+                    return cached.data || emptyAdminDashboard;
                 }
 
                 // 2) Dedupe: se já tem request rodando, reusa
-                if (adminDashboardInFlight) {
-                    return adminDashboardInFlight;
+                if (inFlightByMode[mode]) {
+                    return inFlightByMode[mode];
                 }
 
-                adminDashboardInFlight = (async () => {
-                    const res = await supabaseAdminRepository.fetchAdminDashboard();
+                inFlightByMode[mode] = (async () => {
+                    const res = await supabaseAdminRepository.fetchAdminDashboard(mode);
+                    const data = res?.success ? (res.data || emptyAdminDashboard) : emptyAdminDashboard;
 
                     // Só cacheia sucesso (evita prender erro em cache)
                     if (res?.success) {
-                        adminDashboardCache = res;
-                        adminDashboardCacheAt = Date.now();
+                        cacheByMode[mode] = { at: Date.now(), data };
                     }
 
-                    return res;
+                    return data;
                 })().finally(() => {
-                    adminDashboardInFlight = null;
+                    inFlightByMode[mode] = null;
                 });
 
-                const response = await adminDashboardInFlight;
-                if (!response?.success) {
-                    console.error('[AdminEngine] Supabase dashboard fetch failed', response?.error);
-                }
-                return response?.data || emptyAdminDashboard;
+                return await inFlightByMode[mode];
             } catch (err) {
                 console.error('[AdminEngine] getDashboardData supabase path failed', err);
                 return emptyAdminDashboard;
