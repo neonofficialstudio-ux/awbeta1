@@ -68,7 +68,5 @@ export const EventRankingEngineV5 = {
     },
 
     updateEventScore: (eventId: string, userId: string, points: number) => {
-        // This is handled by eventTelemetry / scoreLog in EventEngineV7
-        // This is a helper for manual or forced updates if needed
     }
 };
