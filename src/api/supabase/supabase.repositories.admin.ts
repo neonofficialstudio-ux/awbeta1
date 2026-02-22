@@ -49,6 +49,12 @@ const STORE_ITEM_ADMIN_SELECT =
 const COIN_PACK_ADMIN_SELECT =
   'id, title, description, coins, bonus_coins, price_cents, currency, is_active, in_stock, sort_order, meta, created_at, updated_at';
 
+
+const RAFFLE_ADMIN_SELECT =
+  'id, item_id, item_name, item_image_url, ticket_price, ticket_limit_per_user, starts_at, ends_at, status, winner_user_id, winner_defined_at, prize_type, coin_reward, custom_reward_text, created_by, created_at, updated_at, meta, total_tickets';
+
+const RAFFLE_TICKET_ADMIN_SELECT = 'id, raffle_id, user_id, purchased_at, created_at';
+
 const derivePriceBRLFromPack = (pack: any) => {
   const cents = Number(pack?.price_cents);
   const currency = String(pack?.currency || '').toUpperCase();
@@ -283,8 +289,16 @@ export const supabaseAdminRepository = {
           .select(`*, store_items(name), profiles(name)`)
           .order('created_at', { ascending: false })
           .limit(50),
-        supabase.from('raffles').select('*').order('created_at', { ascending: false }).limit(20),
-        supabase.from('raffle_tickets').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase
+          .from('raffles')
+          .select(RAFFLE_ADMIN_SELECT)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('raffle_tickets')
+          .select(RAFFLE_TICKET_ADMIN_SELECT)
+          .order('created_at', { ascending: false })
+          .limit(200),
         supabase
           .from('profiles')
           .select('id', { head: true, count: 'exact' })
@@ -461,13 +475,13 @@ export const supabaseAdminRepository = {
     }
 
     try {
-      let missionQuery = supabase.from('missions').select('*').order('created_at', { ascending: false });
+      let missionQuery = supabase.from('missions').select(MISSION_ADMIN_SELECT).order('created_at', { ascending: false });
       if (filter === 'active') missionQuery = missionQuery.eq('active', true);
       if (filter === 'expired') missionQuery = missionQuery.eq('active', false);
 
       let missionsRes = await missionQuery;
       if (missionsRes.error && (missionsRes.error.code === '42703' || missionsRes.error.message?.toLowerCase().includes('active'))) {
-        let fallbackQuery = supabase.from('missions').select('*').order('created_at', { ascending: false });
+        let fallbackQuery = supabase.from('missions').select(MISSION_ADMIN_SELECT).order('created_at', { ascending: false });
         if (filter === 'active') fallbackQuery = fallbackQuery.eq('is_active', true);
         if (filter === 'expired') fallbackQuery = fallbackQuery.eq('is_active', false);
         missionsRes = await fallbackQuery;
