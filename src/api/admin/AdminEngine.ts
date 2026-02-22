@@ -920,9 +920,10 @@ export const AdminService = {
     },
     
     addManualEventPoints: (userId: string, eventId: string, points: number, reason: string) => {
-        ensureMockBackend('addManualEventPoints');
-        EventEngineUnified.addEventPoints(userId, eventId, points, reason);
-        return { success: true };
+        return {
+            success: false,
+            error: "Eventos descontinuados (Supabase-only). addManualEventPoints está desativado.",
+        };
     },
 
     saveSubscriptionPlan: (plan: SubscriptionPlan) => {
