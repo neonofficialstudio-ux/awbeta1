@@ -299,9 +299,10 @@ export const MainLayout: React.FC = () => {
                 localStorage.setItem(`aw_aod_seen:${artistOfTheDayAnnouncementId}`, '1');
             } catch {}
         } else {
-            if (activeUser && artistOfTheDayAnnouncementId) {
-                const response = await api.markArtistOfTheDayAsSeen(activeUser.id, artistOfTheDayAnnouncementId);
-                if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
+            if (artistOfTheDayAnnouncementId) {
+                try {
+                    localStorage.setItem(`aw_aod_seen:${artistOfTheDayAnnouncementId}`, '1');
+                } catch {}
             }
         }
 
