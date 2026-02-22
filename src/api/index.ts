@@ -1,6 +1,6 @@
 
 // API HUB V5.0 - CONSOLIDATED ARCHITECTURE
-export * from './events';
+// Eventos foram descontinuados (Supabase-only). Não reexportar para evitar bundle/rotas mock.
 
 // Admin & Analytics
 export { adminPainelData } from "./admin/painel";

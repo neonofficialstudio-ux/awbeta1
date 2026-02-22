@@ -3,7 +3,7 @@
 import { EconomyEngineV6 } from "../economy/economyEngineV6";
 import { QueueEngineV5 } from "../queue/queueEngineV5";
 import { MissionEngine } from "../../services/missions/mission.engine";
-import { EventEngineUnified as EventEngineV7 } from "../events/EventEngineUnified";
+// Eventos descontinuados (Supabase-only). Não importar engines legadas para evitar bundle mock.
 import * as storeAPI from "../admin/store";
 import * as rankingAPI from "../ranking/index";
 import { getRepository } from "../database/repository.factory";
@@ -74,13 +74,8 @@ export const runFullNormalizationDiagnostic = async () => {
             report.errors.push("Ranking: getGlobalRanking failed or empty");
         }
         
-        // 6. Events
-        // We check if engines are exposed
-        if (typeof EventEngineV7.joinEvent === 'function') {
-            report.modules.events = true;
-        } else {
-            report.errors.push("Events: EngineV7 not linked correctly");
-        }
+        // 6. Events (descontinuado)
+        report.modules.events = false;
 
     } catch (e: any) {
         report.errors.push(`Critical Diagnostic Failure: ${e.message}`);

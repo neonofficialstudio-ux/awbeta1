@@ -104,19 +104,10 @@ export const MissionEngineV5 = {
 
             // 1b. Event Mission Delegation
             if (isEventMission) {
-                const { EventEngineUnified } = await import("../events/EventEngineUnified");
-                if (!mission.eventId) return { success: false, error: "Missão de evento corrompida (sem Event ID)." };
-                
-                try {
-                    const res = await EventEngineUnified.submitEventMission(userId, mission.eventId, missionId, proofInput);
-                    return {
-                        success: res.success,
-                        submission: res.newSubmission as any, 
-                        updatedUser: res.updatedUser,
-                    };
-                } catch (e: any) {
-                    return { success: false, error: e.message };
-                }
+                return {
+                    success: false,
+                    error: "Eventos foram descontinuados no Artist World (Supabase-only). Esta missão não pode ser enviada.",
+                };
             }
 
             // Adaptive Shield
