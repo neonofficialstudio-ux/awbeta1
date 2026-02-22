@@ -1,8 +1,8 @@
 // src/api/games.ts (wrapper seguro)
-import { isSupabaseProvider } from "./core/backendGuard";
+// Supabase é a fonte única da verdade (mock proibido). Jackpot ainda não existe no backend.
 
 // API padrão para o front conseguir checar
-export const isJackpotEnabled = () => !isSupabaseProvider();
+export const isJackpotEnabled = () => false;
 
 type DisabledResponse = { success: false; disabled: true; message: string };
 
@@ -12,34 +12,22 @@ const disabled = (): DisabledResponse => ({
   message: "Jackpot em breve",
 });
 
-// Delegadores: em mock mode, carrega o módulo real sob demanda.
-// Em supabase, retorna disabled sem importar mockData.
 export const fetchJackpotState = async (...args: any[]) => {
-  if (isSupabaseProvider()) return disabled();
-  const mod = await import("./games.mock");
-  return mod.fetchJackpotState(...args);
+  return disabled();
 };
 
 export const buyJackpotTicket = async (...args: any[]) => {
-  if (isSupabaseProvider()) return disabled();
-  const mod = await import("./games.mock");
-  return mod.buyJackpotTicket(...args);
+  return disabled();
 };
 
 export const buyJackpotTicketsBulk = async (...args: any[]) => {
-  if (isSupabaseProvider()) return disabled();
-  const mod = await import("./games.mock");
-  return mod.buyJackpotTicketsBulk(...args);
+  return disabled();
 };
 
 export const getUserJackpotStats = async (...args: any[]) => {
-  if (isSupabaseProvider()) return disabled();
-  const mod = await import("./games.mock");
-  return mod.getUserJackpotStats(...args);
+  return disabled();
 };
 
 export const openCyberCrate = async (...args: any[]) => {
-  if (isSupabaseProvider()) return disabled();
-  const mod = await import("./games.mock");
-  return mod.openCyberCrate(...args);
+  return disabled();
 };
