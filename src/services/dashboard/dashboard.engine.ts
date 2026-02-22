@@ -1,8 +1,6 @@
 // services/dashboard/dashboard.engine.ts
 import { getRepository } from "../../api/database/repository.factory";
 import { EconomyEngineV6 } from "../../api/economy/economyEngineV6";
-import { CheckinEngineV4 } from "../../api/economy/checkin";
-import { EventSessionEngine } from "../../api/events/session";
 import { QueueEngineV5 } from "../../api/queue/queueEngineV5";
 import { GlobalRankingEngine } from "../../services/ranking/globalRanking.engine";
 import { TelemetryPRO } from "../../services/telemetry.pro";
@@ -21,11 +19,7 @@ export const DashboardEngine = {
 
         // 1. Economy Stats (source of truth from backend profile)
 
-        // 2. Active Event
-        const activeEvent = EventSessionEngine.getActiveEvent();
-        const eventSession = user.eventSession;
-
-        // 3. Queue Status
+        // 2. Queue Status
         const userQueue = QueueEngineV5.getQueueForUser(userId);
         
         // 4. Rank
@@ -39,11 +33,7 @@ export const DashboardEngine = {
                 level: user.level,
                 xpToNextLevel: user.xpToNextLevel
             },
-            activeEvent: activeEvent ? {
-                id: activeEvent.id,
-                title: activeEvent.title,
-                session: eventSession
-            } : null,
+            activeEvent: null,
             productionQueue: {
                 count: userQueue.length,
                 items: userQueue.slice(0, 3)

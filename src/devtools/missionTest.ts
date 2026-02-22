@@ -2,7 +2,6 @@
 import { MissionEngine } from "../services/missions/mission.engine";
 import { SubmissionEngine } from "../services/missions/submission.engine";
 import { MissionEventEngine } from "../services/missions/mission.event";
-import { EventPassEngine } from "../api/events/pass"; // Using API for pass purchase
 import { getRepository } from "../api/database/repository.factory";
 import { MissionDB } from "../api/missions/missions.db";
 
@@ -33,7 +32,6 @@ export const MissionTest = {
         else console.log("PASS: Access denied correctly");
 
         // 2. Buy VIP Pass
-        EventPassEngine.purchaseEventPass(userId, eventId, 'vip');
         
         const userVip = repo.select("users").find((u:any) => u.id === userId);
         const missionsVip = MissionEventEngine.getAvailableEventMissions(userVip, eventId);

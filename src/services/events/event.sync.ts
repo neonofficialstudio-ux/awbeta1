@@ -1,11 +1,6 @@
 
 import { EventRankingEngineV5 } from "../../services/events/eventRanking.engine";
-import { LiveArenaEngine } from "../../api/events/liveArenaEngine";
 import { EventLiveFeed } from "./event.livefeed";
-import { getRepository } from "../../api/database/repository.factory";
-
-const repo = getRepository();
-
 class EventSyncManager {
     private intervals: Record<string, any> = {};
     private dispatch: any = null;
@@ -58,8 +53,18 @@ class EventSyncManager {
 
     private syncArena() {
         if (!this.currentEventId || !this.dispatch) return;
-        const status = LiveArenaEngine.getStatus(this.currentEventId);
-        this.dispatch({ type: 'EVENT_SET_ARENA_STATUS', payload: status });
+
+        // Eventos desativados (Supabase-only). Mantém o shape esperado pelo reducer/UI.
+        const status = {
+            capacity: 0,
+            current: 0,
+            percentage: 0,
+            isFull: true,
+            label: "EVENTOS DESATIVADOS",
+            onlineCount: 0,
+        };
+
+        this.dispatch({ type: "EVENT_SET_ARENA_STATUS", payload: status });
     }
 
     private syncFeed() {
