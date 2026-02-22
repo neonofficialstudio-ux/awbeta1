@@ -1,65 +1,45 @@
+// src/api/events/session.ts
+// Supabase-only stub. Events were removed from production.
+// Keep exports/signatures to avoid breaking existing imports.
 
-import { getRepository } from "../database/repository.factory";
-import { createNotification, updateUserInDb } from "../helpers";
-import type { EventSession, EventPassType, User, Event } from "../../types";
+import type { EventSession, EventPassType, Event } from "../../types";
 
-const repo = getRepository();
-const SESSION_STORAGE_KEY = 'aw_event_session_v5';
+const disabledSession = (eventId: string, passType: EventPassType): EventSession => ({
+  eventId,
+  passType,
+  startedAt: new Date().toISOString(),
+  progress: {},
+  rewardsClaimed: [],
+  boostersActive: [],
+  score: 0,
+});
 
 export const EventSessionEngine = {
-    getActiveEvent: (): Event | undefined => {
-        // Returns the current active event
-        const events = repo.select("events") as Event[];
-        return events.find(e => e.status === 'current');
-    },
+  // No active events in Supabase-only mode
+  getActiveEvent: (): Event | undefined => {
+    return undefined;
+  },
 
-    startEventSession: (userId: string, eventId: string, passType: EventPassType): EventSession => {
-        const now = new Date().toISOString();
-        const session: EventSession = {
-            eventId,
-            passType,
-            startedAt: now,
-            progress: {},
-            rewardsClaimed: [],
-            boostersActive: [],
-            score: 0
-        };
-        
-        // Persist to User object via repo update
-        repo.update("users", (u: any) => u.id === userId, (u: any) => ({ ...u, eventSession: session }));
-        
-        // Local persistence
-        try {
-            localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-        } catch(e) { console.error("Failed to save local session", e); }
+  // Keep signature, but do not persist anything (no repo/localStorage).
+  startEventSession: (userId: string, eventId: string, passType: EventPassType): EventSession => {
+    void userId; // explicit unused
+    return disabledSession(eventId, passType);
+  },
 
-        return session;
-    },
+  // No session persistence in Supabase-only mode
+  loadEventSession: (userId: string): EventSession | null => {
+    void userId;
+    return null;
+  },
 
-    loadEventSession: (userId: string): EventSession | null => {
-        // Try loading from user DB first (truth source)
-        const user = repo.select("users").find((u: any) => u.id === userId);
-        if (user && user.eventSession) {
-            return user.eventSession;
-        }
-        return null;
-    },
+  clearEventSession: (userId: string) => {
+    void userId;
+    // no-op
+  },
 
-    clearEventSession: (userId: string) => {
-         repo.update("users", (u: any) => u.id === userId, (u: any) => ({ ...u, eventSession: null }));
-         localStorage.removeItem(SESSION_STORAGE_KEY);
-    },
-    
-    updateProgress: (userId: string, missionId: string) => {
-        const user = repo.select("users").find((u: any) => u.id === userId);
-        if (user && user.eventSession) {
-            const updatedSession = {
-                ...user.eventSession,
-                progress: { ...user.eventSession.progress, [missionId]: true }
-            };
-             repo.update("users", (u: any) => u.id === userId, (u: any) => ({ ...u, eventSession: updatedSession }));
-             return updatedSession;
-        }
-        return null;
-    }
+  updateProgress: (userId: string, missionId: string) => {
+    void userId;
+    void missionId;
+    return null;
+  },
 };
