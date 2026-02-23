@@ -14,7 +14,10 @@ import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
 import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
 import { useAppContext } from '../../constants';
-import { loadSupabaseAdminRepository } from '../../api/index';
+
+// Local lazy-loader to avoid coupling to src/api/index.ts barrel exports
+const loadSupabaseAdminRepository = () =>
+  import('../../api/supabase/supabase.repositories.admin');
 
 type AdminMissionFilter = 'active' | 'expired' | 'all';
 
