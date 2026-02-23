@@ -10,14 +10,16 @@ export { adminInsightsAPI } from "./admin/insights";
 import { AdminEngine } from "./admin/AdminEngine";
 export { AdminEngine };
 import { config } from "../core/config";
-import { fetchMissionsSupabase, submitMissionSupabase } from "./supabase/missions";
 import {
-    fetchLeaderboard,
-    fetchMonthlyLeaderboard,
     fetchLatestMonthlyWinners as fetchLatestMonthlyWinnersSupabase,
     fetchHallOfFame as fetchHallOfFameSupabase,
-    fetchRankingCycles as fetchRankingCyclesSupabase,
 } from "./supabase/economy";
+
+export * from "./artistOfDay";
+export * from "./missions/public";
+export * from "./ranking/public";
+export * from "./dashboard/public";
+export { loadSupabaseAdminRepository } from "./admin/loader";
 
 // Auth & Session (V4.0)
 export { AuthEngineV4 } from "./auth/authEngineV4";
@@ -52,7 +54,6 @@ export {
     fetchWeeklyMissions, // Added export
     listAllMissions // Added export for Admin Panel
 } from "./missions/index";
-import { submitMission as submitMissionMock } from "./missions/index";
 export { submitMissionV4 } from "./missions/submit";
 
 // User & Auth (Legacy/Wrappers)
@@ -110,78 +111,10 @@ export {
     fetchJackpotState 
 } from "./games";
 
-// Missions (Legacy/Direct)
-import {
-    fetchDashboardData,
-    fetchMissions as fetchMissionsMock,
-    fetchAchievementsData
-} from "./missions";
-
-export {
-    fetchDashboardData,
-    fetchAchievementsData
-};
-
-export const fetchArtistsOfTheDayFull = async () => {
-    const dashboard = await fetchDashboardData();
-    return dashboard?.artistsOfTheDay || [];
-};
-
-export const claimArtistOfDayReward = async (_userId: string, _artistId: string) => {
-    return { success: false, updatedUser: null };
-};
-
-
-export const fetchMissions = async (userId: string) => {
-    if (config.backendProvider === 'supabase') {
-        return fetchMissionsSupabase(userId);
-    }
-    return fetchMissionsMock(userId);
-};
-
-export const submitMission = async (userId: string, missionId: string, proof: string) => {
-    if (config.backendProvider === 'supabase') {
-        return submitMissionSupabase(userId, missionId, proof);
-    }
-    return submitMissionMock(userId, missionId, proof);
-};
-
-export const fetchRankingData = async (type: 'mensal' | 'geral' = 'mensal', limit = 50, offset = 0) => {
-    if (config.backendProvider === 'supabase') {
-        if (type === 'mensal') {
-            const response = await fetchMonthlyLeaderboard(limit, offset);
-            if (!response.success) {
-                console.error('[API] fetchRankingData mensal failed', response.error);
-                return [];
-            }
-            return response.leaderboard;
-        }
-
-        // ✅ Geral: leaderboard atual
-        const response = await fetchLeaderboard(limit, offset);
-        if (!response.success) {
-            console.error('[API] fetchRankingData supabase failed', response.error);
-            return [];
-        }
-        return response.leaderboard;
-    }
-    return fetchRankingDataLegacy(type);
-};
-
 export const fetchLatestMonthlyWinnersHistory = async () => {
     if (config.backendProvider !== 'supabase') return { cycle: null, winners: [] as any[] };
     const res = await fetchLatestMonthlyWinnersSupabase();
     return res || { cycle: null, winners: [] as any[] };
-};
-
-export const fetchRankingCycles = async (limit = 5) => {
-    if (config.backendProvider !== 'supabase') return [];
-    const res = await fetchRankingCyclesSupabase(limit);
-    if (!res.success) {
-        console.error('[API] fetchRankingCycles failed', res.error);
-        return [];
-    }
-    return res.cycles || [];
 };
 
 export const fetchHallOfFame = async (limit = 50, offset = 0) => {
@@ -190,11 +123,6 @@ export const fetchHallOfFame = async (limit = 50, offset = 0) => {
         return response.entries;
     }
     return [];
-};
-
-export const loadSupabaseAdminRepository = async () => {
-    const mod = await import("./supabase/supabase.repositories.admin");
-    return mod.supabaseAdminRepository;
 };
 
 // Admin Actions (Delegating to Consolidated Engine)

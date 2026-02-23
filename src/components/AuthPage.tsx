@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { login, register } from '../api/users';
 import { ShieldIcon, CheckIcon } from '../constants';
 
 interface AuthPageProps {
@@ -170,7 +170,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ termsContent }) => {
     const safeEmail = email.trim();
 
     try {
-      const { user, notifications, isFirstLogin, unseenAdminNotifications } = await api.login(safeEmail, password);
+      const { user, notifications, isFirstLogin, unseenAdminNotifications } = await login(safeEmail, password);
       
       setTimeout(() => {
           dispatch({ type: 'LOGIN', payload: { user, notifications, unseenAdminNotifications } });
@@ -217,7 +217,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ termsContent }) => {
     const instagramUrl = instagramUsername ? `https://www.instagram.com/${instagramUsername.replace('@', '').trim()}` : '';
 
     try {
-      const result = await api.register({ 
+      const result = await register({ 
           name: safeName, 
           artisticName: safeArtisticName, 
           email: safeEmail, 

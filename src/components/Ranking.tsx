@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { RankingUser } from '../types';
 import { CrownIcon, SpotifyIcon, YoutubeIcon, MissionIcon, InstagramIcon, StarIcon, HistoryIcon as ClockIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchRankingCycles, fetchRankingData } from '../api/ranking/public';
 import { formatNumber } from './ui/utils/format';
 import { Perf } from '../services/perf.engine';
 import FaqItem from './ui/patterns/FaqItem';
@@ -201,7 +201,7 @@ const Ranking: React.FC = () => {
     useEffect(() => {
         const fetchCycles = async () => {
             try {
-                const cycles = await api.fetchRankingCycles?.(5);
+                const cycles = await fetchRankingCycles?.(5);
                 const currentOpen = cycles?.find((cycle: any) => cycle.status === 'open') ?? null;
                 const lastClosed = cycles?.find((cycle: any) => cycle.status === 'closed') ?? null;
                 setCurrentOpenCycle(currentOpen);
@@ -238,7 +238,7 @@ const Ranking: React.FC = () => {
             else setIsRefreshing(true);
             try {
                 // PATCH: Pass timeFilter to API to fetch correct ranking type (mensal vs geral)
-                const rankingDataRaw = await api.fetchRankingData(timeFilter);
+                const rankingDataRaw = await fetchRankingData(timeFilter);
                 let rankingData: RankingUser[] = rankingDataRaw || [];
 
                 if (activeUser) {

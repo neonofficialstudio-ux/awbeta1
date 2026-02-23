@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { User, CoinTransaction, Achievement, AchievementRarity } from '../types';
 import { MissionIcon, TrophyIcon, StoreIcon, StarIcon, EditIcon, CheckIcon, LockIcon, CoinIcon, CrownIcon, ShareIcon, TrendingUpIcon, ShieldIcon, XPIcon } from '../constants';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchProfileData, updateUser } from '../api/users';
+import { upsertMySocialLinks } from '../api/artistOfDay';
 import { formatNumber } from './ui/utils/format';
 import AvatarWithFrame from './AvatarWithFrame';
 import { safeString } from '../api/helpers';
@@ -225,7 +226,7 @@ const Profile: React.FC = () => {
             const data = AchievementEngine.getUserAchievements(user.id);
             setAllAchievements(data as any); // Type assertion for compatibility
 
-            api.fetchProfileData(user.id).then(data => {
+            fetchProfileData(user.id).then(data => {
                 setCoinTransactions(data.coinTransactions);
                 // setAllAchievements(data.allAchievements); // Don't overwrite engine data
                 setIsLoading(false);
@@ -292,14 +293,14 @@ const Profile: React.FC = () => {
               email: formData.email ?? user.email,
             };
 
-            await api.upsertMySocialLinks({
+            await upsertMySocialLinks({
               spotifyUrl: dataToSave.spotifyUrl || null,
               youtubeUrl: dataToSave.youtubeUrl || null,
               instagramUrl: dataToSave.instagramUrl || null,
               tiktokUrl: dataToSave.tiktokUrl || null,
             });
 
-            const response = await api.updateUser(dataToSave);
+            const response = await updateUser(dataToSave);
 
             if (response.updatedUser) {
               // ✅ ENTERPRISE: nunca deixar o form sobrescrever economia/plan

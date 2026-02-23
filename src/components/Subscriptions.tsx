@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import type { SubscriptionPlan, User, IconComponent } from '../types';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { cancelSubscription, fetchSubscriptionsPageData } from '../api/users';
 import ConfirmationModal from './admin/ConfirmationModal';
 import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, TrendingUpIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
 import { PLANS } from '../api/subscriptions/constants';
@@ -303,7 +303,7 @@ const Subscriptions: React.FC = () => {
     else setIsRefreshing(true);
     try {
       const [{ plans: plansData }, myB, offers] = await Promise.all([
-        api.fetchSubscriptionsPageData(currentUser.id),
+        fetchSubscriptionsPageData(currentUser.id),
         getMyPlanBenefits(),
         getAllPlanOffers(),
       ]);
@@ -647,7 +647,7 @@ const Subscriptions: React.FC = () => {
     if (!currentUser) return;
     setIsCancelling(true);
     try {
-        const response = await api.cancelSubscription(currentUser.id);
+        const response = await cancelSubscription(currentUser.id);
         processApiResponse(response);
         setIsCancelModalOpen(false);
     } catch (error) {

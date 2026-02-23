@@ -5,7 +5,8 @@ import Header from '../components/Header';
 import Notifications from '../components/Notifications';
 import ToastSystem from '../components/ToastSystem';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchUserHistory } from '../api/admin';
+import { markAchievementAsSeen, markAdminNotificationAsSeen, markPlanUpgradeAsSeen, markRaffleWinAsSeen } from '../api/users';
 import { isSupabaseProvider } from '../api/core/backendGuard';
 import type { User, StoreItem, UsableItem, InventoryTab } from '../types';
 import { usePageTitle } from '../components/ui/hooks/usePageTitle';
@@ -263,7 +264,7 @@ export const MainLayout: React.FC = () => {
 
         if (activeUser.unseenPlanUpgrade) {
             setSubscriptionUpgradeInfo({ newPlan: activeUser.plan });
-            api.markPlanUpgradeAsSeen(activeUser.id).then(response => {
+            markPlanUpgradeAsSeen(activeUser.id).then(response => {
                 if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             });
         }
@@ -289,7 +290,7 @@ export const MainLayout: React.FC = () => {
 
     const handleViewUserHistory = async (user: User) => {
         setViewingUserHistory(user);
-        const data = await api.fetchUserHistory(user.id);
+        const data = await fetchUserHistory(user.id);
         setHistoryData(data);
     };
 
@@ -318,7 +319,7 @@ export const MainLayout: React.FC = () => {
 
     const handleCloseAdminNotificationModal = async () => {
         if (activeUser && currentAdminNotification) {
-            const { updatedUser } = await api.markAdminNotificationAsSeen(activeUser.id, currentAdminNotification.id);
+            const { updatedUser } = await markAdminNotificationAsSeen(activeUser.id, currentAdminNotification.id);
             if(updatedUser) dispatch({ type: 'UPDATE_USER', payload: updatedUser });
             const remainingNotifications = unseenAdminNotifications.slice(1);
             dispatch({ type: 'SET_UNSEEN_ADMIN_NOTIFICATIONS', payload: remainingNotifications });
@@ -328,7 +329,7 @@ export const MainLayout: React.FC = () => {
     
     const handleCloseAchievementModal = async () => {
         if (activeUser && unseenAchievementId) {
-            const { updatedUser } = await api.markAchievementAsSeen(activeUser.id, unseenAchievementId);
+            const { updatedUser } = await markAchievementAsSeen(activeUser.id, unseenAchievementId);
             if (updatedUser) dispatch({ type: 'UPDATE_USER', payload: updatedUser });
         }
         setUnseenAchievementId(null);
@@ -378,7 +379,7 @@ export const MainLayout: React.FC = () => {
              return <LevelUpModal newLevel={levelUpInfo.newLevel} onClose={() => setLevelUpInfo(null)} />;
         }
         if (raffleWinInfo) {
-             return <RaffleWinnerModal {...raffleWinInfo} onClose={async () => { if(activeUser) { const res = await api.markRaffleWinAsSeen(activeUser.id); if(res.updatedUser) dispatch({type: 'UPDATE_USER', payload: res.updatedUser}); } setRaffleWinInfo(null); }} onNavigate={() => { dispatch({ type: 'SET_INVENTORY_TAB', payload: 'visual' }); setRaffleWinInfo(null); }} />;
+             return <RaffleWinnerModal {...raffleWinInfo} onClose={async () => { if(activeUser) { const res = await markRaffleWinAsSeen(activeUser.id); if(res.updatedUser) dispatch({type: 'UPDATE_USER', payload: res.updatedUser}); } setRaffleWinInfo(null); }} onNavigate={() => { dispatch({ type: 'SET_INVENTORY_TAB', payload: 'visual' }); setRaffleWinInfo(null); }} />;
         }
         if (subscriptionUpgradeInfo) {
              return <SubscriptionSuccessModal newPlanName={subscriptionUpgradeInfo.newPlan} onClose={() => setSubscriptionUpgradeInfo(null)} />;

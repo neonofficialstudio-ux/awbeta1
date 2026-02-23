@@ -2,7 +2,7 @@
 import React, { useEffect } from 'react';
 import DopamineUniversalModal from './ui/advanced/DopamineUniversalModal';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { markRaffleWinAsSeen } from '../api/users';
 
 interface RaffleWinnerModalProps {
   itemName: string;
@@ -24,7 +24,7 @@ const RaffleWinnerModal: React.FC<RaffleWinnerModalProps> = ({ itemName, itemIma
       });
 
       // Marca como visto no MockDB
-      api.markRaffleWinAsSeen(activeUser.id);
+      markRaffleWinAsSeen(activeUser.id);
     }
   }, []);
   

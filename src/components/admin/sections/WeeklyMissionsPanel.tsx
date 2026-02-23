@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { listAllMissions, loadSupabaseAdminRepository } from '../../../api/index';
+import { listAllMissions } from '../../../api/missions/public';
+import { loadSupabaseAdminRepository } from '../../../api/admin/loader';
 import { MissionIcon } from '../../../constants';
 import { config } from '../../../core/config';
 

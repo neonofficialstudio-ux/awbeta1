@@ -22,7 +22,7 @@ import Tabs from '../ui/navigation/Tabs';
 import Toolbar from '../ui/advanced/Toolbar';
 import { getDisplayName } from '../../api/core/getDisplayName';
 import { useAppContext } from '../../constants';
-import { adminSetArtistOfDay } from '../../api/index';
+import { adminSetArtistOfDay } from '../../api/supabase/artistOfDay';
 
 interface ManageUsersProps {
   initialSubTab?: 'list' | 'metrics' | 'leads';

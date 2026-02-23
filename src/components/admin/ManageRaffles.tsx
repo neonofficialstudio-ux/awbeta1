@@ -7,7 +7,6 @@ import AdminRaffleDrawModalV2 from './AdminRaffleDrawModalV2';
 import ConfirmationModal from './ConfirmationModal';
 import AdminRaffleParticipantsModal from './AdminRaffleParticipantsModal';
 import { EditIcon, DeleteIcon, UsersIcon, TrophyIcon, StarIcon, CheckIcon } from '../../constants';
-import * as api from '../../api/index';
 import { adminPrepareRaffleDraw, adminConfirmRaffleWinner, adminForceUpdateRaffleStates, adminSetHighlightedRaffle, adminAwardManual, adminPreviewDrawRaffle, adminDrawRaffleWithRef } from '../../api/admin/raffles';
 import { PrizeResolver } from '../../api/raffles/prize.resolver';
 import AvatarWithFrame from '../AvatarWithFrame';

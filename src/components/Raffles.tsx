@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Raffle, User } from '../types';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { buyRaffleTickets } from '../api/store';
+import { fetchRafflesData } from '../api/raffles/fetchRafflesData';
 import { getSupabase } from '../api/supabase/client';
 import { CoinIcon, TicketIcon, CrownIcon, HistoryIcon, CheckIcon, ShieldIcon } from '../constants';
 import { config } from '../core/config';
@@ -720,7 +721,7 @@ const Raffles: React.FC = () => {
             }
 
             // Update V1.0: Return highlightedRaffleId
-            const data = await api.fetchRafflesData(activeUser.id);
+            const data = await fetchRafflesData(activeUser.id);
             setRaffles(data.raffles);
             setMyTicketsByRaffle(data.myTicketsByRaffle || {});
             setTotalTicketsByRaffle(data.totalTicketsByRaffle || {});
@@ -887,7 +888,7 @@ const Raffles: React.FC = () => {
         }
 
         try {
-            const response = await api.buyRaffleTickets(activeUser.id, raffleToBuy.id, quantity);
+            const response = await buyRaffleTickets(activeUser.id, raffleToBuy.id, quantity);
             if (response.updatedUser) dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });
             if (response.notifications) dispatch({ type: 'ADD_NOTIFICATIONS', payload: response.notifications });
             await fetchData();

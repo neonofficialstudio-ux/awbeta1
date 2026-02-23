@@ -5,7 +5,7 @@ import { MicIcon, CubeIcon, StoreIcon, StarIcon, InstagramIcon, TikTokIcon, Yout
 import VisualRewardFormModal from './VisualRewardFormModal';
 import QueueSuccessModal from './QueueSuccessModal';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchInventoryData, getMyRequests, getQueuePosition, queueForArtistOfTheDay, submitVisualRewardForm, useUsableItem } from '../api/store';
 import { ModalPortal } from './ui/overlays/ModalPortal';
 import FaqItem from './ui/patterns/FaqItem';
 import { socialLinkValidator } from '../api/quality/socialLinkValidator';
@@ -656,7 +656,7 @@ const Inventory: React.FC = () => {
 
         try {
             setQueueLoading(true);
-            const reqRes = await api.getMyRequests('usable');
+            const reqRes = await getMyRequests('usable');
             if (!reqRes.success) return;
 
             const reqs = reqRes.data || [];
@@ -665,7 +665,7 @@ const Inventory: React.FC = () => {
             const active = reqs.filter((r: any) => r.status === 'queued' || r.status === 'in_progress');
             const entries = await Promise.all(
                 active.map(async (r: any) => {
-                    const posRes = await api.getQueuePosition(r.id);
+                    const posRes = await getQueuePosition(r.id);
                     return [r.id, posRes.success ? posRes.data : null] as const;
                 })
             );
@@ -695,7 +695,7 @@ const Inventory: React.FC = () => {
         setError(null);
         setIsLoading(true);
         try {
-            const result = await api.fetchInventoryData(currentUser.id);
+            const result = await fetchInventoryData(currentUser.id);
             if (result.success && result.data) {
                 setRedeemedItems(result.data.redeemedItems);
                 setStoreItems(result.data.storeItems);
@@ -744,7 +744,7 @@ const Inventory: React.FC = () => {
 
     const handleVisualRewardSubmit = async (redeemedItemId: string, formData: VisualRewardFormData) => {
         if (!currentUser) return;
-        const response = await api.submitVisualRewardForm(currentUser.id, redeemedItemId, formData);
+        const response = await submitVisualRewardForm(currentUser.id, redeemedItemId, formData);
         processApiResponse(response);
         if (response.updatedItem) {
             await fetchData(true);
@@ -760,7 +760,7 @@ const Inventory: React.FC = () => {
         if (!currentUser || !usableItemToActivate) return;
         
         // Validation moved to Modal
-        const response = await api.useUsableItem(currentUser.id, usableItemToActivate.id, url);
+        const response = await useUsableItem(currentUser.id, usableItemToActivate.id, url);
         processApiResponse(response);
         
         if (response.success) {
@@ -773,7 +773,7 @@ const Inventory: React.FC = () => {
     const handleQueueForArtistOfTheDay = async (redeemedItemId: string) => {
         if (!currentUser) return;
         // V13.7: Block queue logic for discontinued items
-        // const response = await api.queueForArtistOfTheDay(currentUser.id, redeemedItemId);
+        // const response = await queueForArtistOfTheDay(currentUser.id, redeemedItemId);
         // processApiResponse(response);
         // if (response.success) {
         //    await fetchData();

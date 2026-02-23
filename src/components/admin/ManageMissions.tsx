@@ -14,7 +14,7 @@ import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
 import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
 import { useAppContext } from '../../constants';
-import { loadSupabaseAdminRepository } from '../../api/index';
+import { loadSupabaseAdminRepository } from '../../api/admin/loader';
 
 type AdminMissionFilter = 'active' | 'expired' | 'all';
 

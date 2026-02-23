@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type { CoinPack, StoreItem, UsableItem, StoreTab, User, CoinPurchaseRequest, RedeemedItem } from '../types';
 import { CoinIcon, LockIcon, CalculatorIcon } from '../constants';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { buyCoinPack, buyCustomCoinPack, cancelCoinPurchaseRequest, fetchStoreData, initiatePayment, openPaymentLink, redeemItem, submitCoinPurchaseProof } from '../api/store';
 import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
 import CoinPurchaseSuccessModal from './CoinPurchaseSuccessModal';
 import { formatNumber } from './ui/utils/format';
@@ -871,7 +871,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         setError(null);
         Perf.mark('store_fetch');
         try {
-            const result = await api.fetchStoreData(currentUser.id);
+            const result = await fetchStoreData(currentUser.id);
             if (result.success && result.data) {
                 setStoreItems(result.data.storeItems);
                 setUsableItems(result.data.usableItems);
@@ -921,7 +921,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         setIsProcessing(true);
         
         // Use updated API that delegates to StoreEngine
-        const response = await api.redeemItem(currentUser.id, item.id);
+        const response = await redeemItem(currentUser.id, item.id);
 
         if (!response?.success) {
             const err = (response?.error || '').toString();
@@ -998,7 +998,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const handleBuyCoinPack = async (pack: CoinPack) => {
         if (!currentUser || isProcessing) return;
         setIsProcessing(true);
-        const response = await api.buyCoinPack(currentUser.id, pack);
+        const response = await buyCoinPack(currentUser.id, pack);
         processApiResponse(response);
         if (response.success) {
             setPurchaseSuccessInfo({ packName: pack.name });
@@ -1011,7 +1011,7 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
     const handlePayNow = async (requestId: string) => {
          if (!currentUser || isProcessing) return;
          setIsProcessing(true);
-         const response = await api.initiatePayment(requestId);
+         const response = await initiatePayment(requestId);
          if(response.success) {
              await fetchData(true);
          }
@@ -1020,14 +1020,14 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
 
     const handleBuyCustomCoinPack = async (coins: number, price: number) => {
         if (!currentUser) return;
-        const response = await api.buyCustomCoinPack(currentUser.id, coins, price);
+        const response = await buyCustomCoinPack(currentUser.id, coins, price);
         processApiResponse(response);
         if (response.success) await fetchData(true);
     };
     
     const handleSubmitCoinPurchaseProof = async (requestId: string, proofDataUrl: string) => {
         if (!currentUser) return;
-        const response = await api.submitCoinPurchaseProof(currentUser.id, requestId, proofDataUrl);
+        const response = await submitCoinPurchaseProof(currentUser.id, requestId, proofDataUrl);
         processApiResponse(response);
         if(response.updatedRequest) await fetchData(true);
     };
@@ -1037,12 +1037,12 @@ const Store: React.FC<StoreProps> = ({ onRedeemSuccess }) => {
         if (request?.paymentLink) {
             window.open(request.paymentLink, '_blank');
         }
-        const response = await api.openPaymentLink(requestId);
+        const response = await openPaymentLink(requestId);
         if(response.updatedRequest) await fetchData(true);
     };
     
     const handleCancelCoinPurchase = async (request: CoinPurchaseRequest) => {
-        const response = await api.cancelCoinPurchaseRequest(request.id);
+        const response = await cancelCoinPurchaseRequest(request.id);
         processApiResponse(response);
         if(response.updatedRequest) await fetchData(true);
     };
