@@ -113,7 +113,8 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       if (config.backendProvider === 'supabase') {
           setIsLoadingMissions(true);
           try {
-              const response = await (await loadSupabaseAdminRepository()).fetchAdminMissions(filter);
+              const repo = await loadSupabaseAdminRepository();
+              const response = await repo.fetchAdminMissions(filter);
               if (response?.success) {
                   setMissionsData(response.missions || []);
               } else {
@@ -285,7 +286,8 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       if (config.backendProvider !== 'supabase') return;
       setIsArchivingExpired(true);
       try {
-          const response = await (await loadSupabaseAdminRepository()).archiveExpiredMissions();
+          const repo = await loadSupabaseAdminRepository();
+          const response = await repo.archiveExpiredMissions();
           if (!response?.success) {
               console.error('[ManageMissions] Supabase archive expired failed', response?.error);
           } else {

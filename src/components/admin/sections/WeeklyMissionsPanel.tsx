@@ -13,7 +13,8 @@ export default function WeeklyMissionsPanel() {
         try {
             let allMissions: any[] = [];
             if (config.backendProvider === 'supabase') {
-                const { missions } = await (await loadSupabaseAdminRepository()).fetchAdminMissions();
+                const repo = await loadSupabaseAdminRepository();
+                const { missions } = await repo.fetchAdminMissions();
                 allMissions = missions || [];
             } else {
                 allMissions = await listAllMissions();
