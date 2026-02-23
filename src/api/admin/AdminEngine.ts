@@ -40,7 +40,7 @@ import { CacheService } from "../../services/performance/cache.service";
 import { SeasonRankingEngine } from "../../services/ranking/seasonRanking.engine";
 import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
-import { assertMockProvider, isSupabaseProvider } from "../core/backendGuard";
+import { isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
 import { supabaseAdminRepository, emptyAdminDashboard, type AdminMissionFilter } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
@@ -56,7 +56,6 @@ const normalizeMissionScope = (value: any): 'weekly' | 'event' => {
 };
 
 const repo = getRepository();
-const ensureMockBackend = (feature: string) => assertMockProvider(`admin.${feature}`);
 
 // Cache in-memory para evitar burst de requests quando AdminPanel remonta
 let adminDashboardCache: any | null = null;
@@ -136,7 +135,6 @@ const reviewSubmissionFn = async (submissionId: string, status: 'approved' | 're
 export const AdminService = {
     
     getUnifiedAwardHistory: () => {
-        ensureMockBackend('getUnifiedAwardHistory');
         return AdminAwardsEngine.getUnifiedAwardHistory();
     },
 
@@ -179,7 +177,6 @@ export const AdminService = {
                 return emptyAdminDashboard;
             }
         }
-        ensureMockBackend('getDashboardData');
         return CacheService.remember('admin_dashboard_data', 3000, () => {
             const users = [...(repo.select("users") || [])];
             const missions = [...(repo.select("missions") || [])];
@@ -261,7 +258,6 @@ export const AdminService = {
             }
             return response || { success: false, missions: [], submissions: [], error: 'Unknown error' };
         }
-        ensureMockBackend('fetchAdminMissions');
         const allMissions = repo.select("missions") || [];
         const filteredMissions = filter === 'all'
             ? allMissions
@@ -283,7 +279,6 @@ export const AdminService = {
             }
             return response?.entries || [];
         }
-        ensureMockBackend('fetchHallOfFame');
         return repo.select("transactions") || [];
     },
     fetchAdminStats: async () => {
@@ -294,7 +289,6 @@ export const AdminService = {
             }
             return response?.stats || null;
         }
-        ensureMockBackend('fetchAdminStats');
         return null;
     },
 
@@ -335,7 +329,7 @@ export const AdminService = {
 
             return MissionEngineUnified.saveMission(mission);
         },
-        saveBatch: (...args: any[]) => { ensureMockBackend('missions.saveBatch'); return MissionEngineUnified.saveBatch(...args as [any]); },
+        saveBatch: (...args: any[]) => { return MissionEngineUnified.saveBatch(...args as [any]); },
         delete: async (missionId: string) => {
             if (isSupabaseProvider()) {
                 try {
@@ -349,7 +343,6 @@ export const AdminService = {
                     return { success: false, error: err instanceof Error ? err.message : 'Supabase delete missão falhou' };
                 }
             }
-            ensureMockBackend('missions.delete');
             return MissionEngineUnified.deleteMission(missionId);
         },
         reviewSubmission: (submissionId: string, status: 'approved' | 'rejected') => {
@@ -358,12 +351,10 @@ export const AdminService = {
              if (config.backendProvider === 'supabase') {
                 return reviewSubmissionSupabase(submissionId, status);
              }
-             ensureMockBackend('missions.reviewSubmission');
              return reviewSubmissionFn(submissionId, status);
         },
-        editSubmissionStatus: (...args: any[]) => { ensureMockBackend('missions.editSubmissionStatus'); return MissionEngineUnified.editSubmissionStatus(...args as [any]); },
+        editSubmissionStatus: (...args: any[]) => { return MissionEngineUnified.editSubmissionStatus(...args as [any]); },
         approveAllPending: () => {
-            ensureMockBackend('missions.approveAllPending');
             const pending = repo.select("submissions").filter((s:any) => s.status === 'pending');
             let approvedCount = 0;
             pending.forEach((sub:any) => {
@@ -373,10 +364,9 @@ export const AdminService = {
             CacheService.invalidate('admin_dashboard_data');
             return { success: true, count: approvedCount };
         },
-        listAll: (...args: any[]) => { ensureMockBackend('missions.listAll'); return MissionEngineUnified.listAll(...args as [any]); },
-        getSnapshot: (...args: any[]) => { ensureMockBackend('missions.getSnapshot'); return MissionEngineUnified.getSnapshot(...args as [any]); },
+        listAll: (...args: any[]) => { return MissionEngineUnified.listAll(...args as [any]); },
+        getSnapshot: (...args: any[]) => { return MissionEngineUnified.getSnapshot(...args as [any]); },
         setFeatured: (id: string | null) => {
-            ensureMockBackend('missions.setFeatured');
             db.setFeaturedMissionIdData(id);
             LogEngineV4.log({ action: "set_featured_mission", category: "admin", payload: { id } });
             return { success: true };
@@ -387,7 +377,6 @@ export const AdminService = {
     store: {
         saveStoreItem: async (item: StoreItem) => {
             if (!isSupabaseProvider()) {
-                ensureMockBackend('store.saveStoreItem');
                 const res = saveStoreItemHelper(item);
                 CacheService.invalidate('admin_dashboard_data');
                 return res;
@@ -453,7 +442,6 @@ export const AdminService = {
 
         deleteStoreItem: async (id: string) => {
             if (!isSupabaseProvider()) {
-                ensureMockBackend('store.deleteStoreItem');
                 repo.delete("storeItems", (i:any) => i.id === id);
                 CacheService.invalidate('admin_dashboard_data');
                 return { success: true };
@@ -475,7 +463,6 @@ export const AdminService = {
 
         toggleStoreItemStock: async (id: string) => {
             if (!isSupabaseProvider()) {
-                ensureMockBackend('store.toggleStoreItemStock');
                 const item = repo.select("storeItems").find((i:any) => i.id === id);
                 if (item) repo.update("storeItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock }));
                 CacheService.invalidate('admin_dashboard_data');
@@ -511,7 +498,6 @@ export const AdminService = {
         // (mantém os outros como mock por enquanto)
         saveUsableItem: async (item: UsableItem) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.saveUsableItem');
             return saveUsableItemHelper(item);
           }
 
@@ -554,7 +540,6 @@ export const AdminService = {
         },
         deleteUsableItem: async (id: string) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.deleteUsableItem');
             repo.delete("usableItems", (i:any) => i.id === id);
             return { success: true };
           }
@@ -570,7 +555,6 @@ export const AdminService = {
         },
         toggleUsableItemStock: async (id: string) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.toggleUsableItemStock');
             const item = repo.select("usableItems").find((i:any) => i.id === id);
             if (item) repo.update("usableItems", (i:any) => i.id === id, (i:any) => ({ ...item, isOutOfStock: !i.isOutOfStock }));
             return { success: true };
@@ -601,7 +585,6 @@ export const AdminService = {
 
         saveCoinPack: async (pack: any) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.saveCoinPack');
             return { success: false, error: 'mock_only' };
           }
 
@@ -663,7 +646,6 @@ export const AdminService = {
 
         deleteCoinPack: async (id: string) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.deleteCoinPack');
             return { success: false, error: 'mock_only' };
           }
 
@@ -679,7 +661,6 @@ export const AdminService = {
 
         toggleCoinPackStock: async (id: string) => {
           if (!isSupabaseProvider()) {
-            ensureMockBackend('store.toggleCoinPackStock');
             return { success: false, error: 'mock_only' };
           }
 
@@ -706,7 +687,6 @@ export const AdminService = {
 
         setEstimatedCompletionDate: async (itemId: string, date: string) => {
             if (!isSupabaseProvider()) {
-                ensureMockBackend('store.setEstimatedCompletionDate');
                 return { success: false, error: 'mock_only' };
             }
 
@@ -768,12 +748,10 @@ export const AdminService = {
     // --- QUEUE ---
     queue: {
         processQueueItem: (id: string) => {
-            ensureMockBackend('queue.processQueueItem');
             QueueEngineV5.processItem(id);
             return { success: true };
         },
         processArtistOfTheDayQueueItem: (id: string) => {
-            ensureMockBackend('queue.processArtistOfTheDayQueueItem');
             const queue = repo.select("spotlightQueue");
             const itemIndex = queue.findIndex((i:any) => i.id === id);
             
@@ -796,8 +774,8 @@ export const AdminService = {
 
     // --- SUBSCRIPTIONS ---
     subscriptions: {
-        approveSubscriptionRequest: (id: string) => { ensureMockBackend('subscriptions.approveSubscriptionRequest'); return approveUpgradeRequest(id); },
-        rejectSubscriptionRequest: (id: string) => { ensureMockBackend('subscriptions.rejectSubscriptionRequest'); return rejectUpgradeRequest(id); }
+        approveSubscriptionRequest: (id: string) => { return approveUpgradeRequest(id); },
+        rejectSubscriptionRequest: (id: string) => { return rejectUpgradeRequest(id); }
     },
 
     // --- EVENTS ---
@@ -806,28 +784,24 @@ export const AdminService = {
     // --- RAFFLES ---
   raffles: {
     saveRaffle: (...args: any[]) => {
-      if (!isSupabaseProvider()) ensureMockBackend('raffles.saveRaffle');
       const res = saveRaffleFn(...args as [any]);
       CacheService.invalidate('admin_dashboard_data');
       return res;
     },
 
     deleteRaffle: (...args: any[]) => {
-      if (!isSupabaseProvider()) ensureMockBackend('raffles.deleteRaffle');
       const res = deleteRaffleFn(...args as [any]);
       CacheService.invalidate('admin_dashboard_data');
       return res;
     },
 
     drawRaffleWinner: (...args: any[]) => {
-      if (!isSupabaseProvider()) ensureMockBackend('raffles.drawRaffleWinner');
       const res = drawRaffleWinnerFn(...args as [any]);
       CacheService.invalidate('admin_dashboard_data');
       return res;
     },
 
     adminSetHighlightedRaffle: (...args: any[]) => {
-      if (!isSupabaseProvider()) ensureMockBackend('raffles.adminSetHighlightedRaffle');
       const res = adminSetHighlightedRaffleFn(...args as [any]);
       CacheService.invalidate('admin_dashboard_data');
       return res;
@@ -836,17 +810,16 @@ export const AdminService = {
 
     // --- JACKPOT ---
     jackpot: {
-        adminDrawJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminDrawJackpot'); return adminDrawJackpotFn(...args as [any]); },
-        adminInjectJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminInjectJackpot'); return adminInjectJackpotFn(...args as [any]); },
-        adminEditJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminEditJackpot'); return adminEditJackpotFn(...args as [any]); },
-        fetchJackpotAnalytics: (...args: any[]) => { ensureMockBackend('jackpot.fetchJackpotAnalytics'); return fetchJackpotAnalyticsFn(...args as [any]); },
-        adminScheduleJackpot: (...args: any[]) => { ensureMockBackend('jackpot.adminScheduleJackpot'); return adminScheduleJackpotFn(...args as [any]); },
-        getDetailedStats: (...args: any[]) => { ensureMockBackend('jackpot.getDetailedStats'); return getJackpotDetailedStatsFn(...args as [any]); }
+        adminDrawJackpot: (...args: any[]) => { return adminDrawJackpotFn(...args as [any]); },
+        adminInjectJackpot: (...args: any[]) => { return adminInjectJackpotFn(...args as [any]); },
+        adminEditJackpot: (...args: any[]) => { return adminEditJackpotFn(...args as [any]); },
+        fetchJackpotAnalytics: (...args: any[]) => { return fetchJackpotAnalyticsFn(...args as [any]); },
+        adminScheduleJackpot: (...args: any[]) => { return adminScheduleJackpotFn(...args as [any]); },
+        getDetailedStats: (...args: any[]) => { return getJackpotDetailedStatsFn(...args as [any]); }
     },
     
     // --- UTILS ---
     manualRefund: async (itemId: string) => {
-        ensureMockBackend('manualRefund');
         const redeemed = repo.select("redeemedItems").find((r:any) => r.id === itemId);
         if (!redeemed || redeemed.status === 'Refunded') return { success: false };
         
@@ -865,7 +838,6 @@ export const AdminService = {
     },
     
     completeVisualReward: (itemId: string, completionUrl?: string) => {
-        ensureMockBackend('completeVisualReward');
         const redeemed = repo.select("redeemedItems").find((r:any) => r.id === itemId);
         if (!redeemed) return { success: false };
         
@@ -883,7 +855,6 @@ export const AdminService = {
     },
     
     createMissionFromQueue: (queueId: string, mission: Mission) => {
-        ensureMockBackend('createMissionFromQueue');
         const queueItem = repo.select("queue").find((q:any) => q.id === queueId);
         if (!queueItem) return { success: false, error: "Item not found" };
 
@@ -901,20 +872,17 @@ export const AdminService = {
     },
     
     convertQueueItemToMission: (queueId: string) => {
-         ensureMockBackend('convertQueueItemToMission');
          // Auto-conversion logic placeholder
          return { success: true };
     },
     
     // ... existing exports ...
     setArtistsOfTheDay: (ids: string[]) => {
-        ensureMockBackend('setArtistsOfTheDay');
         db.setArtistsOfTheDayIdsData(ids);
         return { success: true };
     },
     
     setArtistCarouselDuration: (duration: number) => {
-        ensureMockBackend('setArtistCarouselDuration');
         db.setArtistCarouselDurationData(duration);
         return { success: true };
     },
@@ -927,7 +895,6 @@ export const AdminService = {
     },
 
     saveSubscriptionPlan: (plan: SubscriptionPlan) => {
-        ensureMockBackend('saveSubscriptionPlan');
         const existing = repo.select("subscriptionPlans").find((p:any) => p.name === plan.name);
         if (existing) {
             repo.update("subscriptionPlans", (p:any) => p.name === plan.name, (p:any) => plan);
@@ -948,7 +915,6 @@ export const AdminService = {
         }
 
         // Mock path (mantém como era)
-        ensureMockBackend('saveAdvertisement');
         if (!ad.id) ad.id = `ad-${Date.now()}`;
         const existing = repo.select("advertisements").find((a:any) => a.id === ad.id);
         if (existing) {
@@ -970,13 +936,11 @@ export const AdminService = {
         }
 
         // Mock path (mantém como era)
-        ensureMockBackend('deleteAdvertisement');
         repo.delete("advertisements", (a:any) => a.id === id);
         return { success: true };
     },
     
     updateTerms: (content: string) => {
-        ensureMockBackend('updateTerms');
         db.setTermsAndConditionsContentData(content);
         // Persist setting if we had a settings table, for now in-memory variable mock
         return { success: true };
@@ -1008,7 +972,6 @@ export const AdminService = {
             return { success: true };
         }
 
-        ensureMockBackend('adminSubmitPaymentLink');
         const requests = repo.select('coinPurchaseRequests');
         const requestIndex = requests.findIndex((r: any) => r.id === requestId);
         if (requestIndex > -1) {
@@ -1035,7 +998,6 @@ export const AdminService = {
             return { success: true };
         }
 
-        ensureMockBackend('reviewCoinPurchase');
         const requests = repo.select('coinPurchaseRequests');
         const requestIndex = requests.findIndex((r: any) => r.id === requestId);
         if (requestIndex === -1) return { success: false };
@@ -1051,7 +1013,6 @@ export const AdminService = {
     },
     
     sendAdminNotification: (payload: { title: string; message: string; isGlobal: boolean; targetUserIds?: string[] }) => {
-        ensureMockBackend('sendAdminNotification');
         const { title, message, isGlobal, targetUserIds } = payload;
         
         // This usually goes to "adminNotifications" table which users pull from
@@ -1070,26 +1031,23 @@ export const AdminService = {
         return { success: true };
     },
 
-    saveFeaturedWinner: (winner: FeaturedWinner) => { ensureMockBackend('saveFeaturedWinner'); return AdminAwardsEngine.add(winner); },
+    saveFeaturedWinner: (winner: FeaturedWinner) => { return AdminAwardsEngine.add(winner); },
     deleteFeaturedWinner: (id: string) => {
-         ensureMockBackend('deleteFeaturedWinner');
          // This deletes from legacy list or unified? Usually legacy list in DB
          repo.delete("featuredWinners", (w:any) => w.id === id);
          return { success: true };
     },
     
-    adminRunSimulationStep: (stepName: any, payload?: any) => { ensureMockBackend('adminRunSimulationStep'); return runSimStep(stepName, payload); },
-    adminGetSimulationState: () => { ensureMockBackend('adminGetSimulationState'); return getSimState(); },
+    adminRunSimulationStep: (stepName: any, payload?: any) => { return runSimStep(stepName, payload); },
+    adminGetSimulationState: () => { return getSimState(); },
     
     // --- USERS & SYSTEM ---
     adminUpdateUser: (user: User) => {
-        ensureMockBackend('adminUpdateUser');
         const result = updateUserInDb(user);
         return { success: true, updatedUser: result };
     },
     
     punishUser: async (payload: { userId: string; type: PunishmentType; reason: string; durationDays?: number; deduction?: { coins?: number; xp?: number; } }) => {
-        ensureMockBackend('punishUser');
         const { userId, type, reason, deduction } = payload;
         const user = repo.select("users").find((u:any)=>u.id===userId);
         if(!user) return { success: false };
@@ -1121,23 +1079,20 @@ export const AdminService = {
     },
     
     unbanUser: async (userId: string) => {
-        ensureMockBackend('unbanUser');
         repo.update("users", (u:any)=>u.id===userId, (u:any)=>({ ...u, isBanned: false, banReason: null, banExpiresAt: null }));
         return { success: true };
     },
     
     resetMonthlyRanking: () => {
-        ensureMockBackend('resetMonthlyRanking');
         SeasonRankingEngine.resetSeason();
         return { success: true };
     },
     
-    fetchUserHistory: (userId: string) => { ensureMockBackend('fetchUserHistory'); return UserInspector.getFullProfile(userId); },
+    fetchUserHistory: (userId: string) => { return UserInspector.getFullProfile(userId); },
     
-    createManualAward: (...args: any[]) => { ensureMockBackend('createManualAward'); return ManualAwardsEngine.createAward(...args as [any]); },
+    createManualAward: (...args: any[]) => { return ManualAwardsEngine.createAward(...args as [any]); },
     
     adminDeliverEventPrizes: async (payload: { eventId: string, winners: any[], prizes: any, adminId: string }) => {
-        ensureMockBackend('adminDeliverEventPrizes');
         // Logic to distribute prizes based on manual confirmation
         const { eventId, winners, prizes, adminId } = payload;
         
