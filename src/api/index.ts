@@ -122,6 +122,16 @@ export {
     fetchAchievementsData
 };
 
+export const fetchArtistsOfTheDayFull = async () => {
+    const dashboard = await fetchDashboardData();
+    return dashboard?.artistsOfTheDay || [];
+};
+
+export const claimArtistOfDayReward = async (_userId: string, _artistId: string) => {
+    return { success: false, updatedUser: null };
+};
+
+
 export const fetchMissions = async (userId: string) => {
     if (config.backendProvider === 'supabase') {
         return fetchMissionsSupabase(userId);

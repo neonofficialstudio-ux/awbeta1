@@ -22,6 +22,7 @@ import Tabs from '../ui/navigation/Tabs';
 import Toolbar from '../ui/advanced/Toolbar';
 import { getDisplayName } from '../../api/core/getDisplayName';
 import { useAppContext } from '../../constants';
+import { adminSetArtistOfDay } from '../../api/index';
 
 interface ManageUsersProps {
   initialSubTab?: 'list' | 'metrics' | 'leads';
@@ -722,8 +723,7 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ initialSubTab, allUsers, miss
                                                 className="px-3 py-1 rounded-md bg-goldenYellow-500 text-black font-bold text-xs hover:bg-goldenYellow-400 transition"
                                                 onClick={async () => {
                                                     try {
-                                                        const api = await import('../../api/index');
-                                                        await api.adminSetArtistOfDay(user.id);
+                                                        await adminSetArtistOfDay(user.id);
                                                         toast.success('✅ Artista do Dia definido!');
                                                     } catch (e: any) {
                                                         console.error(e);
