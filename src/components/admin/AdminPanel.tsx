@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
-import { loadEmptyAdminDashboard } from '../../api/index';
+import { loadSupabaseAdminRepository } from '../../api/index';
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
@@ -122,7 +122,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
 
         try {
-            const baseEmptyAdminDashboard = (await loadEmptyAdminDashboard()) || localEmptyAdminDashboard;
+            const baseEmptyAdminDashboard = (await loadSupabaseAdminRepository()).emptyAdminDashboard || localEmptyAdminDashboard;
             const res = await Promise.resolve(AdminEngine.getDashboardData());
             const data = unwrapDashboard(res);
 
