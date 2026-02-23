@@ -13,6 +13,7 @@ import { getSupabase } from '../api/supabase/client';
 import { hasCheckedInToday } from '../api/supabase/supabase.repositories';
 import { ProfileSupabase } from '../api/supabase/profile';
 import { fetchMyLedger, fetchMyNotifications, getMyCheckinStreak, getMyLevelProgress, markNotificationRead, type CheckinStreakInfo, type LevelProgress } from '../api/supabase/economy';
+import { claimArtistOfDayReward, dailyCheckIn, fetchArtistsOfTheDayFull, fetchDashboardData, getArtistOfDay, recordArtistOfDayClick } from '../api/index';
 import { refreshAfterEconomyAction } from '../core/refreshAfterEconomyAction';
 import { calculateLevelFromXp, xpForLevelStart } from '../api/economy/economy';
 import { clearSessionCache } from '../lib/sessionCache';
@@ -136,8 +137,7 @@ const ArtistsOfTheDayCarousel: React.FC<{
 
         const loadArtists = async () => {
             try {
-                const api = await import('../api/index');
-                const data = await api.fetchArtistsOfTheDayFull();
+                const data = await fetchArtistsOfTheDayFull();
                 setArtists(data);
                 setCurrentIndex(0);
             } catch (e) {
@@ -173,9 +173,8 @@ const ArtistsOfTheDayCarousel: React.FC<{
         // ✅ Supabase mode: refresh forte controlado, só no clique
         if (isSupabase) {
             try {
-                const api = await import('../api/index');
-                await api.recordArtistOfDayClick(platform);
-                const aod = await api.getArtistOfDay();
+                await recordArtistOfDayClick(platform);
+                const aod = await getArtistOfDay();
                 if (aod?.success && aod?.has_artist) {
                     const artist = {
                         id: aod.artist.id,
@@ -243,8 +242,7 @@ const ArtistsOfTheDayCarousel: React.FC<{
         const completedCount = Object.values(updatedArtistProgress).filter(v => v === true).length;
         if (completedCount >= required && !updatedArtistProgress._rewarded && required > 0 && !isSupabase) {
             try {
-                const api = await import('../api/index');
-                const res = await api.claimArtistOfDayReward(activeUser.id, current.id);
+                const res = await claimArtistOfDayReward(activeUser.id, current.id);
                 if (res.success && res.updatedUser) {
                     updatedMap[key]._rewarded = true;
                     setProgress(updatedMap);
@@ -616,8 +614,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
             let artistOfDayDayUtc: string | null = null;
 
             try {
-                const api = await import('../api/index');
-                const payload = await api.getArtistOfDay();
+                const payload = await getArtistOfDay();
 
                 if (payload?.success && payload?.has_artist && payload?.artist) {
                     const a = payload.artist;
@@ -709,8 +706,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
                 }
             } catch {}
         } else {
-            const api = await import('../api/index');
-            const dashboardData = await api.fetchDashboardData();
+            const dashboardData = await fetchDashboardData();
             setData(dashboardData);
             const fallbackLedger = dashboardData?.ledger || [];
             setLedgerEntries(fallbackLedger);
@@ -959,8 +955,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
           if (debounce) window.clearTimeout(debounce);
           debounce = window.setTimeout(async () => {
             try {
-              const api = await import('../api/index');
-              const payload = await api.getArtistOfDay();
+              const payload = await getArtistOfDay();
               if (!alive) return;
 
               if (payload?.success && payload?.has_artist && payload?.artist) {
@@ -1115,8 +1110,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onShowArtistOfTheDay, onShowRewar
         clearSessionCache();
         lastLoadRef.current = 0;
 
-        const api = await import('../api/index');
-        const response = await api.dailyCheckIn(user.id);
+        const response = await dailyCheckIn(user.id);
 
         if (response?.updatedUser) {
             dispatch({ type: 'UPDATE_USER', payload: response.updatedUser });

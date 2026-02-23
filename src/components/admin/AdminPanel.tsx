@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
 import * as api from '../../api/index'; 
+import { loadEmptyAdminDashboard } from '../../api/index';
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
@@ -40,10 +41,6 @@ import {
   SettingsIcon,
   ShieldIcon 
 } from '../../constants';
-
-const loadAdminApi = async () => {
-    return await import('../../api/index');
-};
 
 const localEmptyAdminDashboard = {
     missions: [],
@@ -125,8 +122,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
 
         try {
-            const apiHub = await loadAdminApi();
-            const baseEmptyAdminDashboard = (await apiHub.loadEmptyAdminDashboard()) || localEmptyAdminDashboard;
+            const baseEmptyAdminDashboard = (await loadEmptyAdminDashboard()) || localEmptyAdminDashboard;
             const res = await Promise.resolve(AdminEngine.getDashboardData());
             const data = unwrapDashboard(res);
 

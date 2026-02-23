@@ -1,11 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { listAllMissions } from '../../../api/index'; // Updated import path to api/index where listAllMissions is exported
+import { listAllMissions, loadSupabaseAdminRepository } from '../../../api/index'; // Updated import path to api/index where listAllMissions is exported
 import { MissionIcon } from '../../../constants';
 import { config } from '../../../core/config';
-const loadAdminApi = async () => {
-  return await import("../../../api/index");
-};
 
 
 export default function WeeklyMissionsPanel() {
@@ -16,8 +13,7 @@ export default function WeeklyMissionsPanel() {
         try {
             let allMissions: any[] = [];
             if (config.backendProvider === 'supabase') {
-                const api = await loadAdminApi();
-                const { missions } = await (await api.loadSupabaseAdminRepository()).fetchAdminMissions();
+                const { missions } = await (await loadSupabaseAdminRepository()).fetchAdminMissions();
                 allMissions = missions || [];
             } else {
                 allMissions = await listAllMissions();

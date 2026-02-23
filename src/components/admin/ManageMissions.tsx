@@ -14,10 +14,7 @@ import { config } from '../../core/config';
 import { listSubmissionsSupabase, reviewSubmissionSupabase } from '../../api/supabase/admins/missions';
 import { fetchMissionSubmissionProofUrl } from '../../api/supabase/missionsProof';
 import { useAppContext } from '../../constants';
-
-const loadAdminApi = async () => {
-  return await import("../../api/index");
-};
+import { loadSupabaseAdminRepository } from '../../api/index';
 
 type AdminMissionFilter = 'active' | 'expired' | 'all';
 
@@ -116,8 +113,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       if (config.backendProvider === 'supabase') {
           setIsLoadingMissions(true);
           try {
-              const api = await loadAdminApi();
-              const response = await (await api.loadSupabaseAdminRepository()).fetchAdminMissions(filter);
+              const response = await (await loadSupabaseAdminRepository()).fetchAdminMissions(filter);
               if (response?.success) {
                   setMissionsData(response.missions || []);
               } else {
@@ -289,8 +285,7 @@ const ManageMissions: React.FC<ManageMissionsProps> = ({
       if (config.backendProvider !== 'supabase') return;
       setIsArchivingExpired(true);
       try {
-          const api = await loadAdminApi();
-          const response = await (await api.loadSupabaseAdminRepository()).archiveExpiredMissions();
+          const response = await (await loadSupabaseAdminRepository()).archiveExpiredMissions();
           if (!response?.success) {
               console.error('[ManageMissions] Supabase archive expired failed', response?.error);
           } else {

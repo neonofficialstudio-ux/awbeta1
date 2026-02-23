@@ -17,6 +17,15 @@ import AdminArtistsOfTheDayModal from './AdminArtistOfTheDayModal';
 import toast from 'react-hot-toast';
 import { getDisplayName } from '../../api/core/getDisplayName';
 import { getSupabase } from '../../api/supabase/client';
+import {
+  adminApplyArtistOfDayToday,
+  adminClearArtistOfDay,
+  adminListArtistOfDaySchedule,
+  adminScheduleArtistOfDay,
+  adminSetArtistOfDay,
+  adminUnscheduleArtistOfDay,
+  getArtistOfDay,
+} from '../../api/index';
 
 type AdminSubTab = 'ops_v4' | 'artist_of_day' | 'health' | 'telemetry_classic';
 
@@ -115,8 +124,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadAodSchedule = async () => {
     try {
       setIsAodLoading(true);
-      const api = await import('../../api/index');
-      const rows = await api.adminListArtistOfDaySchedule(undefined, undefined, 21);
+      const rows = await adminListArtistOfDaySchedule(undefined, undefined, 21);
       setAodSchedule(rows || []);
     } catch (e: any) {
       console.error(e);
@@ -145,8 +153,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const refreshCurrentArtist = async () => {
     try {
-      const api = await import('../../api/index');
-      const payload = await api.getArtistOfDay();
+      const payload = await getArtistOfDay();
       setCurrentArtistId(payload?.artist?.id || null);
     } catch (e) {
       console.error('[ArtistOfDay][admin] refresh current failed', e);
@@ -169,12 +176,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
       const pickedId = userIds[0];
-      const api = await import('../../api/index');
 
       setBusy(true);
 
       if (schedulePickDay) {
-        await api.adminScheduleArtistOfDay(schedulePickDay, pickedId);
+        await adminScheduleArtistOfDay(schedulePickDay, pickedId);
         toast.success('✅ Agendado!');
         setIsArtistModalOpen(false);
         setSchedulePickDay(null);
@@ -183,7 +189,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
 
-      await api.adminSetArtistOfDay(pickedId);
+      await adminSetArtistOfDay(pickedId);
       toast.success('✅ Artista do Dia definido!');
       await refreshCurrentArtist();
       await loadAodMetrics(aodMetricsDay);
@@ -199,8 +205,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const onClearToday = async () => {
     setBusy(true);
     try {
-      const api = await import('../../api/index');
-      await api.adminClearArtistOfDay();
+      await adminClearArtistOfDay();
       toast.success('✅ Artista do Dia removido (hoje)');
       await refreshCurrentArtist();
       await loadAodMetrics(aodMetricsDay);
@@ -214,8 +219,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleUnschedule = async (dayUtc: string) => {
     try {
-      const api = await import('../../api/index');
-      await api.adminUnscheduleArtistOfDay(dayUtc);
+      await adminUnscheduleArtistOfDay(dayUtc);
       toast.success('Agendamento removido');
       await loadAodSchedule();
     } catch (e: any) {
@@ -317,8 +321,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="px-3 py-2 rounded-lg bg-gold-cinematic/20 border border-gold-cinematic/30 text-gold-cinematic text-xs font-black hover:bg-gold-cinematic/30"
                     onClick={async () => {
                       try {
-                        const api = await import('../../api/index');
-                        const res = await api.adminApplyArtistOfDayToday();
+                        const res = await adminApplyArtistOfDayToday();
                         if (res?.applied) {
                           toast.success(`✅ Aplicado! (UTC ${res.day_utc})`);
                         } else {
