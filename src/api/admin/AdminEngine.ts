@@ -41,7 +41,7 @@ import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
 import { isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
-import { supabaseAdminRepository, emptyAdminDashboard, type AdminMissionFilter } from "../supabase/supabase.repositories.admin";
+import type { AdminMissionFilter } from "../supabase/supabase.repositories.admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
 import { getSupabase } from "../supabase/client";
 
@@ -55,6 +55,11 @@ const normalizeMissionScope = (value: any): 'weekly' | 'event' => {
 };
 
 const repo = getRepository();
+
+const loadSupabaseAdminRepo = async () => {
+    const mod = await import("../supabase/supabase.repositories.admin");
+    return mod;
+};
 
 // Cache in-memory para evitar burst de requests quando AdminPanel remonta
 let adminDashboardCache: any | null = null;
@@ -153,7 +158,7 @@ export const AdminService = {
                 }
 
                 adminDashboardInFlight = (async () => {
-                    const res = await supabaseAdminRepository.fetchAdminDashboard();
+                    const res = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.fetchAdminDashboard();
 
                     // Só cacheia sucesso (evita prender erro em cache)
                     if (res?.success) {
@@ -170,10 +175,10 @@ export const AdminService = {
                 if (!response?.success) {
                     console.error('[AdminEngine] Supabase dashboard fetch failed', response?.error);
                 }
-                return response?.data || emptyAdminDashboard;
+                return response?.data || (await loadSupabaseAdminRepo()).emptyAdminDashboard;
             } catch (err) {
                 console.error('[AdminEngine] getDashboardData supabase path failed', err);
-                return emptyAdminDashboard;
+                return (await loadSupabaseAdminRepo()).emptyAdminDashboard;
             }
         }
         return CacheService.remember('admin_dashboard_data', 3000, () => {
@@ -251,7 +256,7 @@ export const AdminService = {
     },
     fetchAdminMissions: async (filter: AdminMissionFilter = 'active') => {
         if (config.backendProvider === 'supabase') {
-            const response = await supabaseAdminRepository.fetchAdminMissions(filter);
+            const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.fetchAdminMissions(filter);
             if (!response?.success) {
                 console.error('[AdminEngine] fetchAdminMissions supabase failed', response?.error);
             }
@@ -272,7 +277,7 @@ export const AdminService = {
     },
     fetchHallOfFame: async () => {
         if (config.backendProvider === 'supabase') {
-            const response = await supabaseAdminRepository.fetchAdminHallOfFame();
+            const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.fetchAdminHallOfFame();
             if (!response?.success) {
                 console.error('[AdminEngine] fetchHallOfFame supabase failed', response?.error);
             }
@@ -282,7 +287,7 @@ export const AdminService = {
     },
     fetchAdminStats: async () => {
         if (config.backendProvider === 'supabase') {
-            const response = await supabaseAdminRepository.fetchAdminStats();
+            const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.fetchAdminStats();
             if (!response?.success) {
                 console.error('[AdminEngine] fetchAdminStats supabase failed', response?.error);
             }
@@ -302,7 +307,7 @@ export const AdminService = {
                             scope: normalizeMissionScope(mission.scope ?? mission.type),
                         };
 
-                        const response = await supabaseAdminRepository.missions.update(
+                        const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.missions.update(
                             mission.id,
                             safeMission
                         );
@@ -315,7 +320,7 @@ export const AdminService = {
 
                     // CREATE
                     const safeMission = { ...mission, scope: normalizeMissionScope(mission.scope ?? mission.type) };
-                    const response = await supabaseAdminRepository.missions.create(safeMission);
+                    const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.missions.create(safeMission);
                     if (!response.success) {
                         console.error('[AdminEngine] missions.create failed', response.error);
                     }
@@ -332,7 +337,7 @@ export const AdminService = {
         delete: async (missionId: string) => {
             if (isSupabaseProvider()) {
                 try {
-                    const response = await supabaseAdminRepository.missions.delete(missionId);
+                    const response = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.missions.delete(missionId);
                     if (!response?.success) {
                         console.error('[AdminEngine] missions.delete supabase failed', response?.error);
                     }
@@ -906,8 +911,7 @@ export const AdminService = {
     saveAdvertisement: async (ad: Advertisement) => {
         // ✅ Supabase path
         if (config.backendProvider === 'supabase') {
-            const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
-            const res = await supabaseAdminRepository.advertisements.save(ad as any);
+            const res = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.advertisements.save(ad as any);
             if (!res.success) return { success: false, error: res.error };
             invalidateAdminDashboardCache();
             return { success: true };
@@ -927,8 +931,7 @@ export const AdminService = {
     deleteAdvertisement: async (id: string) => {
         // ✅ Supabase path
         if (config.backendProvider === 'supabase') {
-            const { supabaseAdminRepository } = await import('../supabase/supabase.repositories.admin');
-            const res = await supabaseAdminRepository.advertisements.delete(id);
+            const res = await (await loadSupabaseAdminRepo()).supabaseAdminRepository.advertisements.delete(id);
             if (!res.success) return { success: false, error: res.error };
             invalidateAdminDashboardCache();
             return { success: true };
