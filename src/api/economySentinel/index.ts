@@ -22,10 +22,10 @@ import {
  * the game economy from inconsistencies.
  * 
  * How to use (example from browser console):
- * 1. Import the sentinel: `const sentinel = await import('./api/economySentinel');`
- * 2. Fetch data: `const data = await (await import('./api/index')).fetchAdminData();`
- * 3. Run a full scan: `const result = sentinel.runFullEconomyScan(data.allUsers, data.missions, data.missionSubmissions, data.redeemedItems, data.storeItems, data.usableItemQueue);`
- * 4. Generate a report: `const report = sentinel.generateEconomyHealthReport(result);`
+ * 1. Import the sentinel: `import { runFullEconomyScan, generateEconomyHealthReport } from './api/economySentinel';`
+ * 2. Fetch data: `import { fetchAdminData } from './api/index'; const data = await fetchAdminData();`
+ * 3. Run a full scan: `const result = runFullEconomyScan(data.allUsers, data.missions, data.missionSubmissions, data.redeemedItems, data.storeItems, data.usableItemQueue);`
+ * 4. Generate a report: `const report = generateEconomyHealthReport(result);`
  * 5. Log the report: `console.log(report);`
  */
 export {

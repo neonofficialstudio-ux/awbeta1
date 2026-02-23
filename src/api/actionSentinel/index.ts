@@ -10,10 +10,10 @@ import { generateActionHealthReport, generateCriticalActionAlerts } from './acti
  * and submissions to prevent abuse and ensure consistency with platform rules.
  * 
  * How to use (example from browser console):
- * 1. Import the sentinel: `const actionSentinel = await import('./api/actionSentinel');`
- * 2. Fetch data: `const data = await (await import('./api/index')).fetchAdminData();`
- * 3. Run a full scan: `const scanResult = actionSentinel.runFullActionScan(data.missions, data.missionSubmissions);`
- * 4. Generate a report: `const report = actionSentinel.generateActionHealthReport(scanResult);`
+ * 1. Import the sentinel: `import { runFullActionScan, generateActionHealthReport } from './api/actionSentinel';`
+ * 2. Fetch data: `import { fetchAdminData } from './api/index'; const data = await fetchAdminData();`
+ * 3. Run a full scan: `const scanResult = runFullActionScan(data.missions, data.missionSubmissions);`
+ * 4. Generate a report: `const report = generateActionHealthReport(scanResult);`
  * 5. Log the report: `console.log(report);`
  */
 export {
