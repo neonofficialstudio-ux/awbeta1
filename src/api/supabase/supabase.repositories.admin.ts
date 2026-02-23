@@ -1,3 +1,4 @@
+export type { AdminMissionFilter } from "../../types/admin";
 import { config } from '../../core/config';
 import { supabaseClient } from './client';
 import { isAdminCached } from './admin';
@@ -34,7 +35,6 @@ const mapAdRowToApp = (row: AdvertisementRow) => ({
   clicks: Number(row.clicks ?? 0),
 });
 
-export type AdminMissionFilter = 'active' | 'expired' | 'all';
 
 const ensureAdminClient = async () => {
   if (config.backendProvider !== 'supabase') return null;
