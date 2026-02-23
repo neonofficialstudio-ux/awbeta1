@@ -122,7 +122,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
 
         try {
-            const baseEmptyAdminDashboard = (await loadSupabaseAdminRepository()).emptyAdminDashboard || localEmptyAdminDashboard;
+            const baseEmptyAdminDashboard = localEmptyAdminDashboard;
             const res = await Promise.resolve(AdminEngine.getDashboardData());
             const data = unwrapDashboard(res);
 
