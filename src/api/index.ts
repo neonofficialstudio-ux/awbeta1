@@ -228,8 +228,6 @@ export {
     getEconomyAuditData,
     getUserAuditData,
     adminUpdateUser,
-    adminRunSimulationStep,
-    adminGetSimulationState,
     convertQueueItemToMission,
     saveMissionsBatch,
     createMissionFromQueue,
