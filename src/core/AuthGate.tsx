@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchTerms } from '../api/users';
 import AuthPage from '../components/AuthPage';
 import BannedUserPage from '../components/BannedUserPage';
 import BootScreen from '../components/BootScreen';
@@ -80,7 +80,7 @@ export const AuthGate = (): React.ReactElement => {
     useEffect(() => {
         if (!activeUser) {
             const fetchTermsContent = async () => {
-                const content = await api.fetchTerms();
+                const content = await fetchTerms();
                 setTermsContent(content);
             };
             fetchTermsContent();

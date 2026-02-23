@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type { Mission, MissionSubmission } from '../types';
 import { CoinIcon, XPIcon, InstagramIcon, TikTokIcon, StarIcon, VipIcon, HistoryIcon as ClockIcon, TrendingUpIcon, CheckIcon, YoutubeIcon, ShieldIcon } from '../constants';
 import { useAppContext } from '../constants';
-import * as api from '../api/index';
+import { fetchMissions, submitMission } from '../api/missions/public';
 import SubmissionSuccessModal from './SubmissionSuccessModal';
 import { getMyPlanBenefits } from '../api/subscriptions/planBenefits';
 import { getMyMissionQuota, type MissionQuota } from '../api/subscriptions/missionQuota';
@@ -596,7 +596,7 @@ const Missions: React.FC = () => {
         setError(null);
         Perf.mark('missions_data_fetch');
         try {
-            const data = await api.fetchMissions(user.id);
+            const data = await fetchMissions(user.id);
             let nextPlanBenefits: any = null;
             try {
                 nextPlanBenefits = await getMyPlanBenefits();
@@ -643,7 +643,7 @@ const Missions: React.FC = () => {
     const handleSubmitMission = useCallback(async (missionId: string, proof: string) => {
         if (!user) return;
         try {
-            const response = await api.submitMission(user.id, missionId, proof);
+            const response = await submitMission(user.id, missionId, proof);
             if (!response.success) {
                 throw new Error(response.message || 'Falha ao enviar missão.');
             }

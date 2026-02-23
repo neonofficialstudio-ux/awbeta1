@@ -4,7 +4,7 @@ import type { Mission } from '../../types';
 import { prepareGeneratedMission } from '../../api/helpers';
 import AdminMissionModal from './AdminMissionModal';
 import { EditIcon, CheckIcon } from '../../constants';
-import { generateIndividualMissionAPI, generateWeeklyMissionsAPI } from '../../api/index';
+import { generateIndividualMissionAPI, generateWeeklyMissionsAPI } from '../../api/missions/public';
 import { TelemetryPRO } from '../../services/telemetry.pro';
 
 interface GeneratedMission {

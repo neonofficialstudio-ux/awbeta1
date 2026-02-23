@@ -1,5 +1,5 @@
 
-import * as api from '../api/index';
+import { fetchWeeklyMissions } from '../api/missions/public';
 import { rankingAPI } from '../api/ranking/index';
 import { QueueEngineV5 } from '../api/queue/queueEngineV5';
 import { DashboardEngine } from '../services/dashboard/dashboard.engine';
@@ -47,7 +47,7 @@ export const MasterSync = {
             }
 
             // 2. Fetch Missions
-            const weeklyMissions = api.fetchWeeklyMissions(); // V4.2 API
+            const weeklyMissions = fetchWeeklyMissions(); // V4.2 API
             dispatch({ type: 'MISSIONS_SYNC_WEEKLY', payload: weeklyMissions });
 
             // 3. Fetch Ranking

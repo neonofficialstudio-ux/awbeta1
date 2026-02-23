@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Mission, StoreItem, UsableItem, User, MissionSubmission, SubmissionStatus, RedeemedItem, Participation, UsableItemQueueEntry, CoinTransaction, Advertisement, SubscriptionPlan, SubscriptionRequest, CoinPack, CoinPurchaseRequest, AdminTab, AdminStoreTab } from '../../types';
-import * as api from '../../api/index'; 
-import { loadSupabaseAdminRepository } from '../../api/index';
+import { adminSubmitPaymentLink, adminUpdateUser, approveAllPendingSubmissions, approveSubscriptionRequest, completeVisualReward, convertQueueItemToMission, createMissionFromQueue, deleteAdvertisement, deleteMission, deleteRaffle, deleteStoreItem, deleteUsableItem, drawRaffleWinner, editSubmissionStatus, manualRefund, processArtistOfTheDayQueueItem, processQueueItem, punishUser, rejectSubscriptionRequest, reviewCoinPurchase, reviewSubmission, saveAdvertisement, saveCoinPack, saveMission, saveMissionsBatch, saveRaffle, saveStoreItem, saveSubscriptionPlan, saveUsableItem, sendAdminNotification, setEstimatedCompletionDate, setFeaturedMission, toggleCoinPackStock, toggleStoreItemStock, toggleUsableItemStock, unbanUser, updateTerms } from '../../api/admin';
+import { loadSupabaseAdminRepository } from '../../api/admin/loader';
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
@@ -188,7 +188,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         });
     }, [adminData, activeTab, activeEconomySubTab, dispatch]);
     
-    const onUnbanUser = (userId: string) => handleAdminAction(api.unbanUser(userId));
+    const onUnbanUser = (userId: string) => handleAdminAction(unbanUser(userId));
 
     // Safe destructuring + hard normalization (prevents ".filter is not a function" crashes)
     // Hooks abaixo agora sempre rodam (adminData nunca é null)
@@ -303,13 +303,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return <AntiCrashBoundary><ManageMissions 
                     {...adminData}
                     initialSubTab={adminMissionsInitialSubTab}
-                    onSaveMission={(m: Mission) => handleAdminAction(api.saveMission(m))} 
-                    onDeleteMission={(id: string) => handleAdminAction(api.deleteMission(id))} 
-                    setFeaturedMissionId={(id: string | null) => handleAdminAction(api.setFeaturedMission(id))} 
-                    onReview={async (id: string, s: 'approved' | 'rejected') => handleAdminAction(api.reviewSubmission(id, s))} 
-                    onEditStatus={async (id: string, s: SubmissionStatus) => handleAdminAction(api.editSubmissionStatus(id, s))}
-                    onBatchApprove={() => handleAdminAction(api.approveAllPendingSubmissions())}
-                    onBatchSaveMissions={(missions: Mission[]) => handleAdminAction(api.saveMissionsBatch(missions))}
+                    onSaveMission={(m: Mission) => handleAdminAction(saveMission(m))} 
+                    onDeleteMission={(id: string) => handleAdminAction(deleteMission(id))} 
+                    setFeaturedMissionId={(id: string | null) => handleAdminAction(setFeaturedMission(id))} 
+                    onReview={async (id: string, s: 'approved' | 'rejected') => handleAdminAction(reviewSubmission(id, s))} 
+                    onEditStatus={async (id: string, s: SubmissionStatus) => handleAdminAction(editSubmissionStatus(id, s))}
+                    onBatchApprove={() => handleAdminAction(approveAllPendingSubmissions())}
+                    onBatchSaveMissions={(missions: Mission[]) => handleAdminAction(saveMissionsBatch(missions))}
                 /></AntiCrashBoundary>;
             case 'users':
                 return (
@@ -317,8 +317,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <ManageUsers
                             {...adminData}
                             initialSubTab={adminUsersInitialSubTab}
-                            onUpdateUser={(u: User) => handleAdminAction(api.adminUpdateUser(u))}
-                            onPunishUser={(p: any) => handleAdminAction(api.punishUser(p))}
+                            onUpdateUser={(u: User) => handleAdminAction(adminUpdateUser(u))}
+                            onPunishUser={(p: any) => handleAdminAction(punishUser(p))}
                             onUnbanUser={onUnbanUser}
                             // ✅ agora serve apenas para atualizar os dados do admin após fechar/premiar
                             onResetMonthlyRanking={refreshAdminData}
@@ -329,25 +329,25 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             case 'store':
                 return <AntiCrashBoundary><ManageStore 
                     {...adminData} 
-                    onSaveStoreItem={(i: StoreItem) => handleAdminAction(api.saveStoreItem(i))} 
-                    onDeleteStoreItem={(id: string) => handleAdminAction(api.deleteStoreItem(id))} 
-                    onToggleStoreItemStock={(id: string) => handleAdminAction(api.toggleStoreItemStock(id))} 
-                    onSaveUsableItem={(i: UsableItem) => handleAdminAction(api.saveUsableItem(i))} 
-                    onDeleteUsableItem={(id: string) => handleAdminAction(api.deleteUsableItem(id))} 
-                    onToggleUsableItemStock={(id: string) => handleAdminAction(api.toggleUsableItemStock(id))} 
-                    onSaveCoinPack={(p: CoinPack) => handleAdminAction(api.saveCoinPack(p))} 
-                    onToggleCoinPackStock={(id: string) => handleAdminAction(api.toggleCoinPackStock(id))} 
-                    onReviewCoinPurchase={(id: string, s: 'approved' | 'rejected') => handleAdminAction(api.reviewCoinPurchase(id, s))} 
+                    onSaveStoreItem={(i: StoreItem) => handleAdminAction(saveStoreItem(i))} 
+                    onDeleteStoreItem={(id: string) => handleAdminAction(deleteStoreItem(id))} 
+                    onToggleStoreItemStock={(id: string) => handleAdminAction(toggleStoreItemStock(id))} 
+                    onSaveUsableItem={(i: UsableItem) => handleAdminAction(saveUsableItem(i))} 
+                    onDeleteUsableItem={(id: string) => handleAdminAction(deleteUsableItem(id))} 
+                    onToggleUsableItemStock={(id: string) => handleAdminAction(toggleUsableItemStock(id))} 
+                    onSaveCoinPack={(p: CoinPack) => handleAdminAction(saveCoinPack(p))} 
+                    onToggleCoinPackStock={(id: string) => handleAdminAction(toggleCoinPackStock(id))} 
+                    onReviewCoinPurchase={(id: string, s: 'approved' | 'rejected') => handleAdminAction(reviewCoinPurchase(id, s))} 
                     initialSubTab={adminStoreInitialSubTab} 
-                    onAdminSubmitPaymentLink={(id: string, link: string) => handleAdminAction(api.adminSubmitPaymentLink(id, link))}
-                    onRefund={(id: string) => handleAdminAction(api.manualRefund(id))} 
-                    onComplete={(id: string, url?: string) => handleAdminAction(api.completeVisualReward(id, url))}
-                    onSetDeadline={(id: string, date: string) => handleAdminAction(api.setEstimatedCompletionDate(id, date))}
+                    onAdminSubmitPaymentLink={(id: string, link: string) => handleAdminAction(adminSubmitPaymentLink(id, link))}
+                    onRefund={(id: string) => handleAdminAction(manualRefund(id))} 
+                    onComplete={(id: string, url?: string) => handleAdminAction(completeVisualReward(id, url))}
+                    onSetDeadline={(id: string, date: string) => handleAdminAction(setEstimatedCompletionDate(id, date))}
                     // ✅ Reuso dos handlers do módulo Filas dentro da Central de Operações (Loja)
-                    onProcessItemQueue={(id: string) => handleAdminAction(api.processQueueItem(id))}
-                    onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))}
-                    onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
-                    onCreateMissionFromQueue={(id: string, mission: any) => handleAdminAction(api.createMissionFromQueue(id, mission))}
+                    onProcessItemQueue={(id: string) => handleAdminAction(processQueueItem(id))}
+                    onProcessSpotlightQueue={(id: string) => handleAdminAction(processArtistOfTheDayQueueItem(id))}
+                    onConvertItemToMission={(id: string) => handleAdminAction(convertQueueItemToMission(id))}
+                    onCreateMissionFromQueue={(id: string, mission: any) => handleAdminAction(createMissionFromQueue(id, mission))}
                 /></AntiCrashBoundary>;
             case 'queues':
                 // ✅ Atalho enterprise: Filas = Loja → Operação → Filas (fonte única)
@@ -356,23 +356,23 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     <ManageStore
                       {...adminData}
                       initialSubTab={'queues' as any}
-                      onSaveStoreItem={(i: StoreItem) => handleAdminAction(api.saveStoreItem(i))}
-                      onDeleteStoreItem={(id: string) => handleAdminAction(api.deleteStoreItem(id))}
-                      onToggleStoreItemStock={(id: string) => handleAdminAction(api.toggleStoreItemStock(id))}
-                      onSaveUsableItem={(i: UsableItem) => handleAdminAction(api.saveUsableItem(i))}
-                      onDeleteUsableItem={(id: string) => handleAdminAction(api.deleteUsableItem(id))}
-                      onToggleUsableItemStock={(id: string) => handleAdminAction(api.toggleUsableItemStock(id))}
-                      onSaveCoinPack={(p: CoinPack) => handleAdminAction(api.saveCoinPack(p))}
-                      onToggleCoinPackStock={(id: string) => handleAdminAction(api.toggleCoinPackStock(id))}
-                      onReviewCoinPurchase={(id: string, s: 'approved' | 'rejected') => handleAdminAction(api.reviewCoinPurchase(id, s))}
-                      onAdminSubmitPaymentLink={(id: string, link: string) => handleAdminAction(api.adminSubmitPaymentLink(id, link))}
-                      onRefund={(id: string) => handleAdminAction(api.manualRefund(id))}
-                      onComplete={(id: string, url?: string) => handleAdminAction(api.completeVisualReward(id, url))}
-                      onSetDeadline={(id: string, date: string) => handleAdminAction(api.setEstimatedCompletionDate(id, date))}
-                      onProcessItemQueue={(id: string) => handleAdminAction(api.processQueueItem(id))}
-                      onProcessSpotlightQueue={(id: string) => handleAdminAction(api.processArtistOfTheDayQueueItem(id))}
-                      onConvertItemToMission={(id: string) => handleAdminAction(api.convertQueueItemToMission(id))}
-                      onCreateMissionFromQueue={(id: string, mission: Mission) => handleAdminAction(api.createMissionFromQueue(id, mission))}
+                      onSaveStoreItem={(i: StoreItem) => handleAdminAction(saveStoreItem(i))}
+                      onDeleteStoreItem={(id: string) => handleAdminAction(deleteStoreItem(id))}
+                      onToggleStoreItemStock={(id: string) => handleAdminAction(toggleStoreItemStock(id))}
+                      onSaveUsableItem={(i: UsableItem) => handleAdminAction(saveUsableItem(i))}
+                      onDeleteUsableItem={(id: string) => handleAdminAction(deleteUsableItem(id))}
+                      onToggleUsableItemStock={(id: string) => handleAdminAction(toggleUsableItemStock(id))}
+                      onSaveCoinPack={(p: CoinPack) => handleAdminAction(saveCoinPack(p))}
+                      onToggleCoinPackStock={(id: string) => handleAdminAction(toggleCoinPackStock(id))}
+                      onReviewCoinPurchase={(id: string, s: 'approved' | 'rejected') => handleAdminAction(reviewCoinPurchase(id, s))}
+                      onAdminSubmitPaymentLink={(id: string, link: string) => handleAdminAction(adminSubmitPaymentLink(id, link))}
+                      onRefund={(id: string) => handleAdminAction(manualRefund(id))}
+                      onComplete={(id: string, url?: string) => handleAdminAction(completeVisualReward(id, url))}
+                      onSetDeadline={(id: string, date: string) => handleAdminAction(setEstimatedCompletionDate(id, date))}
+                      onProcessItemQueue={(id: string) => handleAdminAction(processQueueItem(id))}
+                      onProcessSpotlightQueue={(id: string) => handleAdminAction(processArtistOfTheDayQueueItem(id))}
+                      onConvertItemToMission={(id: string) => handleAdminAction(convertQueueItemToMission(id))}
+                      onCreateMissionFromQueue={(id: string, mission: Mission) => handleAdminAction(createMissionFromQueue(id, mission))}
                     />
                   </AntiCrashBoundary>
                 );
@@ -383,9 +383,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     {...adminData}
                     highlightedRaffleId={adminData.highlightedRaffleId || null}
                     refreshAdminData={refreshAdminData}
-                    onSaveRaffle={(r: any) => handleAdminAction(api.saveRaffle(r))}
-                    onDeleteRaffle={(id: string) => handleAdminAction(api.deleteRaffle(id))}
-                    onDrawWinner={(id: string) => handleAdminAction(api.drawRaffleWinner(id))}
+                    onSaveRaffle={(r: any) => handleAdminAction(saveRaffle(r))}
+                    onDeleteRaffle={(id: string) => handleAdminAction(deleteRaffle(id))}
+                    onDrawWinner={(id: string) => handleAdminAction(drawRaffleWinner(id))}
                 /></AntiCrashBoundary>;
             case 'subscriptions':
                 return (
@@ -396,13 +396,13 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             subscriptionStats={adminData.subscriptionStats}
                             subscriptionHistory={adminData.subscriptionHistory}
                             subscriptionPlans={adminData.subscriptionPlans}
-                            onSavePlan={(plan) => handleAdminAction(api.saveSubscriptionPlan(plan))}
+                            onSavePlan={(plan) => handleAdminAction(saveSubscriptionPlan(plan))}
                             onApprove={async (id) => {
-                                await handleAdminAction(api.approveSubscriptionRequest(id));
+                                await handleAdminAction(approveSubscriptionRequest(id));
                                 await refreshAdminData();
                             }}
                             onReject={async (id) => {
-                                await handleAdminAction(api.rejectSubscriptionRequest(id));
+                                await handleAdminAction(rejectSubscriptionRequest(id));
                                 await refreshAdminData();
                             }}
                         />
@@ -432,21 +432,21 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             {activeSettingsSubTab === 'advertisements' && (
                                 <ManageAdvertisements 
                                     {...adminData} 
-                                    onSave={(ad: Advertisement) => handleAdminAction(api.saveAdvertisement(ad))} 
-                                    onDelete={(id: string) => handleAdminAction(api.deleteAdvertisement(id))} 
+                                    onSave={(ad: Advertisement) => handleAdminAction(saveAdvertisement(ad))} 
+                                    onDelete={(id: string) => handleAdminAction(deleteAdvertisement(id))} 
                                 />
                             )}
                             {activeSettingsSubTab === 'notifications' && (
                                 <ManageNotifications 
                                     initialType={notificationsInitialType}
                                     allUsers={adminData.allUsers} 
-                                    onSend={(payload: any) => handleAdminAction(api.sendAdminNotification(payload))} 
+                                    onSend={(payload: any) => handleAdminAction(sendAdminNotification(payload))} 
                                 />
                             )}
                             {activeSettingsSubTab === 'terms' && (
                                 <ManageSettings 
                                     {...adminData} 
-                                    onUpdateTerms={(t: string) => handleAdminAction(api.updateTerms(t))} 
+                                    onUpdateTerms={(t: string) => handleAdminAction(updateTerms(t))} 
                                 />
                             )}
                         </div>

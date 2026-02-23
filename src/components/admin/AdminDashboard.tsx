@@ -25,7 +25,7 @@ import {
   adminSetArtistOfDay,
   adminUnscheduleArtistOfDay,
   getArtistOfDay,
-} from '../../api/index';
+} from '../../api/supabase/artistOfDay';
 
 type AdminSubTab = 'ops_v4' | 'artist_of_day' | 'health' | 'telemetry_classic';
 
