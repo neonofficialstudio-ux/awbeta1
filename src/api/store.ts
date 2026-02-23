@@ -1,14 +1,11 @@
 // api/store.ts
-import type { User, Notification, StoreItem, UsableItem, CoinPack, CoinPurchaseRequest, VisualRewardFormData, RedeemedItem, Raffle, RaffleTicket, UsableItemQueueEntry, ArtistOfTheDayQueueEntry } from '../types';
-import * as db from './mockData';
+import type { User, Notification, StoreItem, UsableItem, CoinPack, CoinPurchaseRequest, VisualRewardFormData, Raffle, RaffleTicket } from '../types';
 import { withLatency, createNotification, updateUserInDb } from './helpers';
-import { QueueEngineV5 } from './queue/queueEngineV5'; 
 import { sanitizeLink, checkLinkSafety } from './quality';
 import { StoreEconomyEngine } from '../services/store/storeEconomy.engine';
 import { SanityGuard } from '../services/sanity.guard';
 import { getRepository } from './database/repository.factory';
 import { EconomyEngineV6 } from './economy/economyEngineV6'; // Use V6 for atomic purchases
-import { saveMockDb } from './database/mock-db';
 import { socialLinkValidator } from './quality/socialLinkValidator';
 import { StoreSupabase } from './supabase/store';
 import { config } from '../core/config';
@@ -139,15 +136,7 @@ export const fetchStoreData = (userId: string) => withLatency(async () => {
         };
     }
 
-    return {
-        success: true,
-        data: {
-            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
-            usableItems: db.usableItemsData,
-            coinPacks: db.coinPacksData,
-            coinPurchaseRequests: repo.select("coinPurchaseRequests").filter((cpr: any) => cpr.userId === userId),
-        }
-    };
+    return { success: false, error: 'not_supabase' };
 });
 
 export const fetchInventoryData = (userId: string) => withLatency(async () => {
@@ -329,16 +318,7 @@ export const fetchInventoryData = (userId: string) => withLatency(async () => {
     };
     }
 
-    return {
-        success: true,
-        data: {
-            redeemedItems: db.redeemedItemsData.filter(ri => ri.userId === userId),
-            storeItems: db.storeItemsData.map(SanityGuard.storeItem),
-            usableItems: db.usableItemsData,
-            usableItemQueue: (QueueEngineV5.getQueue('item') as UsableItemQueueEntry[]).map(SanityGuard.queueItem),
-            artistOfTheDayQueue: [],
-        }
-    };
+    return { success: false, error: 'not_supabase' };
 });
 
 export const redeemItem = (userId: string, itemId: string) => withLatency(async () => {
@@ -444,40 +424,7 @@ export const useUsableItem = (
             return { success: false, error: e?.message || 'Falha ao iniciar produção (utilizável)' };
         }
     }
-    const sanitizedUrl = sanitizeLink(postUrl);
-    const safetyCheck = checkLinkSafety(sanitizedUrl);
-    if (!safetyCheck.safe) return { success: false, error: safetyCheck.reason };
-
-    const user = repo.select("users").find((u: any) => u.id === userId);
-    const redeemedItem = repo.select("redeemedItems").find((ri: any) => ri.id === redeemedItemId);
-    
-    if (!user || !redeemedItem) return { success: false, error: "User or item not found" };
-
-    // Platform Validation Check
-    const usableItem = repo.select("usableItems").find((ui: any) => ui.id === redeemedItem.itemId);
-    if (usableItem && usableItem.platform && usableItem.platform !== 'all') {
-         const detectedPlatform = socialLinkValidator.getPlatform(sanitizedUrl);
-         if (detectedPlatform !== usableItem.platform) {
-             return { success: false, error: `Link inválido. Este item requer um link do ${usableItem.platform}.` };
-         }
-    }
-    
-    const queueEntry = {
-        id: `q-${Date.now()}`, userId, userName: user.name, userAvatar: user.avatarUrl, redeemedItemId,
-        itemName: redeemedItem.itemName, queuedAt: new Date().toISOString(), postUrl: sanitizedUrl,
-    };
-    
-    QueueEngineV5.addToQueue(queueEntry, 'item');
-
-    // Update Redeemed Item status
-    repo.update("redeemedItems", (ri: any) => ri.id === redeemedItemId, (ri: any) => ({ ...ri, status: 'InProgress' }));
-    saveMockDb();
-    
-    const notifications: Notification[] = [
-        createNotification(userId, "Solicitação Enviada", `Sua solicitação para "${redeemedItem.itemName}" foi enviada para a fila de produção.`, { view: 'inventory', tab: 'usable' })
-    ];
-
-    return { success: true, notifications };
+    return { success: false, error: 'not_supabase' };
 });
 
 export const queueForArtistOfTheDay = (userId: string, redeemedItemId: string) => withLatency(() => {
@@ -699,26 +646,7 @@ export const submitVisualRewardForm = (
         };
     }
 
-    // MOCK path (mantém o comportamento atual)
-    const item = repo.select("redeemedItems").find((ri: any) => ri.id === redeemedItemId);
-    if (!item) return { success: false, error: "Item not found" };
-
-    const updatedItem: RedeemedItem = {
-        ...item,
-        status: 'InProgress' as const,
-        formData: formData,
-        productionStartedAt: new Date().toISOString(),
-    };
-
-    repo.update("redeemedItems", (ri: any) => ri.id === redeemedItemId, (ri: any) => updatedItem);
-    saveMockDb();
-
-    const notifications: Notification[] = [
-        createNotification(userId, `Briefing enviado`, `Sua solicitação para "${item.itemName}" enviada.`, { view: 'inventory', tab: 'history' })
-    ];
-    repo.insert("notifications", notifications[0]);
-
-    return { success: true, updatedItem, notifications };
+    return { success: false, error: 'not_supabase' };
 });
 
 export const getMyRequests = (category?: string) => withLatency(async () => {
