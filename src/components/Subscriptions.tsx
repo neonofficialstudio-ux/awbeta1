@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import type { SubscriptionPlan, User, IconComponent } from '../types';
 import { useAppContext } from '../constants';
 import { cancelSubscription, fetchSubscriptionsPageData } from '../api/users';
-import ConfirmationModal from './admin/ConfirmationModal';
 import { StarIcon, CheckIcon, CrownIcon, ShieldIcon, TrendingUpIcon, CoinIcon, XPIcon, QueueIcon, DiscountIcon, VipIcon, MissionIcon, StoreIcon } from '../constants';
 import { PLANS } from '../api/subscriptions/constants';
 import { normalizePlanId } from '../api/subscriptions/normalizePlan';
@@ -13,6 +12,8 @@ import { getAllPlanOffers, type PlanOffer } from '../api/subscriptions/planOffer
 import FaqItem from './ui/patterns/FaqItem';
 import { createPagbankCheckout, verifyPagbankCheckout } from '../api/subscriptions/pagbankCheckout';
 import { ProfileSupabase } from '../api/supabase/profile';
+
+const ConfirmationModal = React.lazy(() => import('./admin/ConfirmationModal'));
 
 // --- THEME CONFIGURATION ---
 
@@ -929,20 +930,22 @@ const Subscriptions: React.FC = () => {
             </div>
         )}
 
-        <ConfirmationModal
-            isOpen={isCancelModalOpen}
-            onClose={() => setIsCancelModalOpen(false)}
-            onConfirm={handleCancelSubscription}
-            title="Confirmar Cancelamento"
-            message={
-                <>
-                    <p className="text-white text-lg mb-2">Tem certeza que deseja cancelar?</p>
-                    <p className="text-sm text-gray-400">Você retornará ao plano 'Free Flow' após o término do período atual. Seus benefícios de assinante continuarão ativos até lá.</p>
-                </>
-            }
-            confirmButtonText={isCancelling ? 'Cancelando...' : 'Sim, Confirmar'}
-            confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
-        />
+        <Suspense fallback={null}>
+            <ConfirmationModal
+                isOpen={isCancelModalOpen}
+                onClose={() => setIsCancelModalOpen(false)}
+                onConfirm={handleCancelSubscription}
+                title="Confirmar Cancelamento"
+                message={
+                    <>
+                        <p className="text-white text-lg mb-2">Tem certeza que deseja cancelar?</p>
+                        <p className="text-sm text-gray-400">Você retornará ao plano 'Free Flow' após o término do período atual. Seus benefícios de assinante continuarão ativos até lá.</p>
+                    </>
+                }
+                confirmButtonText={isCancelling ? 'Cancelando...' : 'Sim, Confirmar'}
+                confirmButtonClass="bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-wide text-xs py-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+            />
+        </Suspense>
 
     </div>
   );

@@ -21,7 +21,6 @@ import WelcomeModal from '../components/WelcomeModal';
 import LevelUpModal from '../components/LevelUpModal';
 import RewardClaimedModal from '../components/RewardClaimedModal';
 import ArtistOfTheDayModal from '../components/ArtistOfTheDayModal';
-import AdminUserHistoryModal from '../components/admin/AdminUserHistoryModal';
 import SubscriptionSuccessModal from '../components/SubscriptionSuccessModal';
 import RaffleWinnerModal from '../components/RaffleWinnerModal';
 import AdminNotificationModal from '../components/AdminNotificationModal';
@@ -38,6 +37,7 @@ const Raffles = React.lazy(() => import('../components/Raffles'));
 const Subscriptions = React.lazy(() => import('../components/Subscriptions'));
 const Profile = React.lazy(() => import('../components/Profile'));
 const AdminPanel = React.lazy(() => import('../components/admin/AdminPanel'));
+const AdminUserHistoryModal = React.lazy(() => import('../components/admin/AdminUserHistoryModal'));
 
 const MenuIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -368,7 +368,11 @@ export const MainLayout: React.FC = () => {
     const renderActiveModal = () => {
         // 1. Admin/User History (Explicit Action)
         if (viewingUserHistory && historyData) {
-            return <AdminUserHistoryModal user={viewingUserHistory} onClose={() => setViewingUserHistory(null)} {...historyData} />;
+            return (
+                <Suspense fallback={null}>
+                    <AdminUserHistoryModal user={viewingUserHistory} onClose={() => setViewingUserHistory(null)} {...historyData} />
+                </Suspense>
+            );
         }
 
         // 2. High Priority Events (Welcome, Level Up, Win)
