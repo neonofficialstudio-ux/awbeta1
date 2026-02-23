@@ -3,7 +3,6 @@ import { createNotification, updateUserInDb } from '../helpers';
 import { normalizeUpgradeRequest } from './normalizer';
 import type { SubscriptionRequest, User } from '../../types';
 import { syncAppState } from '../state/sync';
-import { saveMockDb } from '../database/mock-db';
 import { LogEngineV4 } from '../admin/logEngineV4';
 
 const repo = getRepository();
@@ -63,9 +62,6 @@ export async function approveUpgradeRequest(requestId: string) {
   );
   repo.insert('notifications', notification);
 
-  // 4. FORCE DB PERSISTENCE (localStorage)
-  saveMockDb();
-
   // 5. Sync UI State
   await syncAppState();
 
@@ -104,9 +100,6 @@ export async function rejectUpgradeRequest(requestId: string) {
     { view: 'subscriptions' },
   );
   repo.insert('notifications', notification);
-
-  // 3. FORCE DB PERSISTENCE
-  saveMockDb();
 
   // 4. Sync UI
   await syncAppState();
