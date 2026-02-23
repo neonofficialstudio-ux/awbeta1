@@ -169,3 +169,56 @@ export const submitMissionSupabase = async (_userId: string, missionId: string, 
         };
     }
 };
+
+// -----------------------------
+// Admin/Backoffice helpers (Supabase)
+// -----------------------------
+
+/**
+ * Lista TODAS as missões (admin/backoffice).
+ * Observação:
+ * - RLS deve garantir que apenas admin consiga ler tudo.
+ * - Limite defensivo para evitar payload gigante.
+ */
+export const listAllMissionsSupabase = async () => {
+  const supabase = ensureClient();
+  if (!supabase) return [] as Mission[];
+
+  try {
+    const { data, error } = await supabase
+      .from("missions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error || !data) return [] as Mission[];
+    return data.map(mapMissionToApp);
+  } catch (err) {
+    console.error("[SupabaseMissions] listAllMissionsSupabase failed", err);
+    return [] as Mission[];
+  }
+};
+
+/**
+ * Missões semanais (para painel/admin e sync/state):
+ * - segue a lógica legada: !eventId e status 'active'
+ * - usa a listagem ativa (já existente) para reduzir payload.
+ */
+export const fetchWeeklyMissionsSupabase = async () => {
+  const supabase = ensureClient();
+  if (!supabase) return [] as Mission[];
+
+  try {
+    const missionsRes = await fetchActiveMissions();
+    const missions =
+      missionsRes.error || !missionsRes.data
+        ? ([] as Mission[])
+        : missionsRes.data.map(mapMissionToApp);
+
+    // Regra: semanal = ativa e não vinculada a evento
+    return missions.filter((m: any) => !m?.eventId && (m?.status ?? "active") === "active");
+  } catch (err) {
+    console.error("[SupabaseMissions] fetchWeeklyMissionsSupabase failed", err);
+    return [] as Mission[];
+  }
+};
