@@ -5,6 +5,7 @@ import { getRepository } from "../database/repository.factory";
 import { MissionEngine as ServiceMissionEngine } from "../../services/missions/mission.engine";
 import * as db from "../mockData";
 import { withLatency } from "../helpers";
+import { MissionEngineV5 } from "./missionEngineV5";
 
 const repo = getRepository();
 
@@ -28,7 +29,6 @@ export const fetchEventMissions = (userId: string, eventId: string) => {
 };
 
 export const submitMission = async (userId: string, missionId: string, proofUrl: string) => {
-    const { MissionEngineV5 } = await import("./missionEngineV5");
     const result = await MissionEngineV5.submit(userId, missionId, proofUrl);
     
     if (!result.success) {

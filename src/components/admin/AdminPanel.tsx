@@ -5,7 +5,6 @@ import * as api from '../../api/index';
 import { useAppContext } from '../../constants';
 import { AdminEngine } from '../../api/admin/AdminEngine';
 import { AntiCrashBoundary } from '../../core/AntiCrashBoundary';
-import { emptyAdminDashboard } from '../../api/supabase/supabase.repositories.admin';
 
 // Component Imports
 import ManageMissions from './ManageMissions';
@@ -42,6 +41,42 @@ import {
   ShieldIcon 
 } from '../../constants';
 
+const loadAdminApi = async () => {
+    return await import('../../api/index');
+};
+
+const localEmptyAdminDashboard = {
+    missions: [],
+    missionSubmissions: [],
+    allUsers: [],
+    redeemedItems: [],
+    usableItemQueue: [],
+    artistOfTheDayQueue: [],
+    allTransactions: [],
+    storeItems: [],
+    usableItems: [],
+    coinPacks: [],
+    raffles: [],
+    allTickets: [],
+    highlightedRaffleId: null,
+    hallOfFame: [],
+    subscriptionHistory: [],
+    subscriptionPlans: [],
+    subscriptionRequests: [],
+    coinPurchaseRequests: [],
+    eventMissions: [],
+    eventMissionSubmissions: [],
+    manualEventPointsLog: [],
+    advertisements: [],
+    processedItemQueueHistory: [],
+    processedArtistOfTheDayQueueHistory: [],
+    behaviorLog: [],
+    economyHealth: null,
+    anomalies: [],
+    systemHealth: null,
+    subscriptionStats: {},
+};
+
 interface AdminPanelProps {
   activeTab: AdminTab;
   adminMissionsInitialSubTab: string;
@@ -59,7 +94,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const { state, dispatch } = useAppContext();
     const [isLoading, setIsLoading] = useState(true);
     // Nunca null: evita return condicional antes de hooks (React error #310)
-    const [adminData, setAdminData] = useState<any>(emptyAdminDashboard);
+    const [adminData, setAdminData] = useState<any>(localEmptyAdminDashboard);
 
     // Normalize helper: AdminEngine.getDashboardData() may return:
     // (A) data object directly OR (B) an envelope { success, data, error } depending on provider/legacy paths.
@@ -90,6 +125,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsLoading(true);
 
         try {
+            const apiHub = await loadAdminApi();
+            const baseEmptyAdminDashboard = (await apiHub.loadEmptyAdminDashboard()) || localEmptyAdminDashboard;
             const res = await Promise.resolve(AdminEngine.getDashboardData());
             const data = unwrapDashboard(res);
 
@@ -99,7 +136,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
 
             setAdminData((prev: any) => ({
-                ...emptyAdminDashboard,
+                ...baseEmptyAdminDashboard,
                 ...(prev || {}),
                 ...(data || {}),
             }));
