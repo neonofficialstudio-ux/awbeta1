@@ -11,11 +11,10 @@ import { saveMockDb } from "../database/mock-db";
 import { EconomyEngineV6 } from "../economy/economyEngineV6";
 import { NotificationDispatcher } from "../../services/notifications/notification.dispatcher";
 import type { JackpotRound } from "../../types";
-import { assertMockProvider, assertSupabaseProvider, isSupabaseProvider } from "../core/backendGuard";
+import { assertSupabaseProvider, isSupabaseProvider } from "../core/backendGuard";
 import { getSupabase } from "../supabase/client";
 
 const repo = getRepository();
-const ensureMockBackend = (feature: string) => assertMockProvider(`admin.raffles.${feature}`);
 
 const requireSupabaseClient = () => {
     const client = getSupabase();
@@ -111,24 +110,20 @@ export async function adminAwardManual(payload: {
 }
 
 export const adminPrepareRaffleDraw = (raffleId: string) => withLatency(() => {
-    ensureMockBackend('adminPrepareRaffleDraw');
     return RaffleEngineV2.prepareDraw(raffleId);
 });
 
 export const adminConfirmRaffleWinner = (raffleId: string, winnerId: string, adminId: string) => withLatency(() => {
-    ensureMockBackend('adminConfirmRaffleWinner');
     return RaffleEngineV2.confirmWinner(raffleId, winnerId, adminId);
 });
 
 export const adminForceUpdateRaffleStates = () => withLatency(() => {
-    ensureMockBackend('adminForceUpdateRaffleStates');
     const count = RaffleEngineV2.checkRaffleTimers();
     return { success: true, updates: count };
 });
 
 // V1.0: Manual Highlight Control
 export const adminSetHighlightedRaffle = (raffleId: string) => withLatency(() => {
-    ensureMockBackend('adminSetHighlightedRaffle');
     db.setHighlightedRaffleIdData(raffleId);
     logAdminAction('Set Highlighted Raffle', { raffleId });
     return { success: true, highlightedId: raffleId };
@@ -199,7 +194,6 @@ export const saveRaffle = (raffleData: any) => withLatency(async () => {
     }
 
     // MOCK path (mantém comportamento antigo)
-    ensureMockBackend('saveRaffle');
 
     const safeData = { ...raffleData };
     if (!safeData.id) {
@@ -237,7 +231,6 @@ export const deleteRaffle = (raffleId: string) => withLatency(async () => {
         return { success: true };
     }
 
-    ensureMockBackend('deleteRaffle');
     repo.delete("raffles", (r: any) => r.id === raffleId);
     repo.delete("raffleTickets", (t: any) => t.raffleId === raffleId);
     return { success: true };
@@ -247,7 +240,6 @@ export const drawRaffleWinner = (raffleId: string) => withLatency(async () => {
     if (isSupabaseProvider()) {
         return adminDrawRaffle(raffleId);
     }
-    ensureMockBackend('drawRaffleWinner');
     try {
         const { tickets } = RaffleEngineV2.prepareDraw(raffleId);
         if (tickets.length === 0) return { success: false, error: "No tickets found" };
@@ -266,7 +258,6 @@ export const adminScheduleJackpot = (config: {
     initialValue: number;
     ticketPrice: number;
 }) => withLatency(() => {
-    ensureMockBackend('adminScheduleJackpot');
     if (!db.jackpotData) return { success: false, error: "Jackpot not initialized" };
 
     // 1. Archive existing tickets (if any remain from unexpected state)
@@ -299,7 +290,6 @@ export const adminScheduleJackpot = (config: {
 
 // V13.6 Fix: Ensure limits merge correctly
 export const adminEditJackpot = (config: { newValue?: number; newDate?: string; ticketPrice?: number; ticketLimits?: any }) => withLatency(() => {
-    ensureMockBackend('adminEditJackpot');
     if (!db.jackpotData) return { success: false, error: "Jackpot data not initialized" };
     
     if (config.newValue !== undefined) db.jackpotData.currentValue = config.newValue;
@@ -321,7 +311,6 @@ export const adminEditJackpot = (config: { newValue?: number; newDate?: string; 
 });
 
 export const adminDrawJackpot = () => withLatency(() => {
-    ensureMockBackend('adminDrawJackpot');
     const tickets = db.jackpotData?.tickets || [];
     if (tickets.length === 0) return { success: false, error: "No tickets" };
     
@@ -358,7 +347,6 @@ export const adminDrawJackpot = () => withLatency(() => {
 });
 
 export const adminInjectJackpot = (amount: number) => withLatency(() => {
-    ensureMockBackend('adminInjectJackpot');
     if (db.jackpotData) {
         db.jackpotData.currentValue += amount;
         saveMockDb();
@@ -368,7 +356,6 @@ export const adminInjectJackpot = (amount: number) => withLatency(() => {
 });
 
 export const fetchJackpotAnalytics = () => withLatency(() => {
-    ensureMockBackend('fetchJackpotAnalytics');
     if (!db.jackpotData) return { currentValue: 0, ticketsCount: 0, uniqueUsers: 0, history: [] };
 
     return {
@@ -381,7 +368,6 @@ export const fetchJackpotAnalytics = () => withLatency(() => {
 
 // New Helper for detailed stats view in Admin
 export const getJackpotDetailedStats = () => {
-    ensureMockBackend('getJackpotDetailedStats');
     if (!db.jackpotData) return null;
     
     const tickets = db.jackpotData.tickets;

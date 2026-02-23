@@ -1,9 +1,8 @@
 import { getRepository } from "../database/repository.factory";
 import { getSupabase } from "../supabase/client";
-import { assertMockProvider, assertSupabaseProvider } from "../core/backendGuard";
+import { assertSupabaseProvider } from "../core/backendGuard";
 
 const repo = getRepository();
-const ensureMockBackend = (feature: string) => assertMockProvider(`telemetry.${feature}`);
 
 const requireSupabaseClient = () => {
     const client = getSupabase();
@@ -36,7 +35,6 @@ interface TelemetryMetric {
 
 export const TelemetryEngineV5 = {
     captureMetric: (name: string, value: number) => {
-        ensureMockBackend('captureMetric');
         const metric: TelemetryMetric = {
             name,
             value,
@@ -48,7 +46,6 @@ export const TelemetryEngineV5 = {
     },
 
     getSystemHealth: () => {
-        ensureMockBackend('getSystemHealth');
         // Mock calculation of system health based on error rate
         const logs = repo.select("telemetry");
         const errors = logs.filter((l: any) => l.category === 'error' && l.timestamp > Date.now() - 3600000); // Last hour
@@ -62,7 +59,6 @@ export const TelemetryEngineV5 = {
     },
 
     getStats: () => {
-        ensureMockBackend('getStats');
         const logs = repo.select("telemetry");
         return {
             totalEvents: logs.length,
