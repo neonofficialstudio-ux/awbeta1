@@ -194,12 +194,7 @@ export const fetchHallOfFame = async (limit = 50, offset = 0) => {
 
 export const loadSupabaseAdminRepository = async () => {
     const mod = await import("./supabase/supabase.repositories.admin");
-    return mod.supabaseAdminRepository;
-};
-
-export const loadEmptyAdminDashboard = async () => {
-    const mod = await import("./supabase/supabase.repositories.admin");
-    return mod.emptyAdminDashboard;
+    return mod;
 };
 
 // Admin Actions (Delegating to Consolidated Engine)
