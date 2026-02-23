@@ -41,7 +41,7 @@ import { EventClosureEngine } from "../../services/events/eventClosure.engine";
 import { UserInspector } from "./userInspector";
 import { isSupabaseProvider } from "../core/backendGuard";
 import { config } from "../../core/config";
-import type { AdminMissionFilter } from "../supabase/supabase.repositories.admin";
+import type { AdminMissionFilter } from "../../types/admin";
 import { reviewSubmissionSupabase } from "../supabase/admins/missions";
 import { getSupabase } from "../supabase/client";
 

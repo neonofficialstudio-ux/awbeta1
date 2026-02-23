@@ -1,6 +1,7 @@
 import { IconComponent } from './shared';
 
 export type AdminTab = 'dashboard' | 'missions' | 'users' | 'store' | 'queues' | 'economics' | 'subscriptions' | 'raffles' | 'settings' | 'telemetry' | 'behavior' | 'health' | 'insights' | 'economy_console' | 'stress_performance' | 'economy_pro';
+export type AdminMissionFilter = 'active' | 'expired' | 'all';
 export type AdminStoreTab =
   | 'visual'
   | 'usable'
