@@ -1,10 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { listAllMissions } from '../../../api/index'; // Updated import path to api/index where listAllMissions is exported
+import { listAllMissions, loadSupabaseAdminRepository } from '../../../api/index';
 import { MissionIcon } from '../../../constants';
 import { config } from '../../../core/config';
-
-const loadSupabaseAdminRepository = () => import('../../../api/supabase/supabase.repositories.admin');
 
 
 export default function WeeklyMissionsPanel() {
