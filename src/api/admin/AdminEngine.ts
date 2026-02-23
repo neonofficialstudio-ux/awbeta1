@@ -1037,8 +1037,6 @@ export const AdminService = {
          return { success: true };
     },
     
-    adminRunSimulationStep: (stepName: any, payload?: any) => { return runSimStep(stepName, payload); },
-    adminGetSimulationState: () => { return getSimState(); },
     
     // --- USERS & SYSTEM ---
     adminUpdateUser: (user: User) => {

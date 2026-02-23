@@ -66,8 +66,6 @@ export const saveAdvertisement = AdminEngine.saveAdvertisement;
 export const deleteAdvertisement = AdminEngine.deleteAdvertisement;
 export const updateTerms = AdminEngine.updateTerms;
 export const sendAdminNotification = AdminEngine.sendAdminNotification;
-export const adminRunSimulationStep = AdminEngine.adminRunSimulationStep;
-export const adminGetSimulationState = AdminEngine.adminGetSimulationState;
 export const resetMonthlyRanking = AdminEngine.resetMonthlyRanking;
 
 // Audit / Logs Wrappers
