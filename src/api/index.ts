@@ -283,7 +283,6 @@ export {
 // Utilities & Diagnostics
 export { runEconomySanityCheck } from './diagnostics/economyCheck';
 export { runAuthSanityCheck } from './diagnostics/authCheck';
-export { runMockIntegrityScan } from './diagnostics/mockIntegrity';
 export { applyUserHeals } from './economy/economyAutoHeal';
 
 // Stabilization (V7.0)
