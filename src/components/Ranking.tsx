@@ -252,9 +252,23 @@ const Ranking: React.FC = () => {
                 let nextLatestCycle: any | null = null;
                 let nextLatestWinners: any[] = [];
                 if (timeFilter === 'mensal') {
-                    const hist = await (api as any).fetchLatestMonthlyWinnersHistory?.();
-                    nextLatestCycle = hist?.cycle || null;
-                    nextLatestWinners = Array.isArray(hist?.winners) ? hist.winners : [];
+                    // Optional feature: latest monthly winners history
+                    // Must NEVER crash if the function doesn't exist.
+                    try {
+                        const mod = await import('../api/ranking/public');
+                        const fn = (mod as any)?.fetchLatestMonthlyWinnersHistory;
+                        if (typeof fn === 'function') {
+                            const hist = await fn();
+                            nextLatestCycle = hist?.cycle || null;
+                            nextLatestWinners = Array.isArray(hist?.winners) ? hist.winners : [];
+                        } else {
+                            nextLatestCycle = null;
+                            nextLatestWinners = [];
+                        }
+                    } catch {
+                        nextLatestCycle = null;
+                        nextLatestWinners = [];
+                    }
                     setLatestCycle(nextLatestCycle);
                     setLatestWinners(nextLatestWinners);
                 } else {
@@ -276,7 +290,7 @@ const Ranking: React.FC = () => {
                 }
             } catch (err) {
                 console.error("Failed to fetch ranking:", err);
-                setError("Não foi possível carregar o Hall of Fame.");
+                setError("Não foi possível carregar o Ranking.");
             } finally {
                 setIsLoading(false);
                 setIsRefreshing(false);
